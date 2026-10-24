@@ -1,0 +1,8 @@
+{
+  "name": "hvac-mantenimiento",
+  "private": true,
+  "scripts": {
+    "build": "mkdir -p public && tailwindcss -i ./input.css -o ./public/tailwind.css --minify && cp index.html tecnico.html common.js sw.js manifest.json icon-*.png apple-touch-icon.png favicon.ico favicon-32.png public/ && cp public/tailwind.css ./tailwind.css"
+  },
+  "devDependencies": { "tailwindcss": "3.4.17" }
+}

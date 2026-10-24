@@ -1,0 +1,3198 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a1122">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <meta name="application-name" content="HVAC Campo">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="HVAC Campo">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Técnicos HVAC">
+    <meta name="format-detection" content="telephone=no">
+    <title>HVAC Mantenimiento · App de Campo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+    (function () {
+        var t = 'dark';
+        try { var s = localStorage.getItem('TECH_THEME'); if (s === 'light' || s === 'dark') t = s; } catch (e) {}
+        document.documentElement.setAttribute('data-theme', t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', t === 'dark' ? '#0a1122' : '#eef2fa');
+    })();
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+/* =====================================================================
+   SMART MAINTENANCE · APP DE CAMPO (TÉCNICOS)
+   Mobile-first · azul industrial oscuro (por defecto) + modo día de alto contraste
+   ===================================================================== */
+:root{
+  --bg:#0a1122; --bg-2:#0f1a33; --surface:#131f3c; --surface-2:#1a2a4f; --line:#26385f;
+  --text:#eaf0ff; --muted:#93a5cf; --soft:#6a7fae; --bar:rgba(10,17,34,.86);
+  --primary:#3b82f6; --primary-2:#1d5fd6; --accent:#fbbf24; --ok:#22c55e; --ok-2:#15a34a; --danger:#f43f5e;
+  --shadow:0 10px 30px -12px rgba(0,0,0,.65);
+  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#eef2fa; --bg-2:#e5ebf7; --surface:#ffffff; --surface-2:#f2f5fb; --line:#d8e0f0;
+  --text:#0b1530; --muted:#53648c; --soft:#8493b3; --bar:rgba(238,242,250,.9);
+  --shadow:0 10px 26px -14px rgba(15,30,70,.35);
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--text);
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+  padding-bottom:calc(88px + var(--safe-bot));overscroll-behavior-y:contain}
+body.modal-open{overflow:hidden}
+.hidden{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+input,textarea,select{font:inherit;color:inherit}
+h1,h2,h3,h4,p{margin:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.text-emerald-400{color:#34d399}.text-amber-400{color:#fbbf24}.text-rose-400{color:#fb7185}
+
+/* ---------- Barra superior ---------- */
+.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+  padding:calc(12px + var(--safe-top)) 16px 12px;background:var(--bar);
+  backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--line)}
+.avatar{width:42px;height:42px;border-radius:14px;flex:none;display:grid;place-items:center;font-weight:900;font-size:13.5px;color:#fff;
+  background:linear-gradient(135deg,#3b82f6,#6366f1);box-shadow:0 8px 18px -8px rgba(59,130,246,.8)}
+.who{min-width:0;flex:1;display:flex;flex-direction:column;line-height:1.2}
+.who-sub{font-size:9.9px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.who strong{font-size:13.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;font-size:9.9px;font-weight:800;padding:7px 11px;border-radius:99px;
+  background:var(--surface);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.icon-btn{width:44px;height:44px;border-radius:14px;flex:none;display:grid;place-items:center;font-size:14.4px;
+  background:var(--surface);border:1px solid var(--line);color:var(--text);transition:transform .12s,background .2s}
+.icon-btn:active{transform:scale(.94)}
+
+/* ---------- Avisos ---------- */
+.offline-banner{position:sticky;top:0;z-index:29;display:flex;gap:10px;align-items:center;padding:10px 16px;font-size:10.8px;font-weight:700;
+  background:#78350f;color:#fde68a;border-bottom:1px solid #92400e}
+html[data-theme="light"] .offline-banner{background:#fef3c7;color:#78350f;border-color:#fcd34d}
+
+/* ---------- Contenido ---------- */
+.main{max-width:760px;margin:0 auto;padding:18px 16px 24px}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+.hero h1{font-size:23.4px;font-weight:900;letter-spacing:-.02em}
+.hero p{font-size:10.8px;font-weight:600;color:var(--muted);margin-top:2px}
+.pending-chip{font-size:9.9px;font-weight:800;padding:7px 11px;border-radius:99px;background:rgba(251,191,36,.14);color:var(--accent);border:1px solid rgba(251,191,36,.35)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.stat{padding:14px 16px;border-radius:20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+.stat i{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-size:15.3px}
+.stat .s-pend{background:rgba(59,130,246,.16);color:#7db1ff}
+.stat .s-done{background:rgba(34,197,94,.16);color:#4ade80}
+.stat b{display:block;font-size:23.4px;font-weight:900;line-height:1}
+.stat span{font-size:9.9px;font-weight:700;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:var(--surface);border:1px solid var(--line);margin-bottom:16px}
+.seg button{min-height:42px;border-radius:12px;font-size:10.8px;font-weight:800;color:var(--muted);transition:all .2s}
+.seg button.is-active{background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;box-shadow:0 8px 18px -8px rgba(59,130,246,.9)}
+.seg button em{font-style:normal;opacity:.75;margin-left:4px}
+.list{display:grid;gap:14px}
+@media (min-width:700px){.list{grid-template-columns:1fr 1fr}}
+.empty{grid-column:1/-1;text-align:center;padding:42px 20px;border-radius:22px;border:1.5px dashed var(--line);color:var(--muted);font-weight:700;font-size:11.7px;line-height:1.5}
+.empty i{display:block;font-size:27px;margin-bottom:10px;color:var(--soft)}
+
+/* ---------- Tarjeta de rutina ---------- */
+.r-card{position:relative;overflow:hidden;padding:18px 18px 16px;border-radius:24px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
+.r-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#3b82f6,#6366f1)}
+.r-card.is-done::before{background:linear-gradient(180deg,#22c55e,#10b981)}
+.r-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.r-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.8px;font-weight:800;padding:5px 10px;border-radius:10px;background:var(--surface-2);color:#8bb6ff}
+.r-client{font-size:17.1px;font-weight:900;letter-spacing:-.01em;line-height:1.2}
+.r-meta{display:flex;flex-wrap:wrap;gap:14px;font-size:10.8px;font-weight:700;color:var(--muted)}
+.r-meta i{margin-right:6px;color:var(--primary)}
+.r-progress{display:flex;align-items:center;gap:10px;font-size:10.8px;font-weight:800;color:var(--muted)}
+.bar{flex:1;height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .3s}
+.r-card.is-done .bar i{background:linear-gradient(90deg,#22c55e,#4ade80)}
+
+/* ---------- Pills ---------- */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:99px;border:1px solid transparent;white-space:nowrap}
+.pill-pend{background:rgba(251,191,36,.14);color:#fbbf24;border-color:rgba(251,191,36,.35)}
+.pill-ok{background:rgba(34,197,94,.14);color:#4ade80;border-color:rgba(34,197,94,.35)}
+.pill-idle{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
+.pill-warn{background:rgba(251,146,60,.16);color:#fb923c;border-color:rgba(251,146,60,.4)}
+html[data-theme="light"] .pill-pend{color:#a16207}html[data-theme="light"] .pill-ok{color:#15803d}html[data-theme="light"] .pill-warn{color:#c2410c}
+
+/* ---------- Botones ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:50px;padding:0 18px;border-radius:16px;font-size:12.6px;font-weight:800;
+  transition:transform .12s,filter .2s,box-shadow .2s;user-select:none;text-align:center}
+.btn:active{transform:scale(.97)}
+.btn-lg{min-height:58px;font-size:13.5px;border-radius:18px}
+.btn-block{width:100%}
+.btn-primary{color:#fff;background:linear-gradient(135deg,#3b82f6,#1d5fd6);box-shadow:0 12px 24px -10px rgba(59,130,246,.9)}
+.btn-ok{color:#fff;background:linear-gradient(135deg,#22c55e,#15a34a);box-shadow:0 12px 24px -10px rgba(34,197,94,.8)}
+.btn-ghost{background:var(--surface-2);border:1.5px solid var(--line);color:var(--text)}
+.btn[disabled]{opacity:.5;pointer-events:none}
+
+/* ---------- Barra inferior ---------- */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:40;display:flex;justify-content:center;padding:8px 14px calc(8px + var(--safe-bot));
+  background:var(--bar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--line)}
+.tabbar-in{width:100%;max-width:520px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px;border-radius:16px;font-size:9.9px;font-weight:800;color:var(--muted);transition:all .2s}
+.tab i{font-size:17.1px}
+.tab.is-active{color:#fff;background:linear-gradient(135deg,rgba(59,130,246,.95),rgba(29,95,214,.95))}
+.tab.is-danger{color:#fb7185}
+.tab:active{transform:scale(.95)}
+
+/* ---------- Hojas (modales) ---------- */
+.modal-backdrop{position:fixed;inset:0;z-index:9999;display:flex;align-items:flex-end;justify-content:center;background:rgba(3,8,20,.72);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.sheet{width:100%;max-width:680px;max-height:100vh;max-height:100dvh;display:flex;flex-direction:column;background:var(--bg);border-radius:26px 26px 0 0;
+  border:1px solid var(--line);border-bottom:0;box-shadow:0 -20px 60px -20px rgba(0,0,0,.7);animation:sheetUp .28s cubic-bezier(.2,.9,.3,1)}
+.sheet.full{height:100vh;height:100dvh;border-radius:0;border:0}
+@media (min-width:700px){.sheet.full{height:min(94dvh,920px);border-radius:26px;margin-bottom:3dvh;border:1px solid var(--line)}.modal-backdrop{align-items:center}}
+@keyframes sheetUp{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;gap:12px;padding:calc(12px + var(--safe-top)) 16px 12px;border-bottom:1px solid var(--line);background:var(--bar)}
+.sheet:not(.full) .sheet-head{padding-top:16px}
+.sheet-title{min-width:0;flex:1}
+.sheet-title h3{font-size:15.3px;font-weight:900;letter-spacing:-.01em;line-height:1.25}
+.sheet-title p{font-size:10.3px;font-weight:600;color:var(--muted);margin-top:3px;line-height:1.4}
+.sheet-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;display:flex;flex-direction:column;gap:16px}
+.sheet-foot{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;padding:12px 16px calc(12px + var(--safe-bot));border-top:1px solid var(--line);background:var(--bar)}
+.sheet-foot .btn{font-size:11.7px;padding:0 10px;line-height:1.2}
+.sheet-form{display:flex;flex-direction:column;flex:1;min-height:0}
+.stack{display:grid;gap:12px}
+
+/* ---------- Hub de rutina ---------- */
+.tabs2{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;border-radius:16px;background:var(--surface);border:1px solid var(--line)}
+.tab2{min-height:44px;border-radius:12px;font-size:11.7px;font-weight:800;color:var(--muted)}
+.tab2.is-active{background:var(--surface-2);color:var(--text);box-shadow:inset 0 0 0 1.5px var(--primary)}
+.progress-card{padding:14px 16px;border-radius:20px;background:var(--surface);border:1px solid var(--line)}
+.pc-row{display:flex;justify-content:space-between;gap:10px;font-size:10.8px;font-weight:800;color:var(--muted);margin-bottom:10px}
+.pc-row strong{color:var(--text)}
+.finalize{padding:16px;border-radius:22px;background:rgba(34,197,94,.1);border:1.5px solid rgba(34,197,94,.4);display:flex;flex-direction:column;gap:12px}
+.finalize h4{font-size:13.5px;font-weight:900;color:#4ade80}
+html[data-theme="light"] .finalize h4{color:#15803d}
+.finalize p{font-size:10.8px;font-weight:600;color:var(--muted);margin-top:3px}
+
+/* ---------- Tarjeta de equipo ---------- */
+.e-card{padding:16px;border-radius:22px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px;position:relative;overflow:hidden}
+.e-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--line)}
+.e-card.is-done::before{background:var(--ok)}
+.e-card.is-corr::before{background:var(--accent)}
+.e-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.e-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.7px;font-weight:900;padding:5px 10px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line)}
+.e-name{font-size:14.4px;font-weight:800;line-height:1.3}
+.e-specs{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:0}
+.e-specs div{min-width:0}
+.e-specs dt{font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--soft)}
+.e-specs dd{margin:2px 0 0;font-size:11.7px;font-weight:700;overflow-wrap:anywhere}
+.e-note{padding:12px;border-radius:14px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);font-size:11.2px;font-weight:600;line-height:1.45;color:var(--text)}
+.e-note strong{color:var(--accent)}
+html[data-theme="light"] .e-note strong{color:#a16207}
+
+/* ---------- Formularios ---------- */
+.section-t{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.8px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.section-t span{font-size:9.9px;letter-spacing:0;text-transform:none;padding:4px 10px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);color:var(--text)}
+.params{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field>span{font-size:10.8px;font-weight:800;color:var(--muted);line-height:1.25}
+.input{width:100%;min-height:52px;padding:0 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--text);font-size:16px;font-weight:700;outline:none;transition:border-color .2s,box-shadow .2s}
+textarea.input{min-height:98px;padding:12px 14px;resize:vertical;line-height:1.45;font-weight:600}
+.input::placeholder{color:var(--soft);font-weight:600}
+.input:focus{border-color:var(--primary);box-shadow:0 0 0 4px rgba(59,130,246,.22)}
+.field.is-missing .input,.chk-row.is-missing{border-color:var(--danger)!important;box-shadow:0 0 0 4px rgba(244,63,94,.2)}
+.checks{display:grid;gap:10px}
+.chk-row{position:relative;display:flex;align-items:center;gap:14px;min-height:58px;padding:10px 14px;border-radius:16px;background:var(--surface);border:1.5px solid var(--line);cursor:pointer;transition:border-color .2s,background .2s}
+.chk-row input{position:absolute;opacity:0;width:1px;height:1px}
+.chk-box{width:30px;height:30px;border-radius:10px;flex:none;display:grid;place-items:center;border:2px solid var(--soft);color:transparent;font-size:13.5px;transition:all .15s}
+.chk-text{font-size:12.6px;font-weight:700;line-height:1.35}
+.chk-row:has(input:checked){border-color:rgba(34,197,94,.55);background:rgba(34,197,94,.09)}
+.chk-row input:checked~.chk-box{background:var(--ok);border-color:var(--ok);color:#fff}
+.chk-row input:focus-visible~.chk-box{box-shadow:0 0 0 4px rgba(59,130,246,.35)}
+.chk-row.warn{border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)}
+.chk-row.warn:has(input:checked){border-color:var(--accent);background:rgba(251,191,36,.16)}
+.chk-row.warn input:checked~.chk-box{background:var(--accent);border-color:var(--accent);color:#1f1300}
+.chk-row.warn .chk-text{font-weight:900;text-transform:uppercase;letter-spacing:.03em;font-size:11.7px}
+.corr-box{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:20px;background:rgba(251,191,36,.07);border:1px solid rgba(251,191,36,.3)}
+.photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.photo-actions label{cursor:pointer}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ph{position:relative;aspect-ratio:1/1;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+.ph-img{display:block;width:100%;height:100%}
+.ph-img img{width:100%;height:100%;object-fit:cover;display:block}
+.ph-del{position:absolute;top:6px;right:6px;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:11.7px;color:#fff;background:rgba(225,29,72,.92)}
+.ph-n{position:absolute;left:6px;bottom:6px;font-size:9px;font-weight:900;padding:3px 8px;border-radius:99px;background:rgba(3,8,20,.75);color:#fff}
+.ph-empty{grid-column:1/-1;padding:18px;border-radius:16px;border:1.5px dashed var(--line);text-align:center;font-size:10.8px;font-weight:700;color:var(--soft)}
+.sig-box{position:relative;height:240px;border-radius:20px;overflow:hidden;background:#f8fafc;border:2px dashed #94a3b8}
+.sig-box canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+.sig-hint{display:flex;justify-content:space-between;align-items:center;font-size:10.8px;font-weight:700;color:var(--muted)}
+.sig-hint button{font-weight:800;color:var(--primary);padding:8px 12px}
+.viewer{display:flex;flex-direction:column;gap:12px;align-items:center;padding:16px;width:100%;max-width:680px}
+.viewer img{max-width:100%;max-height:72dvh;border-radius:18px;object-fit:contain;background:#000}
+
+/* ---------- Toasts y procesamiento ---------- */
+#toast-container{position:fixed;top:calc(12px + var(--safe-top));left:12px;right:12px;z-index:10006;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:10px;max-width:520px;width:100%;padding:14px 16px;border-radius:18px;font-size:11.7px;font-weight:800;line-height:1.35;color:#fff;
+  box-shadow:0 18px 40px -14px rgba(0,0,0,.7);pointer-events:auto;transition:all .25s;animation:toastIn .25s ease}
+.toast i{font-size:14.4px;flex:none}
+.toast-ok{background:#0f2a1e;border:1px solid rgba(34,197,94,.55)}.toast-ok i{color:#4ade80}
+.toast-error{background:#3b0d1a;border:1px solid rgba(244,63,94,.6)}.toast-error i{color:#fb7185}
+.toast-out{opacity:0;transform:translateY(-10px)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+#app-processing-overlay{position:fixed;inset:0;z-index:10010;display:grid;place-items:center;background:rgba(3,8,20,.6);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .2s}
+#app-processing-overlay.is-visible{opacity:1;pointer-events:auto}
+.processing-card{display:flex;align-items:center;gap:14px;padding:16px 22px;border-radius:20px;background:var(--surface);border:1px solid var(--line);font-size:12.6px;font-weight:800;box-shadow:var(--shadow)}
+.processing-spinner{width:22px;height:22px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--primary);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---------- Login ---------- */
+.login{--surface:#14224a;--surface-2:#1b2d5c;--line:#2b4078;--text:#eaf0ff;--muted:#9db0da;--soft:#7186b5;
+  align-items:stretch;justify-content:center;padding:0;overflow-y:auto;color:var(--text);
+  background:radial-gradient(900px 520px at 80% -10%,rgba(59,130,246,.35),transparent 60%),radial-gradient(700px 480px at -10% 110%,rgba(99,102,241,.28),transparent 60%),#070d1c}
+.login::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(120,150,220,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(120,150,220,.07) 1px,transparent 1px);background-size:36px 36px;
+  mask-image:radial-gradient(circle at 50% 30%,#000 10%,transparent 70%);-webkit-mask-image:radial-gradient(circle at 50% 30%,#000 10%,transparent 70%)}
+.login-in{position:relative;width:100%;max-width:440px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;gap:26px;padding:calc(28px + var(--safe-top)) 22px calc(24px + var(--safe-bot))}
+.login-brand{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px}
+.login-logo{width:84px;height:84px;border-radius:26px;display:grid;place-items:center;font-size:34.2px;color:#fff;
+  background:linear-gradient(135deg,#3b82f6,#6366f1);box-shadow:0 22px 50px -14px rgba(59,130,246,.9),inset 0 1px 0 rgba(255,255,255,.35)}
+.login-brand h1{font-size:25.2px;font-weight:900;letter-spacing:-.025em;line-height:1.1}
+.login-brand h1 span{display:block;font-size:11.7px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#7db1ff;margin-bottom:8px}
+.login-brand p{font-size:12.2px;font-weight:600;color:var(--muted);line-height:1.5;max-width:320px}
+.login-card{padding:22px;border-radius:26px;background:rgba(20,34,74,.78);border:1px solid var(--line);backdrop-filter:blur(14px);box-shadow:0 30px 70px -30px rgba(0,0,0,.9);display:flex;flex-direction:column;gap:16px}
+.pw-wrap{position:relative}
+.pw-wrap .input{padding-right:54px}
+.pw-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:12px;color:var(--muted);font-size:14.4px}
+.login-error{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;font-size:11.2px;font-weight:700;line-height:1.4;background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.45);color:#fda4af}
+.login-foot{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:center;font-size:9.9px;font-weight:700;color:var(--soft)}
+.login-foot i{margin-right:6px;color:#5b8def}
+    
+/* ===== v3: contraste esmeralda + jerarquía de tarjetas ===== */
+:root{--ok:#10b981;--ok-2:#059669;--emerald:#34d399;--shadow:0 12px 30px -14px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05)}
+html[data-theme="light"]{--shadow:0 12px 26px -16px rgba(15,30,70,.35),inset 0 1px 0 rgba(255,255,255,.8)}
+body{background:radial-gradient(700px 360px at 100% -60px,rgba(16,185,129,.12),transparent 60%),radial-gradient(700px 400px at -10% 0,rgba(59,130,246,.14),transparent 60%),var(--bg)!important;background-attachment:fixed}
+.topbar{border-bottom:1px solid rgba(16,185,129,.28)}
+.avatar{background:linear-gradient(135deg,#3b82f6,#10b981)}
+.login-logo{background:linear-gradient(135deg,#3b82f6,#10b981);box-shadow:0 22px 50px -14px rgba(16,185,129,.7),inset 0 1px 0 rgba(255,255,255,.35)}
+.stat .s-done{background:rgba(16,185,129,.2);color:#34d399}
+.stat:nth-child(2){border-color:rgba(16,185,129,.4);background:linear-gradient(135deg,rgba(16,185,129,.12),var(--surface) 70%)}
+.stat:nth-child(1){border-color:rgba(59,130,246,.4);background:linear-gradient(135deg,rgba(59,130,246,.12),var(--surface) 70%)}
+.r-card,.e-card{background:linear-gradient(180deg,var(--surface-2),var(--surface) 55%)}
+.r-card.is-done,.e-card.is-done{border-color:rgba(16,185,129,.5);background:linear-gradient(180deg,rgba(16,185,129,.14),var(--surface) 60%)}
+.r-card.is-done::before,.e-card.is-done::before{background:linear-gradient(180deg,#34d399,#059669)}
+.bar i{background:linear-gradient(90deg,#3b82f6,#10b981)}
+.r-card.is-done .bar i{background:linear-gradient(90deg,#10b981,#34d399)}
+.pill-ok{background:rgba(16,185,129,.18);color:#34d399;border-color:rgba(16,185,129,.5)}
+html[data-theme="light"] .pill-ok{color:#047857}
+.btn-ok{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 12px 24px -10px rgba(16,185,129,.85)}
+.finalize{background:linear-gradient(135deg,rgba(16,185,129,.18),rgba(16,185,129,.05));border-color:rgba(16,185,129,.55)}
+.exec-param-input:not(:placeholder-shown){border-color:rgba(16,185,129,.6);background:linear-gradient(180deg,rgba(16,185,129,.08),var(--surface))}
+.chk-row:has(input:checked){border-color:rgba(16,185,129,.65);background:rgba(16,185,129,.12)}
+.chk-row input:checked~.chk-box{background:#10b981;border-color:#10b981}
+.section-t{color:var(--text)}
+.section-t::before{content:"";width:4px;height:14px;border-radius:4px;background:linear-gradient(180deg,#3b82f6,#10b981);margin-right:8px;flex:none}
+.section-t{justify-content:flex-start}.section-t span{margin-left:auto}
+.sheet-foot{box-shadow:0 -12px 30px -18px rgba(0,0,0,.6)}
+.tab.is-active{background:linear-gradient(135deg,#3b82f6,#10b981)}
+.seg button.is-active{background:linear-gradient(135deg,#3b82f6,#2563eb)}
+</style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="common.js?v=7"></script>
+</head>
+<body>
+
+    <div id="toast-container" aria-live="polite"></div>
+    <div id="app-processing-overlay" role="status" aria-live="polite" aria-hidden="true">
+        <div class="processing-card"><span class="processing-spinner" aria-hidden="true"></span><span id="app-processing-label">Procesando información…</span></div>
+    </div>
+
+    <!-- ===================== LOGIN ===================== -->
+    <div id="app-login-screen" class="modal-backdrop login" style="z-index: 10005;">
+        <div class="login-in">
+            <div class="login-brand">
+                <span class="login-logo"><i class="fa-solid fa-snowflake"></i></span>
+                <h1><span>Smart Maintenance</span>App de campo</h1>
+                <p>Ejecuta tus rutinas, registra evidencias y cierra órdenes con firma, incluso sin señal.</p>
+            </div>
+            <form class="login-card" onsubmit="event.preventDefault(); executeLogin();" autocomplete="on">
+                <label class="field">
+                    <span>Usuario</span>
+                    <input type="text" id="login-username" required class="input" placeholder="Tu usuario" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
+                </label>
+                <label class="field">
+                    <span>Contraseña</span>
+                    <div class="pw-wrap">
+                        <input type="password" id="login-password" required class="input" placeholder="••••••••" autocomplete="current-password" enterkeyhint="go">
+                        <button type="button" class="pw-eye" onclick="toggleLoginPassword()" aria-label="Mostrar u ocultar contraseña"><i id="pw-eye-icon" class="fa-solid fa-eye"></i></button>
+                    </div>
+                </label>
+                <div id="login-error-msg" class="login-error hidden" role="alert">
+                    <i class="fa-solid fa-circle-exclamation"></i><span id="login-error-text">Credenciales incorrectas.</span>
+                </div>
+                <button type="submit" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-right-to-bracket"></i> Ingresar</button>
+            </form>
+            <div class="login-foot">
+                <span><i class="fa-solid fa-cloud-arrow-up"></i>Sincroniza al reconectar</span>
+                <span><i class="fa-solid fa-camera"></i>Fotos de evidencia</span>
+                <span><i class="fa-solid fa-signature"></i>Firma del cliente</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== APP ===================== -->
+    <header class="topbar" id="app-topbar">
+        <div class="avatar" id="topbar-avatar">--</div>
+        <div class="who">
+            <span class="who-sub" id="topbar-greet">Hola</span>
+            <strong id="header-user-welcome"></strong>
+            <span id="header-role-badge" class="hidden"></span>
+        </div>
+        <span id="sidebar-sync-badge" class="sync-pill"><i class="fa-solid fa-circle-check text-emerald-400"></i> Cloud Enlazado</span>
+        <button class="icon-btn" id="btn-theme" onclick="toggleTechTheme()" aria-label="Cambiar entre modo noche y día"><i class="fa-solid fa-circle-half-stroke"></i></button>
+    </header>
+
+    <div id="offline-banner" class="offline-banner hidden" role="status">
+        <i class="fa-solid fa-cloud-bolt"></i>
+        <span>Sin conexión · tus cambios se guardan en este teléfono y se enviarán al reconectar.</span>
+    </div>
+
+    <main id="app-main" class="main">
+        <section id="view-tech-agenda">
+            <div class="hero">
+                <div>
+                    <h1>Mis rutinas</h1>
+                    <p id="hero-date"></p>
+                </div>
+                <span id="tech-pending-chip" class="pending-chip hidden"></span>
+            </div>
+
+            <div class="stats">
+                <div class="stat"><i class="fa-solid fa-clipboard-list s-pend"></i><div><b id="stat-pending">0</b><span>Por ejecutar</span></div></div>
+                <div class="stat"><i class="fa-solid fa-flag-checkered s-done"></i><div><b id="stat-done">0</b><span>Por terminar</span></div></div>
+            </div>
+
+            <div class="seg" role="tablist" aria-label="Filtrar rutinas">
+                <button id="seg-all" class="is-active" role="tab" onclick="setTechFilter('all')">Todas<em id="seg-count-all">0</em></button>
+                <button id="seg-pending" role="tab" onclick="setTechFilter('pending')">Pendientes<em id="seg-count-pending">0</em></button>
+                <button id="seg-done" role="tab" onclick="setTechFilter('done')">Por terminar<em id="seg-count-done">0</em></button>
+            </div>
+
+            <div id="tech-orders-container" class="list"></div>
+        </section>
+    </main>
+
+    <nav class="tabbar" id="tech-tabbar" aria-label="Navegación principal">
+        <div class="tabbar-in">
+            <button class="tab is-active" onclick="window.scrollTo({top:0,behavior:'smooth'})"><i class="fa-solid fa-list-check"></i>Rutinas</button>
+            <button class="tab" onclick="window.loadAllCloudData(true)"><i class="fa-solid fa-rotate"></i>Sincronizar</button>
+            <button class="tab is-danger" onclick="logoutSession()"><i class="fa-solid fa-arrow-right-from-bracket"></i>Salir</button>
+        </div>
+    </nav>
+
+    <!-- ===================== HUB DE RUTINA ===================== -->
+    <div id="order-hub-modal-backdrop" class="modal-backdrop hidden">
+        <div class="sheet full">
+            <div class="sheet-head">
+                <button class="icon-btn" onclick="closeOrderHubModal()" aria-label="Volver a mis rutinas"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="sheet-title">
+                    <h3 id="hub-order-title">Hub de Mantenimiento</h3>
+                    <p id="hub-order-subtitle"></p>
+                </div>
+            </div>
+            <div class="sheet-body">
+                <div class="progress-card">
+                    <div class="pc-row"><span>Avance de la rutina</span><strong id="hub-progress-text">0 / 0 Equipos (0%)</strong></div>
+                    <div class="bar"><i id="hub-progress-bar" style="width: 0%;"></i></div>
+                </div>
+                <div class="stack" style="gap:10px">
+                    <label class="field" for="hub-equipment-search">
+                        <span>Buscar equipo por nombre, modelo, serial o ID</span>
+                        <input id="hub-equipment-search" class="input" type="search" placeholder="Escribe para filtrar…" autocomplete="off" oninput="renderCurrentHubEquipments()">
+                    </label>
+                    <label class="field" for="hub-equipment-status-filter">
+                        <span>Filtrar por estado</span>
+                        <select id="hub-equipment-status-filter" class="input" onchange="renderCurrentHubEquipments()">
+                            <option value="all">Todos los estados</option>
+                            <option value="pending">Pendientes</option>
+                            <option value="progress">En progreso</option>
+                            <option value="done">Finalizados / Completados</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="stack" id="hub-equipments-list"></div>
+                <div id="hub-finalize-container" class="finalize hidden">
+                    <div>
+                        <h4>¡Todos los equipos intervenidos!</h4>
+                        <p>Recolecta la firma del cliente para dar por completada la orden.</p>
+                    </div>
+                    <button onclick="openGlobalSignatureModal()" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-file-signature"></i> Finalizar rutina y recabar firma</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ===================== FIRMA DEL CLIENTE ===================== -->
+    <div id="global-signature-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10002;">
+        <div class="sheet full">
+            <div class="sheet-head">
+                <button class="icon-btn" onclick="closeGlobalSignatureModal()" aria-label="Volver"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="sheet-title"><h3>Cierre de rutina y firma</h3><p>Recibe a satisfacción de los trabajos realizados por Smart Maintenance System.</p></div>
+            </div>
+            <div class="sheet-body">
+                <label class="field">
+                    <span>Nombre de quien recibe</span>
+                    <input type="text" id="sig-client-name" class="input" placeholder="Nombre completo" autocomplete="off">
+                </label>
+                <div class="field">
+                    <span>Firma en pantalla</span>
+                    <div class="sig-box"><canvas id="global-sig-canvas"></canvas></div>
+                    <div class="sig-hint"><span>Dibuja con el dedo</span><button type="button" onclick="clearSignatureCanvas()"><i class="fa-solid fa-eraser"></i> Limpiar</button></div>
+                </div>
+            </div>
+            <div class="sheet-foot">
+                <button type="button" onclick="finalizeRoutineWithoutSignature()" class="btn btn-ghost">Finalizar sin firma</button>
+                <button type="button" onclick="submitGlobalSignature()" class="btn btn-ok"><i class="fa-solid fa-check-double"></i> Confirmar y cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== FORMULARIO DE EQUIPO ===================== -->
+    <div id="exec-equipment-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10001;">
+        <div class="sheet full">
+            <div class="sheet-head">
+                <button type="button" class="icon-btn" onclick="closeEquipmentExecutionModal()" aria-label="Volver al hub"><i class="fa-solid fa-chevron-left"></i></button>
+                <div class="sheet-title">
+                    <h3 id="exec-modal-eq-title">Intervención Técnica</h3>
+                    <p id="exec-modal-eq-subtitle"></p>
+                </div>
+            </div>
+            <form class="sheet-form" onsubmit="event.preventDefault(); saveEquipmentExecution();" novalidate>
+                <div class="sheet-body">
+                    <div>
+                        <div class="section-t" style="margin-bottom:10px">Parámetros técnicos <span id="exec-params-count">0/0</span></div>
+                        <div id="exec-params-container" class="params"></div>
+                    </div>
+
+                    <div>
+                        <div class="section-t" style="margin-bottom:10px">Check-list de mantenimiento <span id="exec-chk-count">0/0</span></div>
+                        <div id="exec-checklist-container" class="checks"></div>
+                    </div>
+
+                    <div class="corr-box">
+                        <label class="chk-row warn">
+                            <input type="checkbox" id="exec-chk-correctivo" onchange="toggleCorrectiveSection()">
+                            <span class="chk-box"><i class="fa-solid fa-check"></i></span>
+                            <span class="chk-text">¿Requiere correctivo?</span>
+                        </label>
+                        <div id="corrective-details-box" class="hidden">
+                            <label class="field">
+                                <span>Descripción de la novedad o correctivo *</span>
+                                <textarea id="exec-corrective-desc" rows="3" class="input" placeholder="Explica la falla o el trabajo requerido…"></textarea>
+                            </label>
+                        </div>
+                    </div>
+
+                    <label class="field">
+                        <span>Observaciones técnicas</span>
+                        <textarea id="exec-f-obs" rows="3" class="input" placeholder="Estado del equipo, recomendaciones o partes a reemplazar…"></textarea>
+                    </label>
+
+                    <div>
+                        <div class="section-t" style="margin-bottom:10px">Fotos de evidencia <span id="exec-photos-count">0/5</span></div>
+                        <div class="photo-actions">
+                            <label for="exec-f-photos-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
+                            <label for="exec-f-photos" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
+                        </div>
+                        <input type="file" id="exec-f-photos-cam" accept="image/*" capture="environment" class="sr-only">
+                        <input type="file" id="exec-f-photos" multiple accept="image/*" class="sr-only">
+                        <div id="exec-photos-preview" class="photo-grid" style="margin-top:12px"></div>
+                    </div>
+                </div>
+                <div class="sheet-foot">
+                    <button type="button" onclick="closeEquipmentExecutionModal()" class="btn btn-ghost">Volver</button>
+                    <button type="submit" class="btn btn-ok"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===================== VISOR DE FOTO ===================== -->
+    <div id="receipt-viewer-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10004; align-items:center;">
+        <div class="viewer">
+            <img id="receipt-viewer-img" src="" alt="Foto de evidencia ampliada">
+            <button type="button" onclick="closeReceiptViewerModal()" class="btn btn-ghost btn-block"><i class="fa-solid fa-xmark"></i> Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://jlcbjotyhdwupzsxehnl.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsY2Jqb3R5aGR3dXB6c3hlaG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTY2MjMsImV4cCI6MjEwNzAzMjYyM30.JVQtxJP_4XuBnTsDZ9onMSkFZT-P8U3ntWnLQUqdPl8";
+
+        // ===== Almacenamiento local con respaldo IndexedDB (sin pérdida al agotar localStorage) =====
+        // La app del técnico solo sincroniza: agenda (correctivos que reporta) y formularios (solo lectura).
+        const CLOUD_STATE_KEYS = ['HVAC_AGENDA_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP'];
+        const cloudStateCtl = { muted: false, disabled: false, timers: {}, quotaWarnedAt: 0 };
+        const hvacMemoryStorage = new Map();
+        let hvacDbPromise = null;
+        let hvacDbReady = false;
+        let hvacStorageWriteTail = Promise.resolve();
+        const hvacNativeGetItem = Storage.prototype.getItem;
+        const hvacNativeSetItem = Storage.prototype.setItem;
+        const hvacNativeRemoveItem = Storage.prototype.removeItem;
+        function hvacOpenDb() {
+            if (!('indexedDB' in window)) return Promise.reject(new Error('IndexedDB no está disponible'));
+            if (!hvacDbPromise) hvacDbPromise = new Promise((resolve, reject) => {
+                const request = indexedDB.open('HVAC_GMAO_OFFLINE_V1', 1);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'id' });
+                };
+                request.onsuccess = () => { hvacDbReady = true; resolve(request.result); };
+                request.onerror = () => reject(request.error || new Error('No se pudo abrir IndexedDB'));
+                request.onblocked = () => reject(new Error('IndexedDB está bloqueado por otra pestaña'));
+            });
+            return hvacDbPromise;
+        }
+        function hvacIsQuotaError(err) {
+            return !!err && (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014);
+        }
+        function hvacIDBWriteOnce(id, value) {
+            return hvacOpenDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readwrite');
+                tx.objectStore('kv').put({ id: String(id), value: String(value), updatedAt: Date.now() });
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo respaldar en IndexedDB'));
+            }));
+        }
+        function hvacEvictRedundantIndexedBackups(protectedId) {
+            const optionalKeys = ['HVAC_EQUIPMENTS_BACKUP', 'HVAC_TECH_USERS_BACKUP', 'HVAC_CLIENTS_BACKUP'];
+            return hvacOpenDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readwrite');
+                const store = tx.objectStore('kv');
+                optionalKeys.forEach(key => {
+                    if (key === String(protectedId)) return;
+                    const req = store.get(key);
+                    req.onsuccess = () => {
+                        const row = req.result;
+                        let localValue = null;
+                        try { localValue = hvacNativeGetItem.call(window.localStorage, key); } catch (_) {}
+                        // Solo quitar una copia de IDB si la copia idéntica sigue en localStorage.
+                        if (row && localValue !== null && String(row.value) === localValue) store.delete(key);
+                    };
+                });
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudieron liberar respaldos duplicados'));
+            }));
+        }
+        function hvacIDBSet(id, value) {
+            return hvacIDBWriteOnce(id, value).catch(async err => {
+                if (!hvacIsQuotaError(err)) throw err;
+                try { await hvacEvictRedundantIndexedBackups(String(id)); } catch (_) {}
+                return hvacIDBWriteOnce(id, value);
+            });
+        }
+        function hvacCleanupOldLocalBackups(protectedKey) {
+            const optionalKeys = ['HVAC_EQUIPMENTS_BACKUP', 'HVAC_TECH_USERS_BACKUP', 'HVAC_CLIENTS_BACKUP'];
+            return hvacOpenDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readonly');
+                const store = tx.objectStore('kv');
+                const candidates = [];
+                optionalKeys.forEach(key => {
+                    if (key === String(protectedKey)) return;
+                    const req = store.get(key);
+                    req.onsuccess = () => {
+                        const row = req.result;
+                        let localValue = null;
+                        try { localValue = hvacNativeGetItem.call(window.localStorage, key); } catch (_) {}
+                        if (row && localValue !== null && String(row.value) === localValue) candidates.push({ key, value: String(row.value) });
+                    };
+                });
+                tx.oncomplete = () => {
+                    candidates.forEach(item => {
+                        hvacMemoryStorage.set(item.key, item.value);
+                        try { hvacNativeRemoveItem.call(window.localStorage, item.key); } catch (_) {}
+                    });
+                    resolve(candidates.length);
+                };
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudieron limpiar respaldos locales duplicados'));
+            }));
+        }
+        function hvacIDBDelete(id) {
+            return hvacOpenDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction('kv', 'readwrite');
+                tx.objectStore('kv').delete(String(id));
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo borrar de IndexedDB'));
+            }));
+        }
+        async function hvacRestoreIndexedStorage() {
+            try {
+                const db = await hvacOpenDb();
+                const rows = await new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', 'readonly');
+                    const req = tx.objectStore('kv').getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+                rows.forEach(row => {
+                    if (!row || typeof row.id !== 'string' || row.id.indexOf('HVAC_') !== 0 || row.id.indexOf('HVAC_OUTBOX::') === 0) return;
+                    let value = String(row.value);
+                    try {
+                        const localTs = Number(hvacNativeGetItem.call(window.localStorage, 'HVAC_TS_' + row.id)) || 0;
+                        const localValue = hvacNativeGetItem.call(window.localStorage, row.id);
+                        if (localValue !== null && localTs > Number(row.updatedAt || 0)) value = localValue;
+                    } catch (_) {}
+                    hvacMemoryStorage.set(row.id, value);
+                    if (value.length <= 700 * 1024) {
+                        try { hvacNativeSetItem.call(window.localStorage, row.id, value); } catch (_) {}
+                    }
+                });
+            } catch (e) {
+                console.info('[Storage] IndexedDB no disponible; se usará localStorage:', e && e.message || e);
+            }
+        }
+        const hvacStorageReady = hvacRestoreIndexedStorage();
+        function hvacFlushStorageWrites() { return hvacStorageWriteTail.catch(() => {}); }
+        (function patchStorage() {
+            try {
+                const orig = hvacNativeSetItem;
+                const origGet = hvacNativeGetItem;
+                const origRemove = hvacNativeRemoveItem;
+                Storage.prototype.getItem = function (k) {
+                    const key = String(k);
+                    if (this === window.localStorage && hvacMemoryStorage.has(key)) return hvacMemoryStorage.get(key);
+                    return origGet.call(this, k);
+                };
+                Storage.prototype.setItem = function (k, v) {
+                    const key = String(k), value = String(v);
+                    const isHVAC = key.indexOf('HVAC_') === 0;
+                    if (this === window.localStorage && isHVAC) {
+                        hvacMemoryStorage.set(key, value);
+                        hvacStorageWriteTail = hvacStorageWriteTail.then(() => hvacIDBSet(key, value)).catch(e => {
+                            console.warn('[Storage] Respaldo IndexedDB pendiente/no disponible para ' + key, e);
+                        });
+                    }
+                    const idbOnly = this === window.localStorage && isHVAC && hvacDbReady && value.length > 700 * 1024;
+                    try {
+                        if (!idbOnly) orig.call(this, k, value);
+                    } catch (e) {
+                        if (isHVAC) {
+                            console.warn('[Storage] Cuota de localStorage; el dato queda en memoria mientras se recupera espacio:', k, e);
+                            if (hvacIsQuotaError(e)) {
+                                hvacStorageWriteTail = hvacStorageWriteTail
+                                    .then(() => hvacCleanupOldLocalBackups(key))
+                                    .then(() => {
+                                        try {
+                                            if (!idbOnly) {
+                                                hvacNativeSetItem.call(window.localStorage, key, value);
+                                                if (key.indexOf('HVAC_TS_') !== 0) {
+                                                    hvacNativeSetItem.call(window.localStorage, 'HVAC_TS_' + key, String(Date.now()));
+                                                }
+                                            }
+                                        } catch (retryError) {
+                                            console.warn('[Storage] Se mantiene el respaldo en memoria/IndexedDB:', key, retryError);
+                                        }
+                                    })
+                                    .catch(cleanupError => console.warn('[Storage] No se pudo limpiar caché redundante:', cleanupError));
+                            }
+                            if (Date.now() - cloudStateCtl.quotaWarnedAt > 60000) {
+                                cloudStateCtl.quotaWarnedAt = Date.now();
+                                try { showToast('Liberando espacio local y completando el respaldo offline en segundo plano.', 'success'); } catch (_) {}
+                            }
+                            return;
+                        }
+                        throw e;
+                    }
+                    if (this === window.localStorage && isHVAC && key.indexOf('HVAC_TS_') !== 0) {
+                        try { orig.call(this, 'HVAC_TS_' + key, String(Date.now())); } catch (_) {}
+                    }
+                    if (this === window.localStorage && CLOUD_STATE_KEYS.indexOf(String(k)) !== -1 && !cloudStateCtl.muted) {
+                        try { orig.call(this, 'HVAC_TS_' + k, String(Date.now())); } catch (_) {}
+                        if (typeof cloudScheduleStatePush === 'function') cloudScheduleStatePush(String(k));
+                    }
+                };
+                Storage.prototype.removeItem = function (k) {
+                    const key = String(k);
+                    if (this === window.localStorage && key.indexOf('HVAC_') === 0) {
+                        hvacMemoryStorage.delete(key);
+                        hvacStorageWriteTail = hvacStorageWriteTail.then(() => hvacIDBDelete(key)).catch(() => {});
+                    }
+                    return origRemove.call(this, k);
+                };
+            } catch (e) { console.warn('patchStorage', e); }
+        })();
+
+        let activeUser = null;
+        let activeSessionRole = null;
+        let activeSessionExpiresAt = null;
+        let sessionAuthenticated = false;
+        const AUTH_SESSION_KEY = 'HVAC_AUTH_SESSION_TECH';
+        const AUTH_SESSION_TTL = 8 * 60 * 60 * 1000;
+        let currentExecOrderId = null;
+        let currentExecEqId = null;
+        let sigCanvas, sigCtx, isDrawing = false;
+        let tempPhotosList = [];
+        let currentHubTab = 'equipos'; // 'equipos' o 'correctivos'
+        let AFC_HEADER_IMG = ''; // se carga desde Supabase Storage (common.js)
+        let AFC_FOOTER_IMG = ''; // se carga desde Supabase Storage (common.js)
+        let systemUsers = [];
+        let equipmentCatalog = [];
+        let workOrders = [];
+        let clientsCatalog = [];
+        let agendaItems = [];
+        let equipmentFormsConfig = {
+            "EXTRACTOR": { name: "EXTRACTOR", params: "Voltaje (V), Amperaje (A)", checklist: "Limpieza de Filtros de Aire\nLavado de Serpentín\nAjuste de Bornes Eléctricos" },
+            "MINISPLIT": { name: "MINISPLIT", params: "Voltaje (V), Amperaje (A), Presión Succión (PSI), Presión Descarga (PSI)", checklist: "Limpieza de Filtros de Aire\nLavado de Serpentín Evaporador\nLavado de Serpentín Condensador\nLimpieza de Bandeja y Desagüe\nAjuste de Bornes Eléctricos\nVerificación de Presiones y Gas" }
+        };
+
+        // =========================================================================
+        // INTERFAZ MÓVIL DEL TÉCNICO (solo presentación; la lógica de datos es la original)
+        // =========================================================================
+
+        // Busca un equipo priorizando el ID único (el código puede repetirse entre clientes).
+        function techFindEq(key) {
+            const k = String(key);
+            return equipmentCatalog.find(e => String(e.id) === k) || equipmentCatalog.find(e => String(e.code) === k);
+        }
+
+        // Solo se muestran rutinas PREVENTIVAS. Las órdenes de correctivos / agenda son exclusivas del administrador.
+        function isPreventiveOrder(o) {
+            if (!o) return false;
+            const id = String(o.id || '');
+            if (id.startsWith('HIST-') || id.startsWith('ORD-IND-')) return false;
+            const t = String(o.maintenanceType || o.type || 'PREVENTIVO').toUpperCase();
+            return t === 'PREVENTIVO';
+        }
+
+        // ===== SANITIZACION XSS =====
+        // esc(): texto -> HTML seguro (contenido de etiquetas y atributos entre comillas).
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;')
+                .replace(/`/g, '&#96;');
+        }
+        // escJs(): texto -> argumento seguro dentro de onclick="fn('...')".
+        function escJs(value) {
+            return esc(String(value == null ? '' : value)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r?\n/g, '\\n'));
+        }
+
+        // =====================================================================
+        //  SEGURIDAD DE CONTRASEÑAS  (PBKDF2-SHA256 + sal aleatoria, con CryptoJS)
+        //  Requiere cargar CryptoJS 4.2.0 (cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js)
+        //  con una etiqueta de script en el head de index.html y de tecnico.html.
+        //  Formato guardado en el usuario:  passwordHash = "pbkdf2$10000$<sal>$<hash>"
+        // =====================================================================
+        const AUTH_ITERATIONS = 10000;
+        const AUTH_MIN_LEN = 8;
+        const AUTH_PREFIX = 'pbkdf2';
+        const authIntentos = { n: 0, hasta: 0 };
+
+        function authRandomSalt() {
+            const bytes = new Uint8Array(16);
+            (window.crypto || window.msCrypto).getRandomValues(bytes);
+            return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function authDerive(password, saltHex, iterations) {
+            return CryptoJS.PBKDF2(String(password), CryptoJS.enc.Hex.parse(saltHex), {
+                keySize: 256 / 32,
+                iterations: iterations,
+                hasher: CryptoJS.algo.SHA256
+            }).toString(CryptoJS.enc.Hex);
+        }
+
+        // Convierte una contraseña en texto plano al valor que se guarda en la base de datos.
+        function hashPassword(password) {
+            const salt = authRandomSalt();
+            return AUTH_PREFIX + '$' + AUTH_ITERATIONS + '$' + salt + '$' + authDerive(password, salt, AUTH_ITERATIONS);
+        }
+
+        function authIgual(a, b) {                       // comparación en tiempo constante
+            a = String(a); b = String(b);
+            let diff = a.length ^ b.length;
+            for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+            return diff === 0;
+        }
+
+        // Compara la contraseña escrita contra el hash guardado (reemplaza a u.password === passwordInput).
+        function verifyPassword(password, stored) {
+            if (typeof stored !== 'string') return false;
+            const p = stored.split('$');
+            if (p.length !== 4 || p[0] !== AUTH_PREFIX) return false;
+            const iterations = parseInt(p[1], 10);
+            if (!iterations || iterations < 1000) return false;
+            return authIgual(authDerive(password, p[2], iterations), p[3]);
+        }
+
+        // ---- límite de intentos: 5 fallos = 30 s de bloqueo ----
+        function authBloqueado() { return Date.now() < authIntentos.hasta; }
+        function authFallo() { if (++authIntentos.n >= 5) { authIntentos.n = 0; authIntentos.hasta = Date.now() + 30000; } }
+        function authAcierto() { authIntentos.n = 0; }
+
+        // ---- pide una contraseña nueva (3 intentos) ----
+        function authPedirNuevaClave() {
+            for (let i = 0; i < 3; i++) {
+                const a = window.prompt('Por seguridad crea una nueva contraseña (mínimo ' + AUTH_MIN_LEN + ' caracteres):');
+                if (a === null) return null;
+                const nueva = a.trim();
+                if (nueva.length < AUTH_MIN_LEN || nueva === '123') { showToast('La contraseña debe tener al menos ' + AUTH_MIN_LEN + ' caracteres.', 'error'); continue; }
+                const b = window.prompt('Repite la nueva contraseña:');
+                if (b === null) return null;
+                if (b.trim() === nueva) return nueva;
+                showToast('Las contraseñas no coinciden.', 'error');
+            }
+            return null;
+        }
+
+        // Verifica el login. Si la cuenta aún tiene contraseña en texto plano, la convierte a hash
+        // (y exige cambiarla si es débil, p. ej. "123").
+        // Devuelve { ok, changed }: si changed=true hay que guardar el usuario (authGuardarUsuario).
+        function authRevisarClave(user, passwordInput) {
+            if (!user) return { ok: false, changed: false };
+            let changed = false;
+            if (user.passwordHash) {
+                if (!verifyPassword(passwordInput, user.passwordHash)) return { ok: false, changed: false };
+            } else if (typeof user.password === 'string' && user.password && authIgual(user.password, passwordInput)) {
+                user.passwordHash = hashPassword(passwordInput);
+                delete user.password;
+                changed = true;
+                if (passwordInput.length < AUTH_MIN_LEN) user.debeCambiarClave = true;
+            } else {
+                return { ok: false, changed: false };
+            }
+            if (user.debeCambiarClave) {
+                const nueva = authPedirNuevaClave();
+                if (!nueva) return { ok: false, changed };
+                user.passwordHash = hashPassword(nueva);
+                delete user.debeCambiarClave;
+                changed = true;
+            }
+            return { ok: true, changed };
+        }
+
+        // Guarda en la nube y en el respaldo local (backupKey: 'HVAC_USERS_BACKUP' en admin, 'HVAC_TECH_USERS_BACKUP' en técnico).
+        function authGuardarUsuario(user, backupKey) {
+            try { cloudSaveUser(user); } catch (e) { console.warn('[Auth] No se pudo guardar el usuario:', e); }
+            try { localStorage.setItem(backupKey, JSON.stringify(systemUsers)); } catch (e) {}
+        }
+
+        // =====================================================================
+        //  SINCRONIZACIÓN POR FILAS (agenda, caja, proyecciones, legalizaciones)
+        //  Reemplaza el "bloque JSON completo" de hvac_app_state por tablas reales.
+        //  - Solo se envían las filas que cambiaron (no se reescribe todo).
+        //  - Control de versión optimista: si otra persona modificó la misma fila,
+        //    NO se pisa: se conserva lo ya guardado y tu copia queda respaldada.
+        // =====================================================================
+        const ESTADO_TABLAS = {
+            HVAC_AGENDA_BACKUP: 'hvac_agenda'
+        };
+        const ESTADO_PAGINA = 200;
+        const ESTADO_TTL_MS = 20000;   // plan free: no se vuelve a descargar una tabla consultada hace menos de 20 s
+        const estadoCtl = { disabled: false, running: {}, again: {}, retry: {}, ultimo: {} };
+
+        // ---------- utilidades ----------
+        function estadoStable(v) {            // JSON con claves ordenadas (jsonb no conserva el orden)
+            if (v === undefined) return 'null';
+            if (v === null || typeof v !== 'object') return JSON.stringify(v);
+            if (Array.isArray(v)) return '[' + v.map(estadoStable).join(',') + ']';
+            return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined)
+                .map(k => JSON.stringify(k) + ':' + estadoStable(v[k])).join(',') + '}';
+        }
+        function estadoHash(str) {
+            let h1 = 0x811c9dc5, h2 = 5381;
+            for (let i = 0; i < str.length; i++) {
+                const c = str.charCodeAt(i);
+                h1 ^= c; h1 = Math.imul(h1, 16777619);
+                h2 = (Math.imul(h2, 33) + c) | 0;
+            }
+            return str.length + ':' + (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
+        }
+        function estadoHashObj(obj) { return estadoHash(estadoStable(JSON.parse(JSON.stringify(obj)))); }
+        function estadoUsuario() {
+            try {
+                const u = (typeof systemUsers !== 'undefined' && typeof activeUser !== 'undefined')
+                    ? systemUsers.find(x => String(x.id) === String(activeUser)) : null;
+                return (u && (u.email || u.username)) || 'desconocido';
+            } catch (e) { return 'desconocido'; }
+        }
+        function estadoLeerLocal(key) {
+            try {
+                const arr = JSON.parse(localStorage.getItem(key) || '[]');
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) { return []; }
+        }
+        function estadoEscribirLocal(key, arr) {          // escritura "muda": no dispara un nuevo envío
+            const prev = cloudStateCtl.muted;
+            cloudStateCtl.muted = true;
+            try { localStorage.setItem(key, JSON.stringify(arr)); } finally { cloudStateCtl.muted = prev; }
+        }
+        function estadoLeerSnap(key) {
+            try { return JSON.parse(localStorage.getItem('HVAC_SYNC_SNAP_' + key) || '{}') || {}; } catch (e) { return {}; }
+        }
+        function estadoGuardarSnap(key, snap) {
+            try { localStorage.setItem('HVAC_SYNC_SNAP_' + key, JSON.stringify(snap)); } catch (e) {}
+        }
+        function estadoSinTabla() {
+            if (cloudCtl.lastStatus === 404) {
+                estadoCtl.disabled = true;
+                console.info('[Estado] Las tablas relacionales no existen todavía: se usa hvac_app_state. Ejecuta supabase_setup.sql.');
+                return true;
+            }
+            return false;
+        }
+        function estadoGuardarConflicto(tabla, id, item) {   // respaldo de TU versión cuando pierdes un conflicto
+            try {
+                const log = JSON.parse(localStorage.getItem('HVAC_SYNC_CONFLICTS') || '[]');
+                log.push({ at: new Date().toISOString(), tabla, id, item });
+                localStorage.setItem('HVAC_SYNC_CONFLICTS', JSON.stringify(log.slice(-25)));
+            } catch (e) {}
+        }
+        function estadoRefrescarUI() {
+            try { if (typeof restoreLocalAppData === 'function') restoreLocalAppData(); } catch (e) {}
+            try {
+                if (typeof refreshAppFromCurrentData === 'function') refreshAppFromCurrentData();            // app del técnico
+                else if (typeof renderSection === 'function') {                                              // panel admin
+                    const sec = Array.from(document.querySelectorAll('main > section')).find(x => !x.classList.contains('hidden'));
+                    if (sec && sec.id) renderSection(sec.id.replace('view-', ''));
+                }
+            } catch (e) {}
+        }
+        function estadoReemplazarLocal(key, remoteRow) {     // pone la versión remota de UNA fila en el arreglo local
+            const arr = estadoLeerLocal(key);
+            const id = String(remoteRow.id);
+            const idx = arr.findIndex(x => x && String(x.id) === id);
+            if (idx >= 0) arr[idx] = remoteRow.payload; else arr.push(remoteRow.payload);
+            estadoEscribirLocal(key, arr);
+        }
+        function estadoProgramarReintento(key, ms) {
+            clearTimeout(estadoCtl.retry[key]);
+            estadoCtl.retry[key] = setTimeout(() => cloudScheduleStatePush(key, true), ms || 20000);
+        }
+
+        // ---------- conflicto: otra persona cambió la misma fila ----------
+        async function estadoResolverConflicto(key, tabla, id, item, h, snap) {
+            const rows = await supabaseFetch(`${tabla}?id=eq.${encodeURIComponent(id)}&select=id,payload,version`, 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows)) return 'error';
+            if (!rows.length) {                               // otra persona la borró: se vuelve a crear con tu versión
+                delete snap[id];
+                estadoCtl.again[key] = true;
+                return 'recreado';
+            }
+            const remoto = rows[0];
+            const hr = estadoHashObj(remoto.payload);
+            if (hr === h) { snap[id] = { v: remoto.version, h }; return 'igual'; }   // misma información: no hay conflicto real
+            estadoGuardarConflicto(tabla, id, item);          // tu versión queda en HVAC_SYNC_CONFLICTS
+            estadoReemplazarLocal(key, remoto);
+            snap[id] = { v: remoto.version, h: hr };
+            try { showToast('El registro ' + id + ' fue modificado por otra persona. Se cargó su versión; tu copia quedó respaldada.', 'error'); } catch (e) {}
+            return 'remoto';
+        }
+
+        // ---------- ENVÍO: solo filas nuevas, modificadas o borradas ----------
+        async function estadoPushInterno(key, tabla) {
+            const local = estadoLeerLocal(key);
+            const snap = estadoLeerSnap(key);
+            const user = estadoUsuario();
+            const vistos = new Set();
+            let todoOk = true, huboConflicto = false;
+
+            for (const raw of local) {
+                if (!raw || typeof raw !== 'object' || raw.id === undefined || raw.id === null || raw.id === '') continue;
+                const id = String(raw.id);
+                vistos.add(id);
+                const item = JSON.parse(JSON.stringify(raw));
+                const h = estadoHash(estadoStable(item));
+                const s = snap[id];
+                if (s && s.h === h) continue;                 // sin cambios
+
+                let r;
+                if (!s) {                                     // INSERT (si ya existe, se ignora y se revisa el conflicto)
+                    r = await supabaseFetch(`${tabla}?on_conflict=id`, 'POST', [{ id, payload: item, updated_by: user }],
+                        { 'Prefer': 'resolution=ignore-duplicates,return=representation' }, { quiet: true });
+                } else {                                      // UPDATE solo si la versión sigue siendo la que leímos
+                    r = await supabaseFetch(`${tabla}?id=eq.${encodeURIComponent(id)}&version=eq.${s.v}`, 'PATCH',
+                        { payload: item, updated_by: user }, { 'Prefer': 'return=representation' }, { quiet: true });
+                }
+                if (!Array.isArray(r)) {                      // fallo de red / permisos / tabla inexistente
+                    todoOk = false;
+                    if (estadoSinTabla()) return false;
+                    continue;
+                }
+                if (r.length) { snap[id] = { v: r[0].version, h }; continue; }
+                const res = await estadoResolverConflicto(key, tabla, id, item, h, snap);
+                if (res === 'error') todoOk = false;
+                if (res === 'remoto') huboConflicto = true;
+            }
+
+            for (const id of Object.keys(snap)) {             // borrados locales
+                if (vistos.has(id)) continue;
+                const enc = encodeURIComponent(id);
+                const del = await supabaseFetch(`${tabla}?id=eq.${enc}&version=eq.${snap[id].v}`, 'DELETE', null, null, { quiet: true });
+                if (!del) { todoOk = false; if (estadoSinTabla()) return false; continue; }
+                const check = await supabaseFetch(`${tabla}?id=eq.${enc}&select=id,payload,version`, 'GET', null, null, { quiet: true });
+                if (!Array.isArray(check)) { todoOk = false; continue; }
+                if (!check.length) { delete snap[id]; continue; }
+                estadoReemplazarLocal(key, check[0]);         // otra persona la había modificado: no se borra
+                snap[id] = { v: check[0].version, h: estadoHashObj(check[0].payload) };
+                huboConflicto = true;
+                try { showToast('El registro ' + id + ' fue modificado por otra persona y no se eliminó.', 'error'); } catch (e) {}
+            }
+
+            estadoGuardarSnap(key, snap);
+            if (huboConflicto) estadoRefrescarUI();
+            if (!todoOk) estadoProgramarReintento(key, 20000);
+            return todoOk;
+        }
+
+        async function estadoPush(key) {
+            const tabla = ESTADO_TABLAS[key];
+            if (!tabla || estadoCtl.disabled) return null;
+            if (estadoCtl.running[key]) { estadoCtl.again[key] = true; return estadoCtl.running[key]; }
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) { estadoProgramarReintento(key, 20000); return null; }
+            const run = (async () => {
+                try { return (await estadoPushInterno(key, tabla)) ? true : null; }
+                catch (e) { console.warn('[Estado] Envío fallido (' + key + '):', e); estadoProgramarReintento(key, 20000); return null; }
+            })();
+            estadoCtl.running[key] = run;
+            try { return await run; }
+            finally {
+                delete estadoCtl.running[key];
+                if (estadoCtl.again[key]) { delete estadoCtl.again[key]; cloudScheduleStatePush(key, true); }
+            }
+        }
+
+        // ---------- LECTURA: trae filas remotas y las mezcla sin perder cambios locales ----------
+        async function estadoDescargar(tabla) {
+            const todas = [];
+            for (let offset = 0; ; offset += ESTADO_PAGINA) {
+                const rows = await supabaseFetch(
+                    `${tabla}?select=id,payload,version&order=created_at.asc,id.asc&limit=${ESTADO_PAGINA}&offset=${offset}`,
+                    'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return null;
+                todas.push(...rows);
+                if (rows.length < ESTADO_PAGINA) return todas;
+            }
+        }
+
+        function estadoMezclar(key, rows) {
+            const snap = estadoLeerSnap(key);
+            const local = estadoLeerLocal(key);
+            const localPorId = new Map();
+            local.forEach(it => { if (it && it.id !== undefined && it.id !== null) localPorId.set(String(it.id), it); });
+            const remotosIds = new Set();
+            const salida = [], nuevoSnap = {};
+
+            for (const row of rows) {
+                const id = String(row.id);
+                remotosIds.add(id);
+                const remoto = row.payload, hRemoto = estadoHashObj(remoto);
+                const loc = localPorId.get(id), s = snap[id];
+                if (!loc) {
+                    if (s) { nuevoSnap[id] = s; continue; }                    // borrado local pendiente de enviar: no se resucita
+                    salida.push(remoto); nuevoSnap[id] = { v: row.version, h: hRemoto }; continue;
+                }
+                const hLocal = estadoHashObj(loc);
+                if (s && s.h !== hLocal) { salida.push(loc); nuevoSnap[id] = s; continue; }   // cambios locales sin enviar: se conservan
+                if (!s && hLocal !== hRemoto) { salida.push(loc); continue; }                 // sin base conocida: lo resuelve el envío
+                salida.push(remoto); nuevoSnap[id] = { v: row.version, h: hRemoto };
+            }
+            for (const loc of local) {                                        // filas que solo existen en este equipo
+                if (!loc || loc.id === undefined || loc.id === null) { salida.push(loc); continue; }
+                const id = String(loc.id);
+                if (remotosIds.has(id)) continue;
+                const s = snap[id];
+                if (s && s.h === estadoHashObj(loc)) continue;                // otra persona la borró y aquí no hubo cambios: se quita
+                salida.push(loc);                                             // nueva o editada localmente: se enviará
+            }
+            const cambio = estadoStable(salida) !== estadoStable(local);
+            if (cambio) estadoEscribirLocal(key, salida);
+            estadoGuardarSnap(key, nuevoSnap);
+            return cambio;
+        }
+
+        async function estadoPullKeys(keys, usarTtl) {
+            if (estadoCtl.disabled || (typeof navigator !== 'undefined' && navigator.onLine === false)) return false;
+            let cambio = false;
+            for (const key of keys) {
+                const tabla = ESTADO_TABLAS[key];
+                if (!tabla || estadoCtl.disabled) continue;
+                if (usarTtl && Date.now() - (estadoCtl.ultimo[key] || 0) < ESTADO_TTL_MS) continue;
+                await estadoPush(key);                                        // 1) primero se envía lo local
+                if (estadoCtl.disabled) continue;
+                const rows = await estadoDescargar(tabla);                    // 2) luego se descarga
+                if (!rows) { estadoSinTabla(); continue; }
+                if (estadoCtl.running[key]) await estadoCtl.running[key];
+                estadoCtl.ultimo[key] = Date.now();
+                if (estadoMezclar(key, rows)) cambio = true;                  // 3) y se mezcla
+            }
+            return cambio;
+        }
+
+        window.addEventListener('online', () => {
+            Object.keys(ESTADO_TABLAS).forEach(k => { if (localStorage.getItem(k) !== null) cloudScheduleStatePush(k, true); });
+        });
+
+
+        // =====================================================================
+        //  AUDITORÍA  ->  tabla audit_logs
+        //  Funciona sin conexión: los eventos se guardan en una cola local
+        //  (HVAC_AUDIT_QUEUE) y se envían cuando vuelve internet.
+        // =====================================================================
+        const AUDIT_COLA_KEY = 'HVAC_AUDIT_QUEUE';
+        let auditEnviando = false;
+
+        function auditUsuario() {
+            try {
+                const u = systemUsers.find(x => String(x.id) === String(activeUser));
+                return (u && (u.email || u.username)) || 'desconocido';
+            } catch (e) { return 'desconocido'; }
+        }
+
+        function auditUuid() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+            const b = new Uint8Array(16);
+            (window.crypto || window.msCrypto).getRandomValues(b);
+            b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+            const h = Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+            return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+        }
+
+        function auditLeerCola() {
+            try { const c = JSON.parse(localStorage.getItem(AUDIT_COLA_KEY) || '[]'); return Array.isArray(c) ? c : []; } catch (e) { return []; }
+        }
+        function auditEscribirCola(c) {
+            try { localStorage.setItem(AUDIT_COLA_KEY, JSON.stringify(c)); } catch (e) {}
+        }
+
+        async function auditEnviarCola() {
+            if (auditEnviando || navigator.onLine === false) return;
+            auditEnviando = true;
+            try {
+                let cola = auditLeerCola();
+                while (cola.length) {
+                    const lote = cola.slice(0, 50);
+                    const r = await supabaseFetch('audit_logs?on_conflict=id', 'POST', lote,
+                        { 'Prefer': 'resolution=ignore-duplicates,return=minimal' }, { quiet: true });
+                    if (!r) break;                                         // se reintenta luego; no se pierde nada
+                    const enviados = new Set(lote.map(x => x.id));
+                    cola = auditLeerCola().filter(x => !enviados.has(x.id));
+                    auditEscribirCola(cola);
+                }
+            } finally { auditEnviando = false; }
+        }
+
+        // accion:     'CREAR' | 'EDITAR' | 'BORRAR' | 'FACTURAR' | 'LEGALIZAR' ...
+        // tabla:      'hvac_orders' | 'hvac_caja' | 'hvac_legalizaciones' ...
+        // registroId: id del registro afectado (p. ej. order.id, 'CAJA-1736...')
+        function registrarAuditoria(accion, tabla, registroId) {
+            try {
+                const cola = auditLeerCola();
+                cola.push({
+                    id: auditUuid(),
+                    user_email: auditUsuario(),
+                    action: String(accion).toUpperCase(),
+                    table_name: String(tabla),
+                    record_id: registroId === undefined || registroId === null ? null : String(registroId),
+                    timestamp: new Date().toISOString()
+                });
+                auditEscribirCola(cola.slice(-500));
+            } catch (e) { console.warn('[Auditoría] No se pudo registrar:', e); }
+            return auditEnviarCola().catch(() => {});
+        }
+
+        window.addEventListener('online', () => { auditEnviarCola().catch(() => {}); });
+        setInterval(() => { if (auditLeerCola().length) auditEnviarCola().catch(() => {}); }, 60000);
+
+
+        function showToast(message, type = "success") {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            const icon = type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-check';
+            toast.className = 'toast ' + (type === 'error' ? 'toast-error' : 'toast-ok');
+            toast.innerHTML = `<i class="fa-solid ${icon}"></i><span></span>`;
+            toast.querySelector('span:last-child').textContent = String(message);
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('toast-out');
+                setTimeout(() => toast.remove(), 250);
+            }, 3500);
+        }
+
+        // Las credenciales de administradores nunca se conservan en el teléfono del técnico.
+        function techStripAdminUsers() {
+            if (Array.isArray(systemUsers)) systemUsers = systemUsers.filter(u => u && u.role !== 'ADMIN');
+        }
+
+        function restoreLocalAppData() {
+            const localEqs = readLocalBackup('HVAC_EQUIPMENTS_BACKUP', equipmentCatalog);
+            const localOrds = readLocalBackup('HVAC_ORDERS_BACKUP', workOrders);
+            const localClis = readLocalBackup('HVAC_CLIENTS_BACKUP', clientsCatalog);
+            const localUsrs = readLocalBackup('HVAC_TECH_USERS_BACKUP', systemUsers);
+            const localAgenda = readLocalBackup('HVAC_AGENDA_BACKUP', agendaItems);
+            const localForms = readLocalBackup('HVAC_FORMS_CONFIG_BACKUP', equipmentFormsConfig);
+
+            if (Array.isArray(localEqs)) equipmentCatalog = localEqs;
+            if (Array.isArray(localOrds)) workOrders = localOrds;
+            if (Array.isArray(localClis)) clientsCatalog = localClis;
+            if (Array.isArray(localUsrs) && localUsrs.length) systemUsers = localUsrs;
+            if (Array.isArray(localAgenda)) agendaItems = localAgenda;
+            if (localForms && typeof localForms === 'object' && !Array.isArray(localForms)) equipmentFormsConfig = localForms;
+            techStripAdminUsers();
+        }
+
+        function refreshAppFromCurrentData() {
+            try { renderTechAgenda(); } catch (e) { console.warn('[UI] No se pudo actualizar la agenda del técnico:', e); }
+            try {
+                if (restoreActiveSession()) {
+                    document.getElementById('app-login-screen').classList.add('hidden');
+                    syncTechUser();
+                } else {
+                    syncTechUser();
+                    document.getElementById('app-login-screen').classList.remove('hidden');
+                }
+            } catch (e) {
+                console.warn('[UI] No se pudo actualizar la sesión:', e);
+            }
+        }
+
+        // Cloudflare R2: sube la imagen al capturarla; si no hay red o R2 no está configurado, se conserva en Base64
+        const r2keep = (d, folder) => (window.HVAC && HVAC.r2) ? HVAC.r2.keep(d, folder) : Promise.resolve(d);
+        const hvacPrefetch = o => (window.HVAC && HVAC.img && HVAC.img.prefetchIn) ? HVAC.img.prefetchIn(o) : Promise.resolve();
+        async function compressImage(file, maxWidth = 800, quality = 0.65, maxBytes = 150 * 1024, silent = false) {
+            const MAX_BYTES = Math.min(150 * 1024, Math.max(16 * 1024, Number(maxBytes) || 150 * 1024));
+            const fail = (msg, err) => {
+                console.error('[compressImage]', msg, err || '');
+                if (!silent) try { showToast(msg, 'error'); } catch (_) {}
+                throw new Error(msg);
+            };
+            if (!file || !file.type || !file.type.startsWith('image/')) {
+                fail('Selecciona un archivo de imagen válido.');
+            }
+
+            let objectUrl;
+            let img;
+            try {
+                objectUrl = URL.createObjectURL(file);
+                img = await new Promise((resolve, reject) => {
+                    const image = new Image();
+                    image.onload = () => resolve(image);
+                    image.onerror = () => reject(new Error('No se pudo decodificar la imagen.'));
+                    image.src = objectUrl;
+                });
+            } catch (e) {
+                fail('Formato de imagen no compatible. Usa una foto JPG o PNG.', e);
+            } finally {
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+            }
+
+            const srcW = img.naturalWidth || img.width;
+            const srcH = img.naturalHeight || img.height;
+            if (!srcW || !srcH) fail('La imagen está vacía o dañada.');
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) fail('Tu navegador no pudo procesar la imagen.');
+            const edgeLimit = Math.min(800, Math.max(240, Number(maxWidth) || 800));
+            let scale = Math.min(1, edgeLimit / Math.max(srcW, srcH));
+            let width = Math.max(1, Math.round(srcW * scale));
+            let height = Math.max(1, Math.round(srcH * scale));
+            const encode = async q => {
+                canvas.width = width;
+                canvas.height = height;
+                ctx.fillStyle = '#ffffff'; // PNG con transparencia: fondo blanco
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+                const blob = await new Promise((resolve, reject) => {
+                    canvas.toBlob(result => result ? resolve(result) : reject(new Error('No se pudo codificar la imagen.')), 'image/jpeg', q);
+                });
+                return blob;
+            };
+
+            try {
+                let q = Math.min(0.65, Math.max(0.3, Number(quality) || 0.65));
+                let blob = await encode(q);
+                while (blob.size >= MAX_BYTES) {
+                    if (q > 0.35) {
+                        q = Math.max(0.35, q - 0.05);
+                    } else if (Math.max(width, height) > 240) {
+                        const shrink = Math.max(0.62, Math.sqrt(MAX_BYTES / blob.size) * 0.9);
+                        width = Math.max(1, Math.round(width * shrink));
+                        height = Math.max(1, Math.round(height * shrink));
+                    } else if (q > 0.3) {
+                        q = Math.max(0.3, q - 0.05);
+                    } else {
+                        fail('La imagen no se pudo reducir por debajo de 150 KB. Elige una foto más pequeña.');
+                    }
+                    blob = await encode(q);
+                }
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = () => reject(reader.error || new Error('No se pudo leer la imagen comprimida.'));
+                    reader.readAsDataURL(blob);
+                });
+                if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg;')) {
+                    fail('No se pudo comprimir la imagen.');
+                }
+                return dataUrl;
+            } catch (e) {
+                if (e && e.message && e.message.indexOf('150 KB') !== -1) throw e;
+                fail('No se pudo comprimir la imagen seleccionada.', e);
+            } finally {
+                canvas.width = 0;
+                canvas.height = 0;
+                img.src = '';
+            }
+        }
+
+        // =========================================================================
+        // CAPA DE NUBE ROBUSTA (Supabase): reintentos, cola por registro, bandeja de salida,
+        // diagnóstico de credenciales y sincronización de módulos locales.
+        // Los nombres y parámetros de las funciones cloud* se conservan.
+        // =========================================================================
+        const cloudCtl = { lastToast: 0, lastStatus: 0, lastOutboxTs: 0, queues: {}, bigWarned: {}, loading: null, flushing: null, durability: {} };
+        const cloudSleep = ms => new Promise(r => setTimeout(r, ms));
+
+        function cloudKeyProblem() {
+            try {
+                const parts = String(SUPABASE_KEY || '').split('.');
+                if (parts.length !== 3) return 'La clave de Supabase no tiene formato JWT (debe tener 3 partes).';
+                const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const json = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+                const claims = JSON.parse(json);
+                if (!claims.role) return 'La clave de Supabase no declara un rol (anon / service_role).';
+                if (claims.role === 'service_role') return 'ATENCIÓN: se está usando la clave service_role en el navegador. Usa solo la clave anon pública.';
+                return null;
+            } catch (e) {
+                return 'La clave SUPABASE_KEY está dañada o incompleta. Cópiala de nuevo en Supabase > Project Settings > API (anon public).';
+            }
+        }
+
+        function cloudSetBadge(state, detail) {
+            const b = document.getElementById('sidebar-sync-badge');
+            if (!b) return;
+            const map = {
+                ok: ['fa-circle-check text-emerald-400', 'Cloud Enlazado'],
+                offline: ['fa-cloud-bolt text-amber-400', 'Sin conexión'],
+                error: ['fa-triangle-exclamation text-rose-400', 'Error de nube'],
+                syncing: ['fa-arrows-rotate fa-spin text-amber-400', 'Sincronizando…']
+            };
+            const m = map[state] || map.ok;
+            b.innerHTML = '<i class="fa-solid ' + m[0] + '"></i> ' + m[1];
+            b.title = detail || '';
+        }
+
+        function cloudReport(ok, status, detail, method, endpoint) {
+            if (ok) {
+                cloudCtl.lastStatus = 200;
+                const pending = cloudOutboxRead().length;
+                cloudSetBadge(pending ? 'syncing' : 'ok', pending ? pending + ' cambio(s) pendiente(s)' : '');
+                return;
+            }
+            cloudCtl.lastStatus = status;
+            console.warn('[Supabase] ' + method + ' ' + endpoint + ' -> ' + status, detail || '');
+            if (status === 401 || status === 403) {
+                cloudSetBadge('error', 'HTTP ' + status + '; cambios locales conservados para sincronizar.');
+                return;
+            }
+            if (status === 429 || status === 'network' || status === 'timeout') {
+                cloudSetBadge('syncing', 'Cambios locales en cola; se reintentará automáticamente.');
+                return;
+            }
+            const offline = status === 'offline';
+            cloudSetBadge(offline ? 'offline' : 'error', 'HTTP ' + status);
+            if (Date.now() - cloudCtl.lastToast < 45000) return;
+            cloudCtl.lastToast = Date.now();
+            let msg = 'No se pudo sincronizar con la nube (' + status + '). Tus datos están a salvo en este dispositivo.';
+            if (offline) msg = 'Sin conexión con la nube. Los cambios se guardan aquí y se reenviarán al reconectar.';
+            else if (status === 401 || status === 403) msg = 'La nube rechazó las credenciales (HTTP ' + status + '). Revisa SUPABASE_KEY y las políticas RLS.';
+            else if (status === 404) msg = 'Tabla no encontrada en Supabase (HTTP 404). Verifica que existan las tablas hvac_*.';
+            try { showToast(msg, 'error'); } catch (_) {}
+        }
+
+        // opts: { quiet: true } no reporta errores (se usa en intentos con plan B)
+        async function supabaseFetch(endpoint, method = 'GET', body = null, extraHeaders = null, opts = null) {
+            const quiet = !!(opts && opts.quiet);
+            const headers = {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            };
+            if (method === 'POST') headers['Prefer'] = 'return=representation';
+            if (extraHeaders) Object.assign(headers, extraHeaders);
+            const payload = body ? JSON.stringify(body) : undefined;
+            const MAX_TRIES = 2;
+            for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+                const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timer = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null;
+                try {
+                    const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { method, headers, body: payload, signal: ctrl ? ctrl.signal : undefined });
+                    if (res.ok) {
+                        cloudCtl.lastStatus = 200;
+                        if (!quiet) cloudReport(true);
+                        if (method === 'DELETE') return true;
+                        const txt = await res.text();
+                        if (!txt) return true;
+                        try { return JSON.parse(txt); } catch (e) { return true; }
+                    }
+                    const detail = await res.text().catch(() => '');
+                    if ((res.status === 429 || res.status >= 500) && attempt < MAX_TRIES) {
+                        if (timer) clearTimeout(timer);
+                        await cloudSleep(res.status === 429 ? 1200 : 700);
+                        continue;
+                    }
+                    cloudCtl.lastStatus = res.status;
+                    if (!quiet) cloudReport(false, res.status, detail, method, endpoint);
+                    return null;
+                } catch (err) {
+                    if (attempt < MAX_TRIES) { await cloudSleep(700); continue; }
+                    const status = err && err.name === 'AbortError' ? 'timeout' : 'network';
+                    cloudCtl.lastStatus = status;
+                    if (!quiet) cloudReport(false, status, String(err), method, endpoint);
+                    return null;
+                } finally {
+                    if (timer) clearTimeout(timer);
+                }
+            }
+            return null;
+        }
+
+        // ---- Bandeja de salida: cambios que no llegaron a la nube ----
+        function cloudOutboxRead() { try { return JSON.parse(localStorage.getItem('HVAC_CLOUD_OUTBOX') || '[]'); } catch (e) { return []; } }
+        function cloudOutboxWrite(a) { try { localStorage.setItem('HVAC_CLOUD_OUTBOX', JSON.stringify(a)); } catch (e) {} }
+        function cloudOutboxAdd(table, id, op, payload) {
+            const existing = cloudOutboxRead();
+            const latestTs = existing.reduce((max, entry) => Math.max(max, Number(entry.ts) || 0), 0);
+            const a = existing.filter(x => !(x.table === table && x.id === id));
+            cloudCtl.lastOutboxTs = Math.max(Date.now(), cloudCtl.lastOutboxTs + 1, latestTs + 1);
+            const e = { table, id, op, ts: cloudCtl.lastOutboxTs };
+            if (payload !== undefined) e.payload = payload; // copia exacta de lo que se quiso guardar
+            a.push(e);
+            cloudOutboxWrite(a);
+            cloudSetBadge('syncing', 'Cambio guardado localmente; sincronización en segundo plano.');
+            const durable = hvacIDBSet('HVAC_OUTBOX::' + table + '::' + id, JSON.stringify(e)).then(() => ({ ts: e.ts, persisted: true })).catch(err => {
+                console.error('[Offline] No se pudo guardar una operación en IndexedDB:', err);
+                return { ts: e.ts, persisted: false };
+            });
+            cloudCtl.durability[table + ':' + id] = durable;
+            durable.then(() => {
+                if (cloudCtl.durability[table + ':' + id] === durable) delete cloudCtl.durability[table + ':' + id];
+            });
+            return durable;
+        }
+        function cloudOutboxClear(table, id, expectedTs) {
+            const a = cloudOutboxRead();
+            const b = a.filter(x => {
+                if (!(x.table === table && x.id === id)) return true;
+                return expectedTs != null && Number(x.ts || 0) > Number(expectedTs);
+            });
+            if (b.length !== a.length) cloudOutboxWrite(b);
+            const newer = b.find(x => x.table === table && x.id === id);
+            hvacStorageWriteTail = hvacStorageWriteTail.then(() => newer
+                ? hvacIDBSet('HVAC_OUTBOX::' + table + '::' + id, JSON.stringify(newer))
+                : hvacIDBDelete('HVAC_OUTBOX::' + table + '::' + id)).catch(() => {});
+            const pending = b.length;
+            cloudSetBadge(pending ? 'syncing' : 'ok', pending ? pending + ' cambio(s) pendiente(s)' : '');
+        }
+
+        function cloudCleanId(id) { return String(id).replace(/[\/\\]/g, '-'); }
+
+        // Una sola escritura a la vez por registro: la última siempre gana en orden.
+        function cloudEnqueue(key, run) {
+            const prev = cloudCtl.queues[key] || Promise.resolve();
+            const next = prev.then(run, run);
+            cloudCtl.queues[key] = next;
+            const cleanup = () => { if (cloudCtl.queues[key] === next) delete cloudCtl.queues[key]; };
+            next.then(cleanup, cleanup);
+            return next;
+        }
+
+        function cloudGuardSize(table, cleanId, payload) {
+            try {
+                const mb = JSON.stringify(payload).length / 1048576;
+                if (mb > 1.5 && !cloudCtl.bigWarned[table + cleanId]) {
+                    cloudCtl.bigWarned[table + cleanId] = true;
+                    console.warn('[Supabase] Registro voluminoso ' + table + '/' + cleanId + ': ' + mb.toFixed(2) + ' MB (fotos incrustadas).');
+                    if (mb > 4) showToast('El registro ' + cleanId + ' pesa ' + mb.toFixed(1) + ' MB por las fotos; podría fallar al sincronizar.', 'error');
+                }
+            } catch (e) {}
+        }
+
+        // ---- Rutinas compartidas por varios técnicos: se conserva el avance más reciente de cada equipo ----
+        const execTs = e => String((e && e.timestamp) || '');
+        function mergeSharedOrder(local, remote) {
+            const out = Object.assign({}, remote, local), ex = Object.assign({}, remote.executions || {});
+            Object.entries(local.executions || {}).forEach(([k, v]) => { if (!ex[k] || execTs(v) >= execTs(ex[k])) ex[k] = v; });
+            out.executions = ex;
+            if (remote.technicianFinished) { out.technicianFinished = true; out.technicianFinishedAt = remote.technicianFinishedAt; }
+            const ids = out.equipmentIds || [];
+            if (String(out.status).toUpperCase() === 'PENDING' && ids.length && ids.every(id => ex[id] && !ex[id].partial)) out.status = 'COMPLETED';
+            return out;
+        }
+        function applyMergedToLocal(id, merged) {
+            const lo = (typeof workOrders !== 'undefined') && workOrders.find(o => o && o.id === id); if (!lo) return;
+            lo.executions = Object.assign({}, merged.executions); lo.status = merged.status;
+            if (merged.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = merged.technicianFinishedAt; }
+        }
+        function cloudUpsert(table, rawId, obj) {
+            const cleanId = cloudCleanId(rawId);
+            const payload = JSON.parse(JSON.stringify(obj));
+            cloudGuardSize(table, cleanId, payload);
+            const durable = cloudOutboxAdd(table, cleanId, 'save', table === 'hvac_app_state' ? undefined : payload); // pendiente hasta confirmar
+            return cloudEnqueue(table + ':' + cleanId, async () => {
+                const queuedEntry = await durable;
+                const enc = encodeURIComponent(cleanId);
+                if (window.HVAC && HVAC.r2 && HVAC.r2.hasInline(payload)) {        // fotos tomadas sin señal: se suben a R2 al sincronizar
+                    const m = await HVAC.r2.externalize(payload, table);
+                    if (m.size) HVAC.r2.applyLocal(table, cleanId, m, { hvac_orders: workOrders });
+                }
+                let body = payload;
+                if (table === 'hvac_orders' && orderTechs(payload).length > 1) {      // rutina compartida: fusiona lo que otros técnicos ya guardaron
+                    const remote = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=payload`, 'GET', null, null, { quiet: true });
+                    if (Array.isArray(remote) && remote[0] && remote[0].payload) { body = mergeSharedOrder(payload, remote[0].payload); applyMergedToLocal(cleanId, body); }
+                }
+                // Plan A: upsert atómico (1 petición)
+                let r = await supabaseFetch(`${table}?on_conflict=id`, 'POST', { id: cleanId, payload: body }, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, { quiet: true });
+                if (!r && [400, 404].includes(Number(cloudCtl.lastStatus))) {
+                    // Plan B: verificar y actualizar / insertar
+                    const check = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'GET', null, null, { quiet: true });
+                    if (check && check.length > 0) r = await supabaseFetch(`${table}?id=eq.${enc}`, 'PATCH', { payload: body }, { 'Prefer': 'return=minimal' }, { quiet: true });
+                    else if (check) r = await supabaseFetch(table, 'POST', { id: cleanId, payload: body }, null, { quiet: true });
+                }
+                if (r) cloudOutboxClear(table, cleanId, queuedEntry.ts);
+                return r || null;
+            });
+        }
+
+        function cloudDeleteGeneric(table, rawId) {
+            const cleanId = cloudCleanId(rawId);
+            const durable = cloudOutboxAdd(table, cleanId, 'delete');
+            return cloudEnqueue(table + ':' + cleanId, async () => {
+                const queuedEntry = await durable;
+                const r = await supabaseFetch(`${table}?id=eq.${encodeURIComponent(cleanId)}`, 'DELETE');
+                if (r) cloudOutboxClear(table, cleanId, queuedEntry.ts);
+                return r || null;
+            });
+        }
+
+        async function cloudSaveEquipment(eq) { return cloudUpsert('hvac_equipments', eq.id || eq.code, eq); }
+        async function cloudDeleteEquipment(id) { return cloudDeleteGeneric('hvac_equipments', id); }
+        async function cloudSaveOrder(order) { return cloudUpsert('hvac_orders', order.id, order); }
+        async function cloudDeleteOrder(id) { return cloudDeleteGeneric('hvac_orders', id); }
+        async function cloudSaveClient(cli) { return cloudUpsert('hvac_clients', cli.id, cli); }
+        async function cloudDeleteClient(id) { return cloudDeleteGeneric('hvac_clients', id); }
+        async function cloudSaveUser(usr) { return cloudUpsert('hvac_users', usr.id, usr); }
+        async function cloudDeleteUser(id) { return cloudDeleteGeneric('hvac_users', id); }
+
+        function hvacDataUrlToBlob(dataUrl) {
+            try {
+                const comma = String(dataUrl).indexOf(',');
+                const meta = String(dataUrl).slice(0, comma);
+                if (comma < 0 || !/;base64$/i.test(meta)) return null;
+                const mime = /^data:([^;]+)/i.exec(meta);
+                const binary = atob(String(dataUrl).slice(comma + 1));
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                return new Blob([bytes], { type: mime ? mime[1] : 'image/jpeg' });
+            } catch (_) {
+                return null;
+            }
+        }
+
+        async function hvacCompressOrderPhotos(order) {
+            let changed = false;
+            const seen = new Set();
+            for (const exec of Object.values(order.executions || {})) {
+                if (!exec || seen.has(exec) || !Array.isArray(exec.photos)) continue;
+                seen.add(exec);
+                for (let i = 0; i < exec.photos.length; i++) {
+                    const original = exec.photos[i];
+                    if (typeof original !== 'string' || !original.startsWith('data:image/')) continue;
+                    const blob = hvacDataUrlToBlob(original);
+                    if (!blob) continue;
+                    try {
+                        const reduced = await compressImage(blob, 640, 0.5, 100 * 1024, true);
+                        if (reduced.length < original.length) {
+                            exec.photos[i] = reduced;
+                            changed = true;
+                        }
+                    } catch (e) {
+                        console.warn('[Offline] No se pudo reducir más una foto durante la recuperación:', e);
+                    }
+                }
+            }
+            return changed;
+        }
+
+        function persistOrderLocallyAndSync(order) {
+            order.updatedAt = new Date().toISOString();
+            registrarAuditoria(order.status === 'COMPLETED' ? 'COMPLETAR' : 'EDITAR', 'hvac_orders', order.id);
+            const backupKey = 'HVAC_ORDERS_BACKUP';
+            const writeOrderBackup = () => {
+                const serializedOrders = JSON.stringify(workOrders);
+                try {
+                    // Actualización sincrónica de localStorage/memoria; IndexedDB continúa aparte.
+                    localStorage.setItem(backupKey, serializedOrders);
+                } catch (e) {
+                    console.warn('[Offline] localStorage no aceptó el respaldo; se conserva en memoria/IndexedDB:', e);
+                }
+                let localStorageConfirmed = false;
+                try { localStorageConfirmed = hvacNativeGetItem.call(window.localStorage, backupKey) === serializedOrders; } catch (_) {}
+                const indexedBackup = hvacIDBSet(backupKey, serializedOrders).then(() => true).catch(e => {
+                    console.warn('[Offline] Se reintentará el respaldo IndexedDB:', e);
+                    return false;
+                });
+                return { serializedOrders, localStorageConfirmed, indexedBackup };
+            };
+            let backup = writeOrderBackup();
+            cloudSetBadge('syncing', 'Orden respaldada localmente; sincronización en segundo plano.');
+            const cloudSync = cloudSaveOrder(order).then(result => {
+                if (!result) cloudSetBadge('syncing', 'Orden local en cola; se reintentará automáticamente.');
+                return result;
+            }).catch(err => {
+                console.warn('[Supabase] La orden permanece guardada localmente y pendiente de reintento:', err);
+                cloudSetBadge('syncing', 'Orden local en cola; se reintentará automáticamente.');
+                return null;
+            });
+            const recovery = (async () => {
+                const firstIdb = await Promise.race([backup.indexedBackup, cloudSleep(450).then(() => false)]);
+                if (backup.localStorageConfirmed || firstIdb) return;
+
+                // Si la cuota está ajustada, elimina solo cachés que tienen una copia íntegra en IDB,
+                // reduce fotos de esta orden y vuelve a intentar el respaldo sin bloquear la interfaz.
+                try { await hvacCleanupOldLocalBackups(backupKey); } catch (e) {
+                    console.warn('[Offline] Limpieza de cachés opcionales omitida:', e);
+                }
+                let photosReduced = false;
+                try { photosReduced = await hvacCompressOrderPhotos(order); } catch (e) {
+                    console.warn('[Offline] Compresión secundaria omitida:', e);
+                }
+                if (photosReduced) {
+                    order.updatedAt = new Date().toISOString();
+                    cloudSaveOrder(order).catch(e => console.warn('[Offline] Reintento cloud de la orden:', e));
+                }
+                try {
+                    backup = writeOrderBackup();
+                } catch (e) {
+                    console.warn('[Offline] No se pudo reserializar la orden durante la recuperación:', e);
+                }
+                const retryIdb = await Promise.race([backup.indexedBackup, cloudSleep(450).then(() => false)]);
+                let nativeSaved = false;
+                try { nativeSaved = hvacNativeGetItem.call(window.localStorage, backupKey) === backup.serializedOrders; } catch (_) {}
+                if (!nativeSaved && !retryIdb) {
+                    cloudSetBadge('syncing', 'Respaldo local en recuperación; conserva la aplicación abierta mientras se reintenta.');
+                    showToast('El teléfono está liberando espacio y reintentando el respaldo local en segundo plano.', 'error');
+                }
+            })().catch(e => {
+                console.warn('[Offline] La recuperación local sigue pendiente:', e);
+                cloudSetBadge('syncing', 'Respaldo local pendiente; reintento en segundo plano.');
+            });
+            cloudSync.catch(() => {});
+            recovery.catch(() => {});
+            return { saved: true, cloudSync, recovery };
+        }
+
+        // Reaplica cambios pendientes (hechos sin conexión) ANTES de que la copia de la nube los pise.
+        function cloudReconcileOutbox() {
+            const box = cloudOutboxRead();
+            if (!box.length) return;
+            const cfg = {
+                hvac_equipments: { get: () => equipmentCatalog, set: v => { equipmentCatalog = v; }, bk: 'HVAC_EQUIPMENTS_BACKUP', key: e => e.id || e.code, save: cloudSaveEquipment, del: cloudDeleteEquipment },
+                hvac_orders: { get: () => workOrders, set: v => { workOrders = v; }, bk: 'HVAC_ORDERS_BACKUP', key: o => o.id, save: cloudSaveOrder, del: cloudDeleteOrder },
+                hvac_clients: { get: () => clientsCatalog, set: v => { clientsCatalog = v; }, bk: 'HVAC_CLIENTS_BACKUP', key: c => c.id, save: cloudSaveClient, del: cloudDeleteClient },
+                hvac_users: { get: () => systemUsers, set: v => { systemUsers = v; }, bk: 'HVAC_TECH_USERS_BACKUP', key: u => u.id, save: cloudSaveUser, del: cloudDeleteUser }
+            };
+            box.forEach(entry => {
+                if (cloudCtl.queues[entry.table + ':' + entry.id]) return; // ya se está enviando
+                if (entry.table === 'hvac_app_state') { cloudScheduleStatePush(entry.id, true); return; }
+                const c = cfg[entry.table];
+                if (!c) { cloudOutboxClear(entry.table, entry.id); return; }
+                const same = rec => rec && cloudCleanId(c.key(rec)) === entry.id;
+                if (entry.op === 'delete') {
+                    c.set(c.get().filter(r => !same(r)));
+                    if (c.del) c.del(entry.id);
+                    return;
+                }
+                const local = entry.payload || null;
+                if (!local) { cloudOutboxClear(entry.table, entry.id); return; }
+                const arr = c.get().filter(r => !same(r));
+                arr.push(local);
+                c.set(arr);
+                c.save(local);
+            });
+        }
+
+        function cloudFlushOutbox() {
+            if (cloudCtl.flushing) return cloudCtl.flushing;
+            const run = async () => {
+                const entries = cloudOutboxRead().slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
+                let sent = 0;
+                for (const entry of entries) {
+                    try {
+                        let result = null;
+                        if (entry.op === 'delete') result = await cloudDeleteGeneric(entry.table, entry.id);
+                        else if (entry.table === 'hvac_app_state' && entry.payload) result = await cloudUpsert(entry.table, entry.id, entry.payload);
+                        else {
+                            const save = {
+                                hvac_equipments: cloudSaveEquipment,
+                                hvac_orders: cloudSaveOrder,
+                                hvac_clients: cloudSaveClient,
+                                hvac_users: cloudSaveUser
+                            }[entry.table];
+                            if (save && entry.payload) result = await save(entry.payload);
+                            else if (entry.table === 'hvac_app_state') {
+                                const stateKey = String(entry.id);
+                                const raw = localStorage.getItem(stateKey);
+                                if (raw !== null) result = await cloudUpsert('hvac_app_state', stateKey, {
+                                    key: stateKey,
+                                    updatedAt: Number(localStorage.getItem('HVAC_TS_' + stateKey)) || entry.ts || Date.now(),
+                                    data: raw
+                                });
+                            }
+                        }
+                        if (result) sent++;
+                        else if ([401, 403, 429, 500, 502, 503, 504, 'network', 'timeout'].includes(cloudCtl.lastStatus)) break;
+                    } catch (e) {
+                        console.warn('[Offline] Se conserva operación pendiente para reintentar:', entry.table, entry.id, e);
+                    }
+                }
+                return { sent, pending: cloudOutboxRead().length };
+            };
+            cloudCtl.flushing = run().finally(() => { cloudCtl.flushing = null; });
+            return cloudCtl.flushing;
+        }
+
+        // ---- Módulos que solo vivían en el navegador: se respaldan en la tabla hvac_app_state ----
+        async function cloudStateProbe() {
+            if (cloudStateCtl.disabled) return false;
+            const r = await supabaseFetch('hvac_app_state?select=id&limit=1', 'GET', null, null, { quiet: true });
+            if (r) return true;
+            if (cloudCtl.lastStatus === 404 || cloudCtl.lastStatus === 400) {
+                cloudStateCtl.disabled = true;
+                console.info('[Supabase] Tabla hvac_app_state no existe: agenda, caja, proyecciones y formularios permanecen solo en este dispositivo.');
+            }
+            return false;
+        }
+
+        function cloudScheduleStatePush(key, immediate) {
+            if (cloudStateCtl.disabled) return;
+            clearTimeout(cloudStateCtl.timers[key]);
+            cloudStateCtl.timers[key] = setTimeout(() => cloudPushState(key), immediate ? 0 : 1500);
+        }
+
+        async function cloudPushState(key) {
+            if (ESTADO_TABLAS[key] && !estadoCtl.disabled) return estadoPush(key);
+            if (cloudStateCtl.disabled) return null;
+            if (key === 'HVAC_FORMS_CONFIG_BACKUP') return null; // el técnico nunca reescribe los formularios del admin
+            const data = localStorage.getItem(key);
+            if (data === null) { cloudOutboxClear('hvac_app_state', key); return null; }
+            const ts = parseInt(localStorage.getItem('HVAC_TS_' + key), 10) || Date.now();
+            const r = await cloudUpsert('hvac_app_state', key, { key, updatedAt: ts, data });
+            if (!r && cloudCtl.lastStatus === 404) { cloudStateCtl.disabled = true; cloudOutboxClear('hvac_app_state', cloudCleanId(key)); }
+            return r;
+        }
+
+        function cloudMergeState(key, localVal, cloudVal) {
+            try {
+                const l = JSON.parse(localVal), c = JSON.parse(cloudVal);
+                if (Array.isArray(l) && Array.isArray(c)) {
+                    const out = c.slice();
+                    l.forEach(it => { if (!it || it.id === undefined || !out.some(o => o && o.id === it.id)) out.push(it); });
+                    return JSON.stringify(out);
+                }
+                if (l && c && typeof l === 'object' && typeof c === 'object') return JSON.stringify(Object.assign({}, l, c));
+            } catch (e) {}
+            return cloudVal;
+        }
+
+        async function cloudHydrateState() {
+            try { await estadoPullKeys(['HVAC_AGENDA_BACKUP'], true); } catch (e) { console.warn('[Estado] Agenda:', e); }
+            if (cloudStateCtl.disabled) return;
+            if (!(await cloudStateProbe())) return;
+            const rows = await supabaseFetch('hvac_app_state?select=id,payload', 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows)) return;
+            const byId = {};
+            rows.forEach(r => { if (r && r.payload) byId[r.id] = r.payload; });
+            cloudStateCtl.muted = true;
+            try {
+                CLOUD_STATE_KEYS.forEach(key => {
+                    if (ESTADO_TABLAS[key] && !estadoCtl.disabled) return;
+                    const cloud = byId[cloudCleanId(key)];
+                    const localVal = localStorage.getItem(key);
+                    const localTs = parseInt(localStorage.getItem('HVAC_TS_' + key), 10) || 0;
+                    if (cloud && typeof cloud.data === 'string') {
+                        if (localVal === null || (localTs > 0 && cloud.updatedAt > localTs)) {
+                            localStorage.setItem(key, cloud.data);
+                            localStorage.setItem('HVAC_TS_' + key, String(cloud.updatedAt || Date.now()));
+                        } else if (localTs === 0) {
+                            const merged = cloudMergeState(key, localVal, cloud.data);
+                            localStorage.setItem(key, merged);
+                            localStorage.setItem('HVAC_TS_' + key, String(Date.now()));
+                            cloudScheduleStatePush(key, true);
+                        } else if (localTs > (cloud.updatedAt || 0)) {
+                            cloudScheduleStatePush(key, true);
+                        }
+                    } else if (localVal !== null) {
+                        if (!localTs) localStorage.setItem('HVAC_TS_' + key, String(Date.now()));
+                        cloudScheduleStatePush(key, true);
+                    }
+                });
+            } finally { cloudStateCtl.muted = false; }
+        }
+
+
+        function readLocalBackup(key, fallback) {
+            try {
+                const raw = localStorage.getItem(key);
+                return raw === null ? fallback : JSON.parse(raw);
+            } catch (e) {
+                console.warn('[Storage] No se pudo leer el respaldo local ' + key + ':', e);
+                return fallback;
+            }
+        }
+
+        function orderTimestamp(order) {
+            if (!order || typeof order !== 'object') return 0;
+            const toMillis = value => {
+                if (typeof value === 'number' && Number.isFinite(value)) return value < 1e12 ? value * 1000 : value;
+                if (typeof value !== 'string' || !value.trim()) return 0;
+                const text = value.trim();
+                if (/^\d{10,13}$/.test(text)) {
+                    const numeric = Number(text);
+                    return numeric < 1e12 ? numeric * 1000 : numeric;
+                }
+                const parsed = Date.parse(text);
+                return Number.isFinite(parsed) ? parsed : 0;
+            };
+            const times = [
+                order.updatedAt, order.modifiedAt, order.lastModifiedAt,
+                order.timestamp, order.clientSignature && order.clientSignature.timestamp,
+                order.technicianFinishedAt
+            ].map(toMillis);
+            Object.values(order.executions || {}).forEach(exec => {
+                if (exec) times.push(toMillis(exec.timestamp), toMillis(exec.updatedAt));
+            });
+            return Math.max(0, ...times);
+        }
+
+        function mergeOrdersByTimestamp(cloudOrders, localOrders) {
+            const localById = new Map((Array.isArray(localOrders) ? localOrders : [])
+                .filter(order => order && order.id != null)
+                .map(order => [String(order.id), order]));
+            return cloudOrders.map(cloudOrder => {
+                if (!cloudOrder || cloudOrder.id == null) return cloudOrder;
+                const localOrder = localById.get(String(cloudOrder.id));
+                if (!localOrder) return cloudOrder;
+                // No permitir que una respuesta remota atrasada borre progreso local más reciente.
+                return orderTimestamp(localOrder) >= orderTimestamp(cloudOrder) && orderTimestamp(localOrder) > 0
+                    ? localOrder
+                    : cloudOrder;
+            });
+        }
+
+        // =========================================================================
+        // CARGA OPTIMIZADA (lazy loading)
+        //  - Al iniciar solo se descargan: los usuarios (livianos, sin administradores) y
+        //    las rutinas PREVENTIVAS pendientes de ESTE técnico.
+        //  - Los equipos NO se descargan en bloque: se piden a Supabase únicamente
+        //    cuando el técnico abre una rutina (solo los equipos de esa rutina).
+        //  - Los clientes ya no se descargan (el técnico no los usa).
+        // =========================================================================
+        const pgQuote = v => '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+        const pgList = arr => arr.map(pgQuote).join(',');
+
+        // Una rutina puede tener varios técnicos asignados (technicians) o uno solo (technician)
+        function orderTechs(o) { return (o && Array.isArray(o.technicians) && o.technicians.length) ? o.technicians : (o && o.technician ? [o.technician] : []); }
+        function techMatches(o, u) {
+            if (!u) return true;
+            const mine = [u.name, u.username].filter(Boolean).map(s => String(s).trim().toLowerCase());
+            return orderTechs(o).some(x => mine.includes(String(x).trim().toLowerCase()));
+        }
+        function techCurrentUserRecord() {
+            return activeUser ? systemUsers.find(x => String(x.id) === String(activeUser)) : null;
+        }
+
+        async function fetchMyActiveOrders() {
+            const u = techCurrentUserRecord();
+            if (!u) return null; // sin sesión todavía: no se piden órdenes
+            const names = [...new Set([u.name, u.username].filter(Boolean))];
+            if (!names.length) return [];
+            // eq = rutina de un solo técnico · ilike = rutinas con varios técnicos ("Ana, Luis"); luego se filtra exacto en el cliente
+            const techOr = names.map(n => 'payload->>technician.eq.' + pgQuote(n)).concat(names.map(n => 'payload->>technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
+            const base = 'hvac_orders?select=payload&id=not.like.HIST-*&order=payload->>date.desc';
+            // 1) Pendientes + completadas que el técnico aún no ha terminado
+            let rows = await supabaseFetch(
+                base + '&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')') + '&limit=200',
+                'GET', null, null, { quiet: true });
+            // 2) Plan B: sin ordenar por JSON (por si el servidor no lo soporta)
+            if (!Array.isArray(rows)) {
+                rows = await supabaseFetch(
+                    'hvac_orders?select=payload&id=not.like.HIST-*&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')') + '&limit=200',
+                    'GET', null, null, { quiet: true });
+            }
+            return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(o => o && techMatches(o, u)) : null;
+        }
+
+        // Pide a Supabase SOLO los equipos de la rutina indicada y los fusiona en memoria.
+        async function ensureOrderEquipments(order) {
+            if (!order) return false;
+            const ids = [...new Set((order.equipmentIds || []).map(String).filter(Boolean))];
+            if (!ids.length) return true;
+            const keys = [...new Set(ids.concat(ids.map(cloudCleanId)))];
+            let ok = true;
+            for (let i = 0; i < keys.length; i += 40) {
+                const list = pgList(keys.slice(i, i + 40));
+                const filter = '(id.in.(' + list + '),payload->>code.in.(' + list + '))';
+                const rows = await supabaseFetch('hvac_equipments?select=payload&or=' + encodeURIComponent(filter), 'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) { ok = false; continue; }
+                rows.map(r => r && r.payload).filter(Boolean).forEach(eq => {
+                    const idx = equipmentCatalog.findIndex(e => String(e.id) === String(eq.id) || (!eq.id && e.code === eq.code));
+                    if (idx >= 0) equipmentCatalog[idx] = eq; else equipmentCatalog.push(eq);
+                });
+            }
+            try { localStorage.setItem('HVAC_EQUIPMENTS_BACKUP', JSON.stringify(equipmentCatalog)); } catch (_) {}
+            return ok;
+        }
+
+        window.loadAllCloudData = async function(forceSync = false) {
+            try {
+                restoreLocalAppData();
+                refreshAppFromCurrentData();
+
+                // Usuarios: tabla liviana y SIN administradores (sus credenciales nunca llegan al teléfono)
+                const usrData = await supabaseFetch('hvac_users?select=payload&payload->>role=neq.ADMIN', 'GET', null, null, { quiet: true })
+                    || await supabaseFetch('hvac_users?select=payload', 'GET');
+                if (Array.isArray(usrData) && usrData.length > 0) systemUsers = usrData.map(r => r.payload).filter(Boolean);
+                techStripAdminUsers();
+
+                // Rutinas del técnico (solo las suyas y activas)
+                const myOrders = await fetchMyActiveOrders();
+                const cloudReadComplete = Array.isArray(usrData) && (myOrders !== null);
+                if (Array.isArray(myOrders)) {
+                    const localOrders = readLocalBackup('HVAC_ORDERS_BACKUP', workOrders);
+                    workOrders = mergeOrdersByTimestamp(myOrders, localOrders);
+                }
+                cloudReconcileOutbox(); // conserva cambios hechos sin conexión
+
+                try {
+                    const localAgenda = JSON.parse(localStorage.getItem('HVAC_AGENDA_BACKUP') || '[]');
+                    const localForms = JSON.parse(localStorage.getItem('HVAC_FORMS_CONFIG_BACKUP') || 'null');
+                    if (localForms) equipmentFormsConfig = localForms;
+                    agendaItems = localAgenda;
+                } catch (e) {}
+
+                try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (_) {}
+                localStorage.setItem('HVAC_TECH_USERS_BACKUP', JSON.stringify(systemUsers));
+
+                if (forceSync) {
+                    const pendingCount = cloudOutboxRead().length;
+                    if (cloudReadComplete && pendingCount === 0) {
+                        showToast(`Sincronizado con Supabase: ${workOrders.length} rutina(s) asignada(s).`);
+                    } else {
+                        const reason = !cloudReadComplete ? 'No se pudo confirmar la lectura completa desde la nube.' : 'La nube no confirmó todos los cambios.';
+                        showToast(`${reason} ${pendingCount ? pendingCount + ' cambio(s) quedan en cola.' : 'Los cambios locales se conservaron.'}`, 'error');
+                    }
+                }
+
+                refreshAppFromCurrentData();
+            } catch (err) {
+                console.warn('[Supabase] Falló la carga; se continuará con los datos locales:', err);
+                restoreLocalAppData();
+                refreshAppFromCurrentData();
+                cloudSetBadge('syncing', 'Se están usando los datos guardados en este dispositivo; la nube se reintentará.');
+                try { showToast('No se pudo completar la carga remota. La aplicación continúa con los datos locales y volverá a intentar.', 'error'); } catch (_) {}
+            }
+        };
+
+        // Evita cargas simultáneas, respalda módulos locales en la nube y reintenta al reconectar.
+        (function wrapCloudLoad() {
+            const original = window.loadAllCloudData;
+            const run = async (force) => {
+                await hvacStorageReady;
+                await hvacFlushStorageWrites();
+                restoreLocalAppData();
+                refreshAppFromCurrentData();
+                const queueStatus = await cloudFlushOutbox();
+                if (force && queueStatus.pending) {
+                    cloudSetBadge('syncing', queueStatus.pending + ' cambio(s) local(es) pendientes; se reintentará automáticamente.');
+                }
+                try { await cloudHydrateState(); } catch (e) { console.warn('hydrateState', e); }
+                cloudStateCtl.muted = true;
+                try { return await original(force); } finally { cloudStateCtl.muted = false; }
+            };
+            window.loadAllCloudData = function (forceSync = false) {
+                if (cloudCtl.loading) {
+                    if (forceSync && !cloudCtl.loading.force) {
+                        const chained = cloudCtl.loading.promise.then(() => window.loadAllCloudData(true));
+                        return chained;
+                    }
+                    return cloudCtl.loading.promise;
+                }
+                const entry = { force: !!forceSync };
+                entry.promise = run(forceSync).finally(() => { if (cloudCtl.loading === entry) cloudCtl.loading = null; });
+                cloudCtl.loading = entry;
+                return entry.promise;
+            };
+            window.addEventListener('online', () => {
+                cloudFlushOutbox();
+                window.loadAllCloudData(false);
+            });
+            window.addEventListener('DOMContentLoaded', () => {
+                const problem = cloudKeyProblem();
+                if (problem) {
+                    console.error('[Supabase] ' + problem);
+                    cloudSetBadge('error', problem);
+                    cloudCtl.lastToast = Date.now();
+                    try { showToast(problem, 'error'); } catch (_) {}
+                }
+            });
+        })();
+
+
+        function clearStoredAuthSession() {
+            activeUser = null;
+            activeSessionRole = null;
+            activeSessionExpiresAt = null;
+            sessionAuthenticated = false;
+            try { sessionStorage.removeItem(AUTH_SESSION_KEY); } catch (_) {}
+            try { localStorage.removeItem('HVAC_ACTIVE_USER_TECH'); } catch (_) {}
+        }
+
+        function restoreActiveSession() {
+            if (sessionAuthenticated) {
+                const currentUser = systemUsers.find(u => String(u.id) === String(activeUser));
+                if (currentUser && currentUser.role !== 'ADMIN' && (!activeSessionRole || currentUser.role === activeSessionRole) &&
+                    activeSessionExpiresAt > Date.now()) return true;
+                clearStoredAuthSession();
+                return false;
+            }
+
+            let rawSession = null;
+            let legacyUserId = null;
+            try { rawSession = sessionStorage.getItem(AUTH_SESSION_KEY); } catch (_) {}
+            try { legacyUserId = localStorage.getItem('HVAC_ACTIVE_USER_TECH'); } catch (_) {}
+            if (!rawSession) {
+                clearStoredAuthSession();
+                return false;
+            }
+
+            try {
+                const savedSession = JSON.parse(rawSession);
+                const userId = savedSession && savedSession.userId;
+                const expiresAt = Number(savedSession && savedSession.expiresAt);
+                const user = systemUsers.find(u =>
+                    String(u.id) === String(userId) && u.role === savedSession.role
+                );
+                if (!user || user.role === 'ADMIN' || !Number.isFinite(expiresAt) || expiresAt <= Date.now() ||
+                    (legacyUserId && String(legacyUserId) !== String(userId))) {
+                    clearStoredAuthSession();
+                    return false;
+                }
+                activeUser = user.id;
+                activeSessionRole = user.role;
+                activeSessionExpiresAt = expiresAt;
+                sessionAuthenticated = true;
+                return true;
+            } catch (_) {
+                clearStoredAuthSession();
+                return false;
+            }
+        }
+
+        function beginActiveSession(user) {
+            activeUser = user.id;
+            activeSessionRole = user.role;
+            sessionAuthenticated = true;
+            activeSessionExpiresAt = Date.now() + AUTH_SESSION_TTL;
+            const savedSession = JSON.stringify({
+                userId: user.id,
+                role: user.role,
+                expiresAt: activeSessionExpiresAt
+            });
+            try { localStorage.setItem('HVAC_ACTIVE_USER_TECH', user.id); } catch (_) {}
+            try { sessionStorage.setItem(AUTH_SESSION_KEY, savedSession); } catch (e) {
+                console.warn('[Auth] No se pudo persistir la sesión de esta pestaña:', e);
+            }
+        }
+
+
+        function executeLogin() {
+            const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
+            const passwordInput = document.getElementById('login-password').value.trim();
+            const errorBox = document.getElementById('login-error-msg');
+            const errorText = document.getElementById('login-error-text');
+            const mostrarError = msg => { errorBox.classList.remove('hidden'); errorText.innerText = msg; };
+
+            if (authBloqueado()) return mostrarError('Demasiados intentos fallidos. Espera 30 segundos e inténtalo de nuevo.');
+            if (!systemUsers.length) {
+                loadAllCloudData(true);
+                return mostrarError('Primer ingreso: conéctate a internet para descargar los usuarios e inténtalo de nuevo.');
+            }
+
+            const matchedUser = systemUsers.find(u => u.username && u.username.toLowerCase() === usernameInput);
+            const check = authRevisarClave(matchedUser, passwordInput);
+            if (check.changed) authGuardarUsuario(matchedUser, 'HVAC_TECH_USERS_BACKUP');
+            if (!check.ok) { authFallo(); return mostrarError('Usuario o contraseña incorrectos.'); }
+            authAcierto();
+
+            if (matchedUser.role === 'ADMIN') {
+                return mostrarError('Esta app es solo para técnicos. Los administradores deben usar el panel administrativo.');
+            }
+
+            errorBox.classList.add('hidden');
+            beginActiveSession(matchedUser);
+            document.getElementById('app-login-screen').classList.add('hidden');
+            syncTechUser();
+            renderTechAgenda();
+            window.scrollTo(0, 0);
+            loadAllCloudData(false);
+        }
+
+        function logoutSession() {
+            clearStoredAuthSession();
+            syncTechUser();
+            document.getElementById('app-login-screen').classList.remove('hidden');
+            document.getElementById('login-password').value = '';
+            document.getElementById('login-error-msg').classList.add('hidden');
+        }
+
+        function toggleLoginPassword() {
+            const input = document.getElementById('login-password');
+            const icon = document.getElementById('pw-eye-icon');
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            icon.className = show ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+        }
+
+        function toggleTechTheme() {
+            const next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem('TECH_THEME', next); } catch (_) {}
+            const meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', next === 'dark' ? '#0a1122' : '#eef2fa');
+        }
+
+        function syncTechUser() {
+            const user = activeUser && systemUsers.find(x => String(x.id) === String(activeUser));
+            const name = user ? (user.name || user.username || '') : '';
+            const parts = name.trim().split(/\s+/).filter(w => !/^(ing|dr|dra|lic|director)\.?$/i.test(w));
+            const ini = ((parts[0] || '?')[0] + ((parts[1] || '')[0] || '')).toUpperCase();
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            set('topbar-avatar', name ? ini : '--');
+            set('header-user-welcome', name);
+            set('header-role-badge', user ? user.role : '');
+            const h = new Date().getHours();
+            set('topbar-greet', h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches');
+            const d = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+            set('hero-date', d.charAt(0).toUpperCase() + d.slice(1));
+        }
+
+        // ---------- Agenda del técnico ----------
+        let techFilter = 'all';
+        function setTechFilter(f) { techFilter = f; renderTechAgenda(); }
+
+        function techExecFor(order, eqId) {
+            const eq = techFindEq(eqId);
+            return order.executions && (order.executions[eqId] || (eq && order.executions[eq.code]));
+        }
+
+        function renderTechAgenda() {
+            const container = document.getElementById('tech-orders-container');
+            if (!container) return;
+            const u = systemUsers.find(x => x.id === activeUser);
+            const myOrders = workOrders.filter(o =>
+                isPreventiveOrder(o) &&
+                techMatches(o, u) &&
+                (o.status === 'PENDING' || (o.status === 'COMPLETED' && !o.technicianFinished))
+            ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+            const nPend = myOrders.filter(o => o.status === 'PENDING').length;
+            const nDone = myOrders.length - nPend;
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            set('stat-pending', nPend); set('stat-done', nDone);
+            set('seg-count-all', myOrders.length); set('seg-count-pending', nPend); set('seg-count-done', nDone);
+            ['all', 'pending', 'done'].forEach(k => {
+                const b = document.getElementById('seg-' + k);
+                if (b) b.classList.toggle('is-active', techFilter === k);
+            });
+
+            const visible = myOrders.filter(o => techFilter === 'all' || (techFilter === 'pending' ? o.status === 'PENDING' : o.status === 'COMPLETED'));
+            if (visible.length === 0) {
+                container.innerHTML = '<div class="empty"><i class="fa-solid fa-clipboard-check"></i>No tienes rutinas pendientes por ejecutar o terminar.</div>';
+                return;
+            }
+
+            container.innerHTML = visible.map(o => {
+                const isCompleted = o.status === 'COMPLETED';
+                const eqIds = o.equipmentIds || [];
+                const done = eqIds.filter(id => !!techExecFor(o, id)).length;
+                const pct = eqIds.length ? Math.round(done / eqIds.length * 100) : 0;
+                return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
+                    <div class="r-top">
+                        <span class="r-id">${esc(o.id)}</span>
+                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Completada · por terminar' : 'Pendiente'}</span>
+                    </div>
+                    <h3 class="r-client">${esc(o.client)}</h3>
+                    <div class="r-meta">
+                        <span><i class="fa-regular fa-calendar"></i>${esc(o.date)}</span>
+                        <span><i class="fa-solid fa-snowflake"></i>${esc(eqIds.length)} ${isCompleted ? 'equipos intervenidos' : 'equipos a intervenir'}</span>
+                    </div>
+                    <div class="r-progress"><div class="bar"><i style="width:${pct}%"></i></div><span>${done}/${esc(eqIds.length)}</span></div>
+                    ${isCompleted
+                        ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
+                        : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Abrir rutina</button>`}
+                </article>`;
+            }).join('');
+        }
+
+        // ---------- Hub de rutina ----------
+        // El técnico solo trabaja rutinas preventivas: ya no existe la pestaña de correctivos.
+        function updateHubTabButtons() { currentHubTab = 'equipos'; }
+
+        function getEquipmentExecutionStatus(eq, eqId, exec) {
+            if (!exec || typeof exec !== 'object') return 'pending';
+            const cfg = exec.formConfigSnapshot || equipmentFormsConfig[(eq.type || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
+            const params = String(cfg.params || '').split(',').map(v => v.trim()).filter(Boolean);
+            const checklist = String(cfg.checklist || '').split(/\n/).map(v => v.trim()).filter(Boolean);
+            const values = exec.paramsValues || {};
+            const checks = exec.checklist || {};
+            const paramFilled = params.filter((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim()).length;
+            const checksDone = checklist.filter((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true).length;
+            const hasAny = paramFilled > 0 || checksDone > 0 || !!String(exec.obs || '').trim() || !!(exec.photos && exec.photos.length) || !!exec.corrective;
+            if (!hasAny) return 'pending';
+            return paramFilled === params.length && checksDone === checklist.length ? 'done' : 'progress';
+        }
+
+        function renderCurrentHubEquipments() {
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+            if (order) renderOrderHubEquipments(order);
+        }
+
+        function renderOrderHubEquipments(order) {
+            const container = document.getElementById('hub-equipments-list');
+            if (!container) return;
+            const eqIds = order.equipmentIds || [];
+            const search = (document.getElementById('hub-equipment-search')?.value || '').trim().toLocaleLowerCase('es');
+            const statusFilter = document.getElementById('hub-equipment-status-filter')?.value || 'all';
+            let completedCount = 0;
+            const allItems = [];
+
+            eqIds.forEach(eqId => {
+                const eq = techFindEq(eqId) || { id: eqId, code: eqId, name: 'Desconocido', type: 'HVAC' };
+                const exec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
+                const status = getEquipmentExecutionStatus(eq, eqId, exec);
+                if (status === 'done') completedCount++;
+                allItems.push({ eqId, eq, exec, status });
+            });
+
+            let displayList = allItems.filter(item => {
+                const { eqId, eq, exec, status } = item;
+                if (statusFilter !== 'all' && status !== statusFilter) return false;
+                const searchable = [eqId, eq.id, eq.code, eq.name, eq.model, eq.serial].map(v => String(v || '')).join(' ').toLocaleLowerCase('es');
+                return !search || searchable.includes(search);
+            });
+
+            let html = '';
+            if (!displayList.length) {
+                let msg = 'No hay equipos asignados que coincidan con los filtros.';
+                html = `<div class="empty"><i class="fa-solid fa-box-open"></i>${esc(msg)}</div>`;
+            }
+
+            displayList.forEach(({ eqId, eq, exec, status }) => {
+                const corr = !!(exec && exec.corrective);
+                const statusLabel = status === 'done' ? 'Completado' : status === 'progress' ? 'En progreso' : 'Pendiente';
+                const statusClass = status === 'done' ? 'pill-ok' : status === 'progress' ? 'pill-warn' : 'pill-idle';
+                html += `<article class="e-card ${status === 'done' ? 'is-done' : ''} ${corr ? 'is-corr' : ''}">
+                    <div class="e-head">
+                        <span class="e-code">${esc(eq.code || eqId || '—')}</span>
+                        <span class="pill ${statusClass}">${statusLabel}</span>
+                        ${corr ? '<span class="pill pill-warn">Correctivo</span>' : ''}
+                    </div>
+                    <h4 class="e-name">${esc(eq.name || '—')}</h4>
+                    <dl class="e-specs">
+                        <div><dt>Tipo</dt><dd>${esc(eq.type || '—')}</dd></div>
+                        <div><dt>Capacidad</dt><dd>${esc(eq.capacity || '—')}</dd></div>
+                        <div><dt>Marca</dt><dd>${esc(eq.brand || '—')}</dd></div>
+                        <div><dt>Modelo</dt><dd>${esc(eq.model || '—')}</dd></div>
+                        <div><dt>Serie</dt><dd>${esc(eq.serial || '—')}</dd></div>
+                        <div><dt>ID / Código</dt><dd>${esc(eq.id || eq.code || eqId || '—')}</dd></div>
+                    </dl>
+                    ${corr ? `<p class="e-note"><strong>Novedad:</strong> ${esc(exec.correctiveDesc || 'Sin descripción')}</p>` : ''}
+                    <button onclick="openEquipmentExecutionModal('${String(order.id).replace(/'/g, '&#39;')}', '${String(eqId).replace(/'/g, '&#39;')}')" class="btn ${status === 'done' ? 'btn-ghost' : 'btn-primary'} btn-lg btn-block">
+                        ${status === 'done' ? '<i class="fa-solid fa-pen"></i> Editar intervención' : '<i class="fa-solid fa-play"></i> Intervenir'}
+                    </button>
+                </article>`;
+            });
+            container.innerHTML = html;
+
+            const percent = eqIds.length > 0 ? Math.round((completedCount / eqIds.length) * 100) : 0;
+            document.getElementById('hub-progress-bar').style.width = `${percent}%`;
+            document.getElementById('hub-progress-text').innerText = `${completedCount} / ${eqIds.length} Equipos (${percent}%)`;
+            const finalizeBox = document.getElementById('hub-finalize-container');
+            if (eqIds.length > 0 && percent === 100 && order.status !== 'COMPLETED' && order.status !== 'BILLED') finalizeBox.classList.remove('hidden');
+            else finalizeBox.classList.add('hidden');
+        }
+
+        // =========================================================================
+        // FORMULARIO DINÁMICO SEGÚN TIPO DE EQUIPO (misma lógica; diseño móvil)
+        // =========================================================================
+        function openEquipmentExecutionModal(orderId, eqId) {
+            currentExecOrderId = orderId;
+            currentExecEqId = eqId;
+            const order = workOrders.find(o => o.id === orderId);
+            const eq = techFindEq(eqId) || { code: eqId, type: 'EXTRACTOR' };
+            const exec = (order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
+
+            const typeKey = (eq.type || 'EXTRACTOR').trim().toUpperCase();
+            const formCfg = equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'] || {
+                params: "Voltaje (V), Amperaje (A)",
+                checklist: "Limpieza general"
+            };
+
+            document.getElementById('exec-equipment-modal-backdrop').classList.remove('hidden');
+            document.getElementById('exec-modal-eq-title').innerText = `Intervención: ${eq.code} - ${eq.name || ''} (${typeKey})`;
+            document.getElementById('exec-modal-eq-subtitle').innerText =
+                `${order.client} | ${eq.name || 'Sin nombre'} | ${eq.type || 'Sin tipo'} | Capacidad: ${eq.capacity || 'N/A'} | Marca: ${eq.brand || 'N/A'} | Modelo: ${eq.model || 'N/A'} | Serie: ${eq.serial || 'N/A'} | Código: ${eq.code || 'N/A'}`;
+
+            // Parámetros técnicos dinámicos
+            const paramsContainer = document.getElementById('exec-params-container');
+            paramsContainer.innerHTML = '';
+            const paramList = formCfg.params.split(',').map(p => p.trim()).filter(Boolean);
+            let paramsHtml = '';
+            paramList.forEach((paramName, idx) => {
+                const paramKey = `param_${idx}`;
+                const rawVal = exec.paramsValues ? exec.paramsValues[paramKey] : (exec[paramKey] || '');
+                const val = rawVal == null ? '' : rawVal;
+                paramsHtml += `
+                    <label class="field">
+                        <span>${esc(paramName)}</span>
+                        <input type="text" data-param-key="${paramKey}" class="input exec-param-input" value="${esc(val)}" placeholder="Valor…" autocomplete="off" enterkeyhint="next">
+                    </label>`;
+            });
+            paramsContainer.innerHTML = paramsHtml;
+
+            // Checklist dinámico
+            const checkContainer = document.getElementById('exec-checklist-container');
+            checkContainer.innerHTML = '';
+            const checkListItems = formCfg.checklist.split('\n').map(c => c.trim()).filter(Boolean);
+            let checksHtml = '';
+            checkListItems.forEach((checkText, idx) => {
+                const chkKey = `chk_${idx + 1}`;
+                const chks = exec.checklist || {};
+                const isChecked = !!chks[chkKey];
+                checksHtml += `
+                    <label class="chk-row">
+                        <input type="checkbox" data-chk-key="${chkKey}" ${isChecked ? 'checked' : ''} class="exec-chk-input">
+                        <span class="chk-box"><i class="fa-solid fa-check"></i></span>
+                        <span class="chk-text">${esc(checkText)}</span>
+                    </label>`;
+            });
+            checkContainer.innerHTML = checksHtml;
+
+            document.getElementById('exec-f-obs').value = exec.obs || '';
+
+            const chkCorr = document.getElementById('exec-chk-correctivo');
+            chkCorr.checked = !!exec.corrective;
+            document.getElementById('exec-corrective-desc').value = exec.correctiveDesc || '';
+            toggleCorrectiveSection();
+
+            tempPhotosList = exec.photos || [];
+            renderExecPhotosPreview();
+            markExecMissing([]);
+            updateExecProgress();
+            const body = document.querySelector('#exec-equipment-modal-backdrop .sheet-body');
+            if (body) body.scrollTop = 0;
+        }
+
+        function updateExecProgress() {
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            const params = Array.from(document.querySelectorAll('.exec-param-input'));
+            const checks = Array.from(document.querySelectorAll('.exec-chk-input'));
+            set('exec-params-count', `${params.filter(i => String(i.value || '').trim()).length}/${params.length}`);
+            set('exec-chk-count', `${checks.filter(i => i.checked).length}/${checks.length}`);
+        }
+
+        function markExecMissing(list) {
+            document.querySelectorAll('#exec-equipment-modal-backdrop .is-missing').forEach(n => n.classList.remove('is-missing'));
+            (list || []).forEach(el => {
+                const box = el.closest('.field, .chk-row');
+                if (box) box.classList.add('is-missing');
+            });
+        }
+
+        async function handleExecPhotosChange(e) {
+            const files = e.target.files;
+            if (!files) return;
+            appBusyStart('Comprimiendo fotos de evidencia…');
+            try {
+            const isCorrective = document.getElementById('exec-chk-correctivo').checked;
+            const maxAllowed = isCorrective ? 6 : 5;
+
+            for (let i = 0; i < files.length; i++) {
+                if (tempPhotosList.length >= maxAllowed) {
+                    showToast(`Has alcanzado el límite máximo de ${maxAllowed} fotos permitidas.`, "error");
+                    break;
+                }
+                try {
+                    const compressedBase64 = await r2keep(await compressImage(files[i], 800, 0.65), 'reportes');
+                    tempPhotosList.push(compressedBase64);
+                    renderExecPhotosPreview();
+                } catch (err) {
+                    console.warn('[Fotos] No se agregó la imagen seleccionada:', err);
+                }
+            }
+            } finally {
+                appBusyEnd();
+            }
+            e.target.value = '';
+        }
+
+        function renderExecPhotosPreview() {
+            const cont = document.getElementById('exec-photos-preview');
+            const isCorrective = document.getElementById('exec-chk-correctivo').checked;
+            const counter = document.getElementById('exec-photos-count');
+            if (counter) counter.textContent = `${tempPhotosList.length}/${isCorrective ? 6 : 5}`;
+            if (!tempPhotosList.length) {
+                cont.innerHTML = '<div class="ph-empty"><i class="fa-solid fa-camera"></i> Aún no hay fotos de evidencia</div>';
+                return;
+            }
+            cont.innerHTML = tempPhotosList.map((p, idx) => `<div class="ph">
+                <button type="button" class="ph-img" onclick="viewExecutionPhoto(${idx})" aria-label="Ampliar foto ${idx + 1}">
+                    <img src="${p}" alt="Foto de evidencia ${idx + 1}">
+                </button>
+                <button type="button" class="ph-del" aria-label="Eliminar foto ${idx + 1}" onclick="tempPhotosList.splice(${idx},1); renderExecPhotosPreview();"><i class="fa-solid fa-trash"></i></button>
+                <span class="ph-n">${idx + 1}</span>
+            </div>`).join('');
+        }
+
+        function closeReceiptViewerModal() {
+            document.getElementById('receipt-viewer-modal-backdrop').classList.add('hidden');
+        }
+
+        async function openOrderHub(orderId) {
+            currentExecOrderId = orderId;
+            const order = workOrders.find(o => o.id === orderId);
+            if (!order) return;
+
+            document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
+            document.getElementById('hub-order-title').innerText = `Orden ${order.id} - ${order.client}`;
+            document.getElementById('hub-order-subtitle').innerText = `Técnico: ${order.technician} | Fecha: ${order.date}`;
+
+            currentHubTab = 'equipos';
+            const searchInput = document.getElementById('hub-equipment-search');
+            const statusSelect = document.getElementById('hub-equipment-status-filter');
+            if (searchInput) searchInput.value = '';
+            if (statusSelect) statusSelect.value = 'all';
+            updateHubTabButtons();
+            // Primero se pinta lo que ya hay en el dispositivo; luego se piden SOLO los equipos de esta rutina.
+            renderOrderHubEquipments(order);
+            const box = document.getElementById('hub-equipments-list');
+            const missing = (order.equipmentIds || []).some(id => !techFindEq(id));
+            if (missing && box) box.innerHTML = '<div class="empty"><i class="fa-solid fa-spinner fa-spin"></i>Cargando equipos de la rutina…</div>';
+            const ok = await ensureOrderEquipments(order);
+            if (String(currentExecOrderId) !== String(orderId)) return; // el técnico ya salió de la rutina
+            renderOrderHubEquipments(order);
+            if (!ok && (order.equipmentIds || []).some(id => !techFindEq(id))) showToast('No se pudieron cargar todos los equipos. Revisa tu conexión y vuelve a abrir la rutina.', 'error');
+        }
+
+        function closeOrderHubModal() {
+            document.getElementById('order-hub-modal-backdrop').classList.add('hidden');
+            currentExecOrderId = null;
+        }
+
+        function switchHubTab() {
+            currentHubTab = 'equipos';
+            const order = workOrders.find(o => o.id === currentExecOrderId);
+            if (order) renderOrderHubEquipments(order);
+        }
+
+        function closeEquipmentExecutionModal() {
+            document.getElementById('exec-equipment-modal-backdrop').classList.add('hidden');
+            currentExecEqId = null;
+        }
+
+        function toggleCorrectiveSection() {
+            const chk = document.getElementById('exec-chk-correctivo').checked;
+            const box = document.getElementById('corrective-details-box');
+            box.classList.toggle('hidden', !chk);
+            renderExecPhotosPreview();
+        }
+
+        function viewExecutionPhoto(index) {
+            const photo = tempPhotosList[index];
+            if (!photo) return;
+            document.getElementById('receipt-viewer-img').src = photo;
+            document.getElementById('receipt-viewer-modal-backdrop').classList.remove('hidden');
+        }
+
+        function openGlobalSignatureModal() {
+            document.getElementById('global-signature-modal-backdrop').classList.remove('hidden');
+            setTimeout(initSignatureCanvas, 100);
+        }
+
+        function closeGlobalSignatureModal() {
+            document.getElementById('global-signature-modal-backdrop').classList.add('hidden');
+        }
+
+        function initSignatureCanvas() {
+            sigCanvas = document.getElementById('global-sig-canvas');
+            sigCtx = sigCanvas.getContext('2d');
+            sigCanvas.width = sigCanvas.offsetWidth;
+            sigCanvas.height = sigCanvas.offsetHeight;
+            sigCtx.strokeStyle = '#0f172a';
+            sigCtx.lineWidth = 2.5;
+            sigCtx.lineCap = 'round';
+
+            const getPos = e => {
+                const rect = sigCanvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            };
+
+            const start = e => { isDrawing = true; const p = getPos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); };
+            const draw = e => { if (!isDrawing) return; const p = getPos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); };
+            const stop = () => { isDrawing = false; };
+
+            sigCanvas.onmousedown = start;
+            sigCanvas.onmousemove = draw;
+            window.onmouseup = stop;
+            sigCanvas.ontouchstart = start;
+            sigCanvas.ontouchmove = draw;
+            sigCanvas.ontouchend = stop;
+        }
+
+        function clearSignatureCanvas() {
+            if (sigCtx) sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+        }
+
+
+        async function saveEquipmentExecution() {
+            const order = workOrders.find(o => o.id === currentExecOrderId);
+            if (!order) return;
+            if (!order.executions) order.executions = {};
+
+            const missingParams = Array.from(document.querySelectorAll('.exec-param-input')).filter(input => !String(input.value || '').trim());
+            const uncheckedItems = Array.from(document.querySelectorAll('.exec-chk-input')).filter(input => !input.checked);
+            // Un solo botón: si falta algo se guarda como avance (En progreso); si todo está completo, como equipo completado.
+            const pendingCount = missingParams.length + uncheckedItems.length;
+            const partial = pendingCount > 0;
+            markExecMissing([]);
+
+            const paramsValues = {};
+            document.querySelectorAll('.exec-param-input').forEach(input => {
+                paramsValues[input.getAttribute('data-param-key')] = input.value;
+            });
+
+            const checklist = {};
+            document.querySelectorAll('.exec-chk-input').forEach(chk => {
+                checklist[chk.getAttribute('data-chk-key')] = chk.checked;
+            });
+
+            const corrective = document.getElementById('exec-chk-correctivo').checked;
+            const correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
+
+            const eq = techFindEq(currentExecEqId);
+            const typeKey = (eq && eq.type ? eq.type : 'EXTRACTOR').trim().toUpperCase();
+            const formCfg = equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'];
+
+            const previousExecData = order.executions[currentExecEqId] || (eq && order.executions[eq.code]) || {};
+            const execData = {
+                typeKey,
+                correctiveAgendaId: previousExecData.correctiveAgendaId || null,
+                formConfigSnapshot: formCfg, // Guardamos la foto exacta del formulario activo para que el PDF refleje exactamente los campos editados
+                paramsValues,
+                checklist,
+                obs: document.getElementById('exec-f-obs').value,
+                corrective,
+                correctiveDesc,
+                photos: tempPhotosList,
+                partial: !!partial,
+                timestamp: new Date().toISOString()
+            };
+
+            order.executions[currentExecEqId] = execData;
+            if (eq && eq.code) order.executions[eq.code] = execData;
+
+            if (corrective) {
+                // Evita crear una tarea correctiva duplicada cada vez que se guarda un avance.
+                let agendaItem = execData.correctiveAgendaId
+                    ? agendaItems.find(item => item.id === execData.correctiveAgendaId)
+                    : null;
+                if (!agendaItem) {
+                    agendaItem = {
+                        id: `AG-CORR-${Date.now()}`,
+                        origin: `Orden ${order.id} (Equipo ${eq ? eq.code : ''})`,
+                        client: order.client,
+                        status: 'Pendiente por gestionar',
+                        description: `[Correctivo Equipo ${eq ? eq.code : ''}] ${correctiveDesc || 'Sin descripción'}`,
+                        date: new Date().toISOString().split('T')[0]
+                    };
+                    agendaItems.push(agendaItem);
+                    execData.correctiveAgendaId = agendaItem.id;
+                } else {
+                    agendaItem.description = `[Correctivo Equipo ${eq ? eq.code : ''}] ${correctiveDesc || 'Sin descripción'}`;
+                }
+                localStorage.setItem('HVAC_AGENDA_BACKUP', JSON.stringify(agendaItems));
+            }
+
+            persistOrderLocallyAndSync(order);
+            closeEquipmentExecutionModal();
+            renderOrderHubEquipments(order);
+            showToast(partial
+                ? `Avance guardado localmente. El equipo queda En progreso (faltan ${pendingCount} punto(s)); sincronizando…`
+                : 'Intervención guardada localmente; sincronizando en segundo plano…');
+        }
+
+        async function submitGlobalSignature() {
+            const order = workOrders.find(o => o.id === currentExecOrderId);
+            if (!order) return;
+            const clientName = document.getElementById('sig-client-name').value.trim();
+            const sigData = await r2keep(sigCanvas.toDataURL('image/png'), 'firmas');
+
+            order.clientSignature = { name: clientName || order.client, signatureImg: sigData, timestamp: new Date().toISOString() };
+            order.status = 'COMPLETED';
+
+            persistOrderLocallyAndSync(order);
+            closeGlobalSignatureModal();
+            closeOrderHubModal();
+            renderTechAgenda();
+            showToast("Firma y cierre guardados localmente; sincronizando en segundo plano…");
+        }
+
+        async function finalizeRoutineWithoutSignature() {
+            const order = workOrders.find(o => o.id === currentExecOrderId);
+            if (!order) return;
+
+            order.clientSignature = { name: 'Completado sin firma', signatureImg: null, timestamp: new Date().toISOString() };
+            order.status = 'COMPLETED';
+
+            persistOrderLocallyAndSync(order);
+            closeGlobalSignatureModal();
+            closeOrderHubModal();
+            renderTechAgenda();
+            showToast("Cierre guardado localmente; sincronizando en segundo plano…");
+        }
+
+        async function finishTechnicianRoutine(orderId) {
+            const order = workOrders.find(o => o.id === orderId);
+            if (!order || order.status !== 'COMPLETED') {
+                showToast("Solo puedes terminar una rutina que ya esté completada.", "error");
+                return;
+            }
+            if (order.technicianFinished) return;
+
+            order.technicianFinished = true;
+            order.technicianFinishedAt = new Date().toISOString();
+            persistOrderLocallyAndSync(order);
+            renderTechAgenda();
+            showToast("Rutina terminada. Ya no aparece en tu agenda.");
+        }
+
+        let appBusyCount = 0;
+        let appBusyTimer = null;
+        function appBusyStart(label) {
+            appBusyCount++;
+            if (appBusyTimer) clearTimeout(appBusyTimer);
+            appBusyTimer = setTimeout(() => {
+                const overlay = document.getElementById('app-processing-overlay');
+                const text = document.getElementById('app-processing-label');
+                if (overlay && appBusyCount > 0) {
+                    if (text) text.textContent = label || 'Procesando información…';
+                    overlay.classList.add('is-visible');
+                    overlay.setAttribute('aria-hidden', 'false');
+                }
+            }, 120);
+        }
+        function appBusyEnd() {
+            appBusyCount = Math.max(0, appBusyCount - 1);
+            if (appBusyCount) return;
+            if (appBusyTimer) clearTimeout(appBusyTimer);
+            appBusyTimer = null;
+            const overlay = document.getElementById('app-processing-overlay');
+            if (overlay) {
+                overlay.classList.remove('is-visible');
+                overlay.setAttribute('aria-hidden', 'true');
+            }
+        }
+        function wrapWithGlobalProcessing(name, label) {
+            const original = window[name];
+            if (typeof original !== 'function' || original.__hvacBusyWrapped) return;
+            const wrapped = async function (...args) {
+                appBusyStart(label);
+                try { return await original.apply(this, args); }
+                finally { appBusyEnd(); }
+            };
+            wrapped.__hvacBusyWrapped = true;
+            window[name] = wrapped;
+        }
+
+
+        // Fotos: la cámara y la galería usan exactamente el mismo flujo de compresión y límites.
+        ['exec-f-photos', 'exec-f-photos-cam'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', handleExecPhotosChange);
+        });
+
+        (function techUiLayer() {
+            const execModal = document.getElementById('exec-equipment-modal-backdrop');
+            if (execModal) {
+                const onEdit = e => {
+                    const box = e.target.closest && e.target.closest('.field, .chk-row');
+                    if (box) box.classList.remove('is-missing');
+                    updateExecProgress();
+                };
+                execModal.addEventListener('input', onEdit);
+                execModal.addEventListener('change', onEdit);
+            }
+            const banner = document.getElementById('offline-banner');
+            // navigator.onLine no es una prueba fiable de acceso a Internet en algunos móviles.
+            // El estado real se refleja en la insignia de nube y en la cola persistente.
+            const setNet = () => { if (banner) banner.classList.add('hidden'); };
+            window.addEventListener('online', setNet); window.addEventListener('offline', setNet); setNet();
+
+            const chip = document.getElementById('tech-pending-chip');
+            const updatePending = () => {
+                try {
+                    const n = cloudOutboxRead().length;
+                    if (chip) { chip.textContent = n + (n === 1 ? ' cambio pendiente' : ' cambios pendientes'); chip.classList.toggle('hidden', !n); }
+                } catch (_) {}
+            };
+            setInterval(updatePending, 3000); updatePending();
+            setInterval(() => {
+                if (cloudOutboxRead().length) cloudFlushOutbox().catch(err => console.warn('[Offline] Reintento automático pendiente:', err));
+            }, 30000);
+
+            const lock = () => {
+                const open = Array.from(document.querySelectorAll('.modal-backdrop')).some(el => !el.classList.contains('hidden'));
+                document.body.classList.toggle('modal-open', open);
+            };
+            document.querySelectorAll('.modal-backdrop').forEach(el => new MutationObserver(lock).observe(el, { attributes: true, attributeFilter: ['class'] }));
+            lock();
+        })();
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await hvacStorageReady;
+            await hvacFlushStorageWrites();
+            restoreLocalAppData();
+            const hasSession = restoreActiveSession();
+            if (hasSession) {
+                document.getElementById('app-login-screen').classList.add('hidden');
+                syncTechUser();
+                renderTechAgenda();
+            } else {
+                syncTechUser();
+                document.getElementById('app-login-screen').classList.remove('hidden');
+            }
+            loadAllCloudData(false);
+        });
+
+    </script>
+<!-- ===== MÓDULO PWA + QR + ASISTENCIA GPS (técnico) ===== -->
+<style>
+.mx-back{position:fixed;inset:0;z-index:10010;background:rgba(3,8,20,.78);display:none;align-items:flex-end;justify-content:center;padding:0}
+.mx-back.open{display:flex}
+.mx-card{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:22px 22px 0 0;padding:18px 16px calc(18px + var(--safe-bot));box-shadow:var(--shadow)}
+.mx-card h3{font-size:16px;font-weight:900;margin:0 0 4px}.mx-card p{font-size:12.5px;color:var(--muted);margin:0 0 12px}
+.mx-row{display:flex;gap:8px;margin-top:10px}.mx-row>*{flex:1}
+.mx-btn{min-height:48px;border-radius:14px;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,#3b82f6,#1d5fd6);border:0;display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none}
+.mx-btn.ok{background:linear-gradient(135deg,#22c55e,#15803d)}.mx-btn.out{background:linear-gradient(135deg,#f59e0b,#b45309)}.mx-btn.ghost{background:var(--surface-2);color:var(--text);border:1px solid var(--line)}
+.mx-btn:disabled{opacity:.55}
+.mx-input{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);padding:0 12px;font-size:14px}
+.mx-video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:16px;background:#000}
+.mx-alert{border-radius:14px;padding:14px;font-size:13px;font-weight:700;line-height:1.4;margin:10px 0}
+.mx-alert.bad{background:rgba(244,63,94,.14);border:1px solid rgba(244,63,94,.5);color:#fb7185}.mx-alert.good{background:rgba(34,197,94,.14);border:1px solid rgba(34,197,94,.5);color:#4ade80}.mx-alert.warn{background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.5);color:#fbbf24}
+.tabbar-in.mx-5{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}.tabbar-in.mx-5 .tab{padding:0 2px;font-size:9px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+</style>
+
+<div id="mx-scan" class="mx-back"><div class="mx-card">
+  <h3><i class="fa-solid fa-qrcode"></i> Escanear QR del equipo</h3>
+  <p>Apunta la cámara al código QR pegado en el equipo.</p>
+  <video id="mx-video" class="mx-video" playsinline muted></video>
+  <div id="mx-scan-msg" class="mx-alert warn" style="display:none"></div>
+  <input id="mx-manual" class="mx-input" placeholder="…o escribe el código del equipo" autocapitalize="characters">
+  <div class="mx-row"><button class="mx-btn ghost" onclick="mxScanClose()">Cerrar</button><button class="mx-btn" onclick="mxScanManual()">Validar código</button></div>
+</div></div>
+
+<div id="mx-block" class="mx-back"><div class="mx-card">
+  <h3 style="color:#fb7185"><i class="fa-solid fa-ban"></i> Equipo sin rutina para este periodo</h3>
+  <div id="mx-block-body" class="mx-alert bad"></div>
+  <div class="mx-row"><button class="mx-btn ghost" onclick="mxClose('mx-block')">Entendido</button><button class="mx-btn" onclick="mxClose('mx-block');mxScanOpen()">Escanear otro</button></div>
+</div></div>
+
+<div id="mx-att" class="mx-back"><div class="mx-card">
+  <h3><i class="fa-solid fa-location-dot"></i> Asistencia (Check-In / Check-Out)</h3>
+  <p>Se captura tu ubicación GPS y se compara con la sede del cliente.</p>
+  <input id="mx-att-q" class="mx-input" type="search" placeholder="Buscar cliente o sede…" oninput="mxAttFill()" autocomplete="off" style="margin-bottom:8px">
+  <select id="mx-att-client" class="mx-input"></select>
+  <div id="mx-att-count" style="font-size:11px;color:var(--muted);margin:4px 0 2px"></div>
+  <div id="mx-att-last" class="mx-alert warn" style="display:none"></div>
+  <div id="mx-att-msg" class="mx-alert" style="display:none"></div>
+  <div class="mx-row">
+    <button id="mx-btn-in" class="mx-btn ok" onclick="mxMark('CHECK-IN')"><i class="fa-solid fa-right-to-bracket"></i> Check-In</button>
+    <button id="mx-btn-out" class="mx-btn out" onclick="mxMark('CHECK-OUT')"><i class="fa-solid fa-right-from-bracket"></i> Check-Out</button>
+  </div>
+  <div class="mx-row"><button class="mx-btn ghost" onclick="mxClose('mx-att')">Cerrar</button></div>
+</div></div>
+
+<div id="mx-done" class="mx-back" style="align-items:center;padding:16px"><div class="mx-card" style="max-width:380px;border-radius:22px;text-align:center;padding-bottom:18px">
+  <div id="mx-done-icon" style="font-size:54px;line-height:1;margin:6px 0 10px;color:#22c55e"></div>
+  <h3 id="mx-done-title" style="font-size:17px">¡Marcación registrada correctamente!</h3>
+  <p id="mx-done-text" style="font-size:13.5px;margin:6px 0 12px">El reporte ha sido enviado al sistema.</p>
+  <div id="mx-done-detail" class="mx-alert good" style="text-align:left;font-size:12.5px"></div>
+  <button class="mx-btn ok" style="width:100%;margin-top:6px" onclick="mxDoneOk()"><i class="fa-solid fa-check"></i> Aceptar</button>
+</div></div>
+
+<div id="mx-photo" class="mx-back"><div class="mx-card">
+  <h3><i class="fa-solid fa-camera"></i> Foto de asistencia</h3>
+  <p>Tómate una selfie con la cámara frontal para validar tu marcación.</p>
+  <video id="mx-photo-video" class="mx-video" playsinline muted style="transform:scaleX(-1)"></video>
+  <div id="mx-photo-msg" class="mx-alert warn" style="display:none"></div>
+  <input id="mx-photo-file" type="file" accept="image/*" capture="user" style="display:none" onchange="mxPhotoFile(this)">
+  <div class="mx-row"><button class="mx-btn ghost" onclick="mxPhotoCancel()">Cancelar</button><button class="mx-btn ghost" onclick="mxQ('mx-photo-file').click()"><i class="fa-solid fa-image"></i> Galería/cámara</button><button class="mx-btn ok" onclick="mxPhotoShoot()"><i class="fa-solid fa-camera"></i> Tomar</button></div>
+</div></div>
+
+<script>
+/* ---------------- Configuración ---------------- */
+const MX = {
+  REQUIRE_QR: false,          // true = el formulario de un equipo solo se abre tras escanear su QR
+  RADIO_DEFAULT_M: 150,       // radio si la sede no define uno propio
+  BLOQUEAR_FUERA_RANGO: false,// true = no registra marcaciones fuera del radio
+  FOTO_OBLIGATORIA: true,     // true = no se puede marcar sin foto
+  TABLE: 'asistencia'
+};
+/* ---------------- Telegram (reemplaza a WhatsApp) ---------------- */
+const TG = {
+  TOKEN: '8861661480:AAFQ1DNU5Goc0vfHzylXCqEWlBvH572Tm_o',
+  CHAT_ID: '-1004425523424',
+  USE_PROXY: false,            // true = enviar vía /api/telegram (token en variables de Vercel, recomendado)
+  PROXY_URL: '/api/telegram'
+};
+async function mxTgSend(mensaje) {            // 'ok' | 'retry' (sin red / 429 / 5xx) | 'fail' (error definitivo)
+  try {
+    const r = await fetch(TG.USE_PROXY ? TG.PROXY_URL : 'https://api.telegram.org/bot' + TG.TOKEN + '/sendMessage', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(TG.USE_PROXY ? { text: mensaje } : { chat_id: TG.CHAT_ID, text: mensaje, parse_mode: 'HTML' })
+    });
+    if (r.ok) return 'ok';
+    console.warn('Telegram:', r.status, await r.text().catch(() => ''));
+    return (r.status === 429 || r.status >= 500) ? 'retry' : 'fail';
+  } catch (e) { return 'retry'; }
+}
+/* Se ejecuta en segundo plano tras guardar la marcación; si no hay red, se reintenta solo (cola IndexedDB) */
+async function enviarMarcacionTelegram(mensaje) {
+  const s = await mxTgSend(mensaje);
+  if (s === 'retry') await HVAC.outbox.add({ id: 'tg-' + Date.now() + Math.random().toString(16).slice(2), type: 'telegram', msg: mensaje, tries: 0 });
+  return s === 'ok';
+}
+function mxShowDone(saved, detail, warn) {
+  mxQ('mx-done-icon').innerHTML = saved ? '<i class="fa-solid fa-circle-check"></i>' : '<i class="fa-solid fa-cloud-arrow-up"></i>';
+  mxQ('mx-done-icon').style.color = saved ? '#22c55e' : '#f59e0b';
+  mxQ('mx-done-title').textContent = saved ? '¡Marcación registrada correctamente!' : 'Marcación guardada en el teléfono';
+  mxQ('mx-done-text').textContent = saved ? 'El reporte ha sido enviado al sistema.' : 'Sin señal: se enviará automáticamente al reconectar.';
+  const d = mxQ('mx-done-detail'); d.textContent = detail; d.className = 'mx-alert ' + (warn ? 'warn' : 'good');
+  mxOpen('mx-done');
+}
+function mxDoneOk() { mxClose('mx-done'); mxClose('mx-att'); mxAttMsg(''); mxQ('mx-att-last').style.display = 'none'; }   // vuelve a la pantalla principal con el formulario limpio
+
+const mxQ = id => document.getElementById(id);
+const mxOpen = id => mxQ(id).classList.add('open');
+function mxClose(id) { mxQ(id).classList.remove('open'); }
+const mxValidated = new Set();
+const mxMonthKey = (d = new Date()) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+const mxMonthLabel = () => new Date().toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+const mxNorm = s => String(s == null ? '' : s).trim().toUpperCase();
+
+/* ---------------- PWA ---------------- */
+HVAC.pwa.register();
+HVAC.letterhead.load().then(r => { AFC_HEADER_IMG = r.header; AFC_FOOTER_IMG = r.footer; });
+
+/* ---------------- 1) QR + validación de rutina del mes ---------------- */
+function mxParseQr(raw) {
+  let t = String(raw || '').trim();
+  try { const j = JSON.parse(t); if (j && typeof j === 'object') t = String(j.code || j.codigo || j.id || j.eq || t); } catch (_) {}
+  try { const u = new URL(t); t = u.searchParams.get('eq') || u.searchParams.get('code') || u.searchParams.get('id') || decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || t); } catch (_) {}
+  return t.trim();
+}
+async function mxResolveEquipment(key) {
+  let eq = techFindEq(key);
+  if (eq) return eq;
+  const k = pgQuote(key);
+  const rows = await supabaseFetch('hvac_equipments?select=payload&or=' + encodeURIComponent('(id.eq.' + k + ',payload->>code.eq.' + k + ')') + '&limit=1', 'GET', null, null, { quiet: true });
+  if (Array.isArray(rows) && rows[0] && rows[0].payload) { eq = rows[0].payload; equipmentCatalog.push(eq); return eq; }
+  return null;
+}
+async function mxValidateEquipment(rawCode) {
+  const key = mxParseQr(rawCode);
+  if (!key) return { ok: false, reason: 'No se pudo leer un código válido.' };
+  const eq = await mxResolveEquipment(key);
+  const aliases = new Set([key, eq && eq.id, eq && eq.code].filter(Boolean).flatMap(v => [mxNorm(v), mxNorm(cloudCleanId(v))]));
+  const label = (eq && (eq.code || eq.name)) || key;
+  if (!eq) return { ok: false, reason: 'El código "' + key + '" no corresponde a ningún equipo registrado.' };
+  // Fuente de verdad: Supabase (rutinas que el administrador programó). Sin señal: copia local.
+  let orders = navigator.onLine ? await fetchMyActiveOrders() : null;
+  if (!Array.isArray(orders)) orders = workOrders;
+  const month = mxMonthKey();
+  const me = techCurrentUserRecord();
+  const mine = o => techMatches(o, me);
+  const order = (orders || []).find(o => o && isPreventiveOrder(o) && String(o.status || 'PENDING').toUpperCase() === 'PENDING'
+    && String(o.date || '').startsWith(month) && mine(o)
+    && (o.equipmentIds || []).some(id => aliases.has(mxNorm(id)) || aliases.has(mxNorm(cloudCleanId(id)))));
+  if (!order) return { ok: false, eq, reason: 'El equipo ' + label + ' no tiene rutinas pendientes para el periodo actual (' + mxMonthLabel() + '). Puede corresponder a otro mes o no estar programado por el administrador.' };
+  const eqId = (order.equipmentIds || []).find(id => aliases.has(mxNorm(id)) || aliases.has(mxNorm(cloudCleanId(id))));
+  return { ok: true, eq, order, eqId };
+}
+async function mxHandleCode(raw) {
+  mxScanMsg('Validando equipo…', 'warn');
+  const r = await mxValidateEquipment(raw);
+  if (!r.ok) { mxScanClose(); mxQ('mx-block-body').textContent = r.reason; mxOpen('mx-block'); if (navigator.vibrate) navigator.vibrate([200, 80, 200]); return; }
+  mxScanClose();
+  if (!workOrders.find(o => o.id === r.order.id)) workOrders.push(r.order);
+  await ensureOrderEquipments(r.order);
+  mxValidated.add(r.order.id + '|' + r.eqId);
+  openEquipmentExecutionModal(r.order.id, r.eqId);
+}
+function mxScanMsg(t, kind) { const m = mxQ('mx-scan-msg'); m.style.display = t ? 'block' : 'none'; m.className = 'mx-alert ' + (kind || 'warn'); m.textContent = t || ''; }
+let mxStream = null, mxTimer = null, mxBusy = false;
+async function mxScanOpen() {
+  mxOpen('mx-scan'); mxScanMsg('');
+  try {
+    mxStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    const v = mxQ('mx-video'); v.srcObject = mxStream; await v.play();
+    let det = null;
+    if ('BarcodeDetector' in window) det = new BarcodeDetector({ formats: ['qr_code'] });
+    else if (!window.jsQR) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+    const cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
+    mxTimer = setInterval(async () => {
+      if (mxBusy || v.readyState < 2) return;
+      mxBusy = true;
+      try {
+        let txt = '';
+        if (det) { const f = await det.detect(v); txt = f[0] && f[0].rawValue; }
+        else { cv.width = v.videoWidth; cv.height = v.videoHeight; cx.drawImage(v, 0, 0); const d = cx.getImageData(0, 0, cv.width, cv.height); const q = jsQR(d.data, d.width, d.height); txt = q && q.data; }
+        if (txt) { clearInterval(mxTimer); await mxHandleCode(txt); }
+      } catch (_) {} finally { mxBusy = false; }
+    }, 300);
+  } catch (e) { mxScanMsg('No se pudo abrir la cámara (' + (e.name || 'error') + '). Escribe el código del equipo manualmente.', 'bad'); }
+}
+function mxScanClose() {
+  clearInterval(mxTimer); mxTimer = null;
+  if (mxStream) { mxStream.getTracks().forEach(t => t.stop()); mxStream = null; }
+  mxClose('mx-scan');
+}
+function mxScanManual() { const v = mxQ('mx-manual').value; if (v.trim()) { clearInterval(mxTimer); mxHandleCode(v); } }
+
+if (MX.REQUIRE_QR) {   // opcional: bloquea abrir el formulario sin QR
+  const _open = window.openEquipmentExecutionModal;
+  window.openEquipmentExecutionModal = function (orderId, eqId) {
+    if (mxValidated.has(orderId + '|' + eqId)) return _open.apply(this, arguments);
+    showToast('Escanea el QR del equipo para abrir su rutina.', 'error'); mxScanOpen();
+  };
+}
+
+/* ---------------- 2) Check-In / Check-Out con GPS ---------------- */
+const mxAttQueueKey = 'HVAC_ATT_QUEUE', mxAttTodayKey = 'HVAC_ATT_TODAY';
+const mxRead = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || d); } catch (_) { return JSON.parse(d); } };
+const mxToday = () => new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD local
+function mxDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000, r = Math.PI / 180, dLat = (lat2 - lat1) * r, dLng = (lng2 - lng1) * r;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+function mxGetPosition() {
+  return new Promise((res, rej) => {
+    if (!navigator.geolocation) return rej(new Error('Este dispositivo no soporta geolocalización.'));
+    navigator.geolocation.getCurrentPosition(res, e => rej(new Error(e.code === 1 ? 'Permiso de ubicación denegado. Actívalo para esta app en los ajustes del navegador.' : e.code === 3 ? 'Tiempo agotado obteniendo el GPS. Sal a un lugar abierto e intenta de nuevo.' : 'No se pudo obtener la ubicación.')), { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+}
+/* Lista COMPLETA de clientes: antes solo salían los que tenían rutina este mes (por eso aparecía un único cliente) */
+const mxFold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+async function mxLoadAllClients() {
+  const KEY = 'HVAC_CLIENTS_ALL'; let all = null;
+  if (navigator.onLine) {
+    all = [];
+    for (let off = 0; ; off += 1000) {                       // sin filtros ni límite fijo: pagina de 1000 en 1000
+      const rows = await supabaseFetch('hvac_clients?select=payload&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true });
+      if (!Array.isArray(rows)) { all = null; break; }
+      all.push(...rows.map(r => r && r.payload).filter(c => c && c.name));
+      if (rows.length < 1000) break;
+    }
+    if (all && all.length) { try { localStorage.setItem(KEY, JSON.stringify(all.map(c => ({ id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, latitud: c.latitud, longitud: c.longitud, geoRadius: c.geoRadius })))); } catch (e) {} }
+  }
+  if (!all || !all.length) { try { all = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { all = []; } }   // sin señal: última lista descargada
+  all.forEach(c => {                                         // une con el catálogo local (coordenadas incluidas)
+    const l = clientsCatalog.find(x => x && (String(x.id) === String(c.id) || mxFold(x.name) === mxFold(c.name)));
+    if (!l) clientsCatalog.push(c); else ['lat', 'lng', 'latitud', 'longitud', 'geoRadius'].forEach(k => { if (l[k] == null && c[k] != null) l[k] = c[k]; });
+  });
+  return clientsCatalog;
+}
+function mxAttFill() {
+  const sel = mxQ('mx-att-client'), q = mxFold(mxQ('mx-att-q').value), prev = sel.value, me = techCurrentUserRecord();
+  const month = mxMonthKey(), withRoutine = new Set(), seen = new Set(), all = [];
+  workOrders.forEach(o => { if (o && o.client && isPreventiveOrder(o) && String(o.date || '').startsWith(month) && techMatches(o, me)) withRoutine.add(mxFold(o.client)); });
+  const add = n => { n = String(n || '').trim(); if (n && !seen.has(mxFold(n))) { seen.add(mxFold(n)); all.push(n); } };
+  clientsCatalog.forEach(c => c && add(c.name)); workOrders.forEach(o => o && add(o.client));
+  all.sort((a, b) => a.localeCompare(b, 'es'));
+  const ok = n => !q || mxFold(n).includes(q), mine = all.filter(n => withRoutine.has(mxFold(n)) && ok(n)), rest = all.filter(n => !withRoutine.has(mxFold(n)) && ok(n));
+  const opt = n => '<option value="' + esc(n) + '">' + esc(n) + '</option>';
+  sel.innerHTML = '<option value="">' + (all.length ? '— Selecciona el cliente / sede —' : 'Sin clientes cargados') + '</option>'
+    + (mine.length ? '<optgroup label="Con rutina este mes">' + mine.map(opt).join('') + '</optgroup>' : '')
+    + (rest.length ? '<optgroup label="' + (mine.length ? 'Otros clientes' : 'Todos los clientes') + '">' + rest.map(opt).join('') + '</optgroup>' : '');
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+  mxQ('mx-att-count').textContent = all.length + ' clientes' + (q ? ' · ' + (mine.length + rest.length) + ' coinciden' : '');
+}
+function mxAttOpen() {
+  mxQ('mx-att-q').value = ''; mxAttFill();                  // muestra al instante lo que ya hay en el teléfono…
+  mxQ('mx-att-msg').style.display = 'none';
+  const last = mxRead(mxAttTodayKey, '{}'), l = last.date === mxToday() ? last : null;
+  const b = mxQ('mx-att-last'); b.style.display = l ? 'block' : 'none';
+  if (l) b.textContent = 'Última marcación de hoy: ' + l.tipo + ' · ' + l.cliente + ' · ' + new Date(l.hora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  mxOpen('mx-att');
+  mxLoadAllClients().then(mxAttFill).catch(() => {});       // …y trae la lista completa desde Supabase
+}
+function mxAttMsg(t, kind) { const m = mxQ('mx-att-msg'); m.style.display = t ? 'block' : 'none'; m.className = 'mx-alert ' + (kind || 'warn'); m.innerHTML = t || ''; }
+async function mxClientGeo(name) {
+  let c = clientsCatalog.find(x => mxNorm(x.name) === mxNorm(name));
+  if ((!c || c.lat == null) && navigator.onLine) {
+    const rows = await supabaseFetch('hvac_clients?select=payload&payload->>name=eq.' + encodeURIComponent(name) + '&limit=1', 'GET', null, null, { quiet: true });
+    if (Array.isArray(rows) && rows[0] && rows[0].payload) c = rows[0].payload;
+  }
+  const lat = c && c.lat !== '' ? parseFloat(c.lat) : NaN, lng = c && c.lng !== '' ? parseFloat(c.lng) : NaN;
+  return { client: c || null, lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, radius: (c && parseInt(c.geoRadius, 10)) || MX.RADIO_DEFAULT_M };
+}
+/* ---- Foto del técnico ---- */
+let mxPhotoStream = null, mxPhotoResolve = null;
+function mxPhotoMsg(t) { const m = mxQ('mx-photo-msg'); m.style.display = t ? 'block' : 'none'; m.textContent = t || ''; }
+function mxPhotoStop() { if (mxPhotoStream) { mxPhotoStream.getTracks().forEach(x => x.stop()); mxPhotoStream = null; } mxClose('mx-photo'); }
+function mxPhotoDone(blob) { const r = mxPhotoResolve; mxPhotoResolve = null; mxPhotoStop(); if (r) r(blob); }
+async function mxTakePhoto() {
+  return new Promise(async resolve => {
+    mxPhotoResolve = resolve; mxPhotoMsg(''); mxOpen('mx-photo');
+    try {
+      mxPhotoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 960 } }, audio: false });
+      const v = mxQ('mx-photo-video'); v.srcObject = mxPhotoStream; await v.play();
+    } catch (e) { mxPhotoMsg('No se pudo abrir la cámara. Usa el botón "Galería/cámara" para tomar la foto.'); }
+  });
+}
+function mxPhotoShoot() {
+  const v = mxQ('mx-photo-video'); if (!mxPhotoStream || !v.videoWidth) return mxPhotoMsg('La cámara no está lista.');
+  const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+  c.toBlob(b => mxPhotoDone(b), 'image/jpeg', 0.92);
+}
+function mxPhotoFile(inp) { const f = inp.files && inp.files[0]; inp.value = ''; if (f) mxPhotoDone(f); }
+function mxPhotoCancel() { mxPhotoDone(null); }
+
+/* ---- Registro (foto → Storage → fila en Supabase) con cola offline en IndexedDB ---- */
+const mxSyncItem = async it => {
+  if (it.type === 'telegram') {
+    const s = await mxTgSend(it.msg);
+    if (s === 'retry') { it.tries = (it.tries || 0) + 1; if (it.tries < 8) { await HVAC.outbox.add(it); return false; } }
+    return true;
+  }
+  if (it.type !== 'asistencia') return false;
+  if (it.photo && !(await HVAC.storage.upload(it.path, it.photo, 'image/jpeg'))) return false;
+  const ok = !!(await HVAC.sb.insertIgnore(MX.TABLE, it.rec));
+  if (ok && it.msg) enviarMarcacionTelegram(it.msg);        // marcación hecha sin señal: ahora sí se notifica
+  return ok;
+};
+const mxFlushQueue = () => HVAC.outbox.flush(mxSyncItem);
+async function mxMark(tipo) {
+  const name = mxQ('mx-att-client').value;
+  if (!name) return mxAttMsg('Selecciona el cliente / sede.', 'bad');
+  const u = techCurrentUserRecord() || {};
+  const btns = [mxQ('mx-btn-in'), mxQ('mx-btn-out')]; btns.forEach(b => b.disabled = true);
+  try {
+    const raw = await mxTakePhoto();
+    if (!raw && MX.FOTO_OBLIGATORIA) return mxAttMsg('La foto es obligatoria para registrar la marcación.', 'bad');
+    mxAttMsg('<i class="fa-solid fa-satellite-dish"></i> Obteniendo ubicación GPS…', 'warn');
+    const [pos, geo] = await Promise.all([mxGetPosition(), mxClientGeo(name)]);
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+    const dist = geo.lat != null ? mxDistance(lat, lng, geo.lat, geo.lng) : null;
+    const inRange = dist == null ? null : dist <= geo.radius;
+    if (inRange === false && MX.BLOQUEAR_FUERA_RANGO) { mxAttMsg('Estás a <b>' + Math.round(dist) + ' m</b> de la sede (máximo ' + geo.radius + ' m). Acércate para marcar.', 'bad'); return; }
+    const now = new Date(), id = (crypto.randomUUID ? crypto.randomUUID() : 'a' + Date.now() + Math.random().toString(16).slice(2));
+    let blob = null, path = null, fotoUrl = null;
+    if (raw) {
+      mxAttMsg('Comprimiendo foto…', 'warn');
+      blob = await HVAC.img.compress(raw, { maxW: 720, quality: 0.7, maxBytes: 120 * 1024 });
+      path = 'asistencia/' + mxToday().replace(/-/g, '/') + '/' + id + '.jpg';
+      fotoUrl = HVAC.storage.publicUrl(path);          // la URL es determinista: ya sirve para el mensaje
+    }
+    const rec = {
+      id, tecnico_id: u.id ? String(u.id) : null, tecnico_nombre: u.name || u.username || 'Técnico',
+      cliente_id: geo.client ? String(geo.client.id) : null, cliente_nombre: name, tipo, fecha: mxToday(), hora: now.toISOString(),
+      lat, lng, precision_m: Math.round(accuracy), sede_lat: geo.lat, sede_lng: geo.lng, radio_permitido_m: geo.radius,
+      distancia_m: dist == null ? null : Math.round(dist), dentro_rango: inRange, order_id: null, foto_url: fotoUrl
+    };
+    const estado = inRange === true ? '✅ Dentro del rango (' + Math.round(dist) + ' m)' : inRange === false ? '⚠️ FUERA de rango (' + Math.round(dist) + ' m de ' + geo.radius + ' m)' : 'ℹ️ Sede sin coordenadas registradas';
+    const hora = now.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' });
+    const h = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const msg = [tipo === 'CHECK-IN' ? '🟢 <b>ENTRADA (Check-In)</b>' : '🔴 <b>SALIDA (Check-Out)</b>',
+      '👷 <b>Técnico:</b> ' + h(rec.tecnico_nombre), '🏢 <b>Cliente / Sede:</b> ' + h(name), '🕒 <b>Fecha y hora:</b> ' + h(hora), '📡 <b>GPS:</b> ' + h(estado),
+      '📍 <b>Ubicación:</b> https://www.google.com/maps?q=' + lat.toFixed(6) + ',' + lng.toFixed(6)].concat(fotoUrl ? ['📸 <b>Foto:</b> ' + fotoUrl] : []).join('\n');
+    mxAttMsg('Guardando registro…', 'warn');
+    const uploaded = blob ? await HVAC.storage.upload(path, blob, 'image/jpeg') : true;
+    const saved = uploaded && !!(await HVAC.sb.insertIgnore(MX.TABLE, rec));
+    if (!saved) {
+      await HVAC.outbox.add({ id, type: 'asistencia', rec, path, photo: uploaded ? null : blob, msg });
+      navigator.serviceWorker && navigator.serviceWorker.ready.then(r => r.sync && r.sync.register('hvac-outbox')).catch(() => {});
+    }
+    if (saved) enviarMarcacionTelegram(msg);   // segundo plano: no bloquea la confirmación
+    localStorage.setItem(mxAttTodayKey, JSON.stringify({ date: rec.fecha, tipo, cliente: name, hora: rec.hora }));
+    mxShowDone(saved, estado + ' · Precisión GPS ±' + Math.round(accuracy) + ' m', inRange === false);
+  } catch (e) { mxAttMsg(esc(e.message || 'Error al marcar.'), 'bad'); }
+  finally { btns.forEach(b => b.disabled = false); }
+}
+HVAC.net.onChange(on => on && mxFlushQueue());
+document.addEventListener('hvac-sync', mxFlushQueue);
+setTimeout(mxFlushQueue, 4000);
+{ const a = new URLSearchParams(location.search).get('accion'); if (a) setTimeout(() => { if (techCurrentUserRecord()) (a === 'qr' ? mxScanOpen : mxAttOpen)(); }, 2500); }
+
+/* ---------------- Rutinas compartidas: refresco en vivo cada 30 s ---------------- */
+async function mxPullShared() {
+  if (!navigator.onLine || document.hidden || !techCurrentUserRecord()) return;
+  const remote = await fetchMyActiveOrders(); if (!Array.isArray(remote)) return;
+  let changed = false;
+  remote.filter(r => orderTechs(r).length > 1).forEach(r => {
+    const lo = workOrders.find(o => o && o.id === r.id);
+    if (!lo) { workOrders.push(r); changed = true; return; }
+    lo.executions = lo.executions || {};
+    Object.entries(r.executions || {}).forEach(([k, v]) => { if (!lo.executions[k] || execTs(v) > execTs(lo.executions[k])) { lo.executions[k] = v; changed = true; } });
+    if (r.technicianFinished && !lo.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = r.technicianFinishedAt; changed = true; }
+    if (String(r.status).toUpperCase() === 'COMPLETED' && String(lo.status).toUpperCase() === 'PENDING') { lo.status = 'COMPLETED'; changed = true; }
+  });
+  if (!changed) return;
+  try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (e) {}
+  try { renderTechAgenda(); } catch (e) {}
+  const hub = document.getElementById('order-hub-modal-backdrop');
+  if (hub && !hub.classList.contains('hidden')) { const o = workOrders.find(x => x && x.id === currentExecOrderId); if (o) try { renderOrderHubEquipments(o); } catch (e) {} }
+}
+setInterval(mxPullShared, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPullShared(); });
+
+/* ---------------- Botones en la barra inferior ---------------- */
+(function () {
+  const bar = document.querySelector('#tech-tabbar .tabbar-in'); if (!bar) return;
+  bar.classList.add('mx-5');
+  const b1 = document.createElement('button'); b1.className = 'tab'; b1.innerHTML = '<i class="fa-solid fa-qrcode"></i>Escanear'; b1.onclick = mxScanOpen;
+  const b2 = document.createElement('button'); b2.className = 'tab'; b2.innerHTML = '<i class="fa-solid fa-location-dot"></i>Asistencia'; b2.onclick = mxAttOpen;
+  bar.insertBefore(b2, bar.children[1]); bar.insertBefore(b1, bar.children[1]);
+})();
+</script>
+
+</body>
+</html>

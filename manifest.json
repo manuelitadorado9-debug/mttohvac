@@ -1,0 +1,56 @@
+{
+  "id": "/tecnico.html",
+  "name": "Smart Maintenance · App de Campo",
+  "short_name": "HVAC Campo",
+  "description": "Rutinas de mantenimiento HVAC, QR de equipos y asistencia con GPS.",
+  "start_url": "/tecnico.html",
+  "scope": "/tecnico.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1122",
+  "theme_color": "#0a1122",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Escanear QR",
+      "url": "/tecnico.html?accion=qr",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Asistencia",
+      "url": "/tecnico.html?accion=asistencia",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false
+}
