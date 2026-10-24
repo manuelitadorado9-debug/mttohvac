@@ -2829,7 +2829,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
 </div></div>
 
 <div id="mx-block" class="mx-back"><div class="mx-card">
-  <h3 style="color:#fb7185"><i class="fa-solid fa-ban"></i> Equipo sin rutina para este periodo</h3>
+  <h3 style="color:#fb7185"><i class="fa-solid fa-ban"></i> <span id="mx-block-title">Equipo sin rutina para este periodo</span></h3>
   <div id="mx-block-body" class="mx-alert bad"></div>
   <div class="mx-row"><button class="mx-btn ghost" onclick="mxClose('mx-block')">Entendido</button><button class="mx-btn" onclick="mxClose('mx-block');mxScanOpen()">Escanear otro</button></div>
 </div></div>
@@ -2938,11 +2938,11 @@ async function mxResolveEquipment(key) {
 }
 async function mxValidateEquipment(rawCode) {
   const key = mxParseQr(rawCode);
-  if (!key) return { ok: false, reason: 'No se pudo leer un código válido.' };
+  if (!key) return { ok: false, title: 'Código no válido', reason: 'No se pudo leer un código válido.' };
   const eq = await mxResolveEquipment(key);
   const aliases = new Set([key, eq && eq.id, eq && eq.code].filter(Boolean).flatMap(v => [mxNorm(v), mxNorm(cloudCleanId(v))]));
   const label = (eq && (eq.code || eq.name)) || key;
-  if (!eq) return { ok: false, reason: 'El código "' + key + '" no corresponde a ningún equipo registrado.' };
+  if (!eq) return { ok: false, title: 'Equipo no encontrado', reason: 'El código "' + key + '" no corresponde a ningún equipo registrado.' };
   // Fuente de verdad: Supabase (rutinas que el administrador programó). Sin señal: copia local.
   let orders = navigator.onLine ? await fetchMyActiveOrders() : null;
   if (!Array.isArray(orders)) orders = workOrders;
@@ -2952,14 +2952,19 @@ async function mxValidateEquipment(rawCode) {
   const order = (orders || []).find(o => o && isPreventiveOrder(o) && String(o.status || 'PENDING').toUpperCase() === 'PENDING'
     && String(o.date || '').startsWith(month) && mine(o)
     && (o.equipmentIds || []).some(id => aliases.has(mxNorm(id)) || aliases.has(mxNorm(cloudCleanId(id)))));
-  if (!order) return { ok: false, eq, reason: 'El equipo ' + label + ' no tiene rutinas pendientes para el periodo actual (' + mxMonthLabel() + '). Puede corresponder a otro mes o no estar programado por el administrador.' };
+  if (!order) {
+    const sameEq = o => (o.equipmentIds || []).some(id => aliases.has(mxNorm(id)) || aliases.has(mxNorm(cloudCleanId(id))));
+    const assigned = (orders || []).some(o => o && isPreventiveOrder(o) && String(o.status || 'PENDING').toUpperCase() === 'PENDING' && mine(o) && sameEq(o));
+    if (!assigned) return { ok: false, eq, title: 'Sin rutinas asignadas', reason: 'No tienes rutinas asignadas para este equipo (' + label + '). Si crees que es un error, consulta con el administrador.' };
+    return { ok: false, eq, title: 'Equipo sin rutina para este periodo', reason: 'El equipo ' + label + ' no tiene rutinas pendientes para el periodo actual (' + mxMonthLabel() + '). Puede corresponder a otro mes o no estar programado por el administrador.' };
+  }
   const eqId = (order.equipmentIds || []).find(id => aliases.has(mxNorm(id)) || aliases.has(mxNorm(cloudCleanId(id))));
   return { ok: true, eq, order, eqId };
 }
 async function mxHandleCode(raw) {
   mxScanMsg('Validando equipo…', 'warn');
   const r = await mxValidateEquipment(raw);
-  if (!r.ok) { mxScanClose(); mxQ('mx-block-body').textContent = r.reason; mxOpen('mx-block'); if (navigator.vibrate) navigator.vibrate([200, 80, 200]); return; }
+  if (!r.ok) { mxScanClose(); mxQ('mx-block-title').textContent = r.title || 'Equipo sin rutina para este periodo'; mxQ('mx-block-body').textContent = r.reason; mxOpen('mx-block'); if (navigator.vibrate) navigator.vibrate([200, 80, 200]); return; }
   mxScanClose();
   if (!workOrders.find(o => o.id === r.order.id)) workOrders.push(r.order);
   await ensureOrderEquipments(r.order);
@@ -3191,6 +3196,48 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
   const b1 = document.createElement('button'); b1.className = 'tab'; b1.innerHTML = '<i class="fa-solid fa-qrcode"></i>Escanear'; b1.onclick = mxScanOpen;
   const b2 = document.createElement('button'); b2.className = 'tab'; b2.innerHTML = '<i class="fa-solid fa-location-dot"></i>Asistencia'; b2.onclick = mxAttOpen;
   bar.insertBefore(b2, bar.children[1]); bar.insertBefore(b1, bar.children[1]);
+})();
+</script>
+
+
+<script id="qr-deeplink">
+/* ===== Enlace del QR: tecnico.html?eq=<ID del equipo> =====
+   Si el técnico no ha iniciado sesión, el equipo queda pendiente y se abre apenas ingrese. */
+(function () {
+  const KEY = 'HVAC_PENDING_EQ';
+  try {
+    const p = new URLSearchParams(location.search), eq = (p.get('eq') || '').trim();
+    if (eq) {
+      sessionStorage.setItem(KEY, eq);
+      p.delete('eq');
+      const q = p.toString();
+      history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+    }
+  } catch (_) {}
+  const pending = () => { try { return sessionStorage.getItem(KEY); } catch (_) { return null; } };
+  let running = false;
+  async function run() {
+    if (running) return;
+    const key = pending(); if (!key) return;
+    if (!(typeof sessionAuthenticated !== 'undefined' && sessionAuthenticated && restoreActiveSession())) return;
+    running = true;
+    try { sessionStorage.removeItem(KEY); } catch (_) {}
+    try {
+      showToast('Buscando la rutina de este equipo…');
+      try { if (cloudCtl.loading && cloudCtl.loading.promise) await Promise.race([cloudCtl.loading.promise.catch(() => {}), new Promise(r => setTimeout(r, 8000))]); } catch (_) {}
+      await mxHandleCode(key);
+    } catch (err) {
+      console.warn('[QR]', err);
+      mxQ('mx-block-title').textContent = 'No se pudo abrir el equipo';
+      mxQ('mx-block-body').textContent = 'No fue posible consultar la rutina de este equipo. Revisa tu conexión e inténtalo de nuevo escaneando el QR.';
+      mxOpen('mx-block');
+    } finally { running = false; }
+  }
+  setInterval(run, 600);
+  document.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+    run();
+    if (pending() && !(typeof sessionAuthenticated !== 'undefined' && sessionAuthenticated)) showToast('Inicia sesión para abrir la rutina del equipo escaneado.');
+  }, 900));
 })();
 </script>
 
