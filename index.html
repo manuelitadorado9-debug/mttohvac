@@ -680,6 +680,52 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
 .pa-foot{margin-top:10px;font-size:.72rem;font-weight:700;opacity:.8}.pa-foot button{font-weight:900;color:#0d9488;background:none;border:0;padding:0}
 .pa-ok{font-size:.78rem;font-weight:700;color:#0f766e}
 </style>
+<style id="v7-overrides">
+/* Planificación diaria: barra de navegación (fecha, flechas, atajos) */
+html #app-main .prog-tools{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;width:100%}
+html #app-main .prog-nav{display:flex;align-items:center;gap:8px;flex:1 1 100%;min-width:0}
+html #app-main .prog-nav .prog-date{flex:1 1 auto;min-width:0;height:44px}
+html #app-main .prog-nav .prog-view{flex:0 0 7rem;width:7rem;height:44px}
+html #app-main .prog-nb{flex:0 0 44px !important;width:44px !important;height:44px !important;min-height:44px !important;padding:0 !important;border-radius:12px !important;display:inline-flex;align-items:center;justify-content:center;background:var(--ctl);border:1px solid var(--line);color:var(--text);transition:border-color .15s,color .15s}
+html #app-main .prog-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;flex:1 1 100%}
+html #app-main .prog-quick button{flex:none !important;width:auto !important;height:40px !important;min-height:40px !important;padding:0 .4rem !important;border-radius:11px !important;font-size:.78rem !important;font-weight:800;background:var(--ctl);border:1px solid var(--line);color:var(--text);transition:border-color .15s,color .15s}
+html #app-main .prog-nb:hover,html #app-main .prog-quick button:hover{border-color:#14b8a6;color:#14b8a6}
+@media (min-width:768px){html #app-main .prog-nav{flex:0 0 auto}html #app-main .prog-nav .prog-date{flex:0 0 11rem}html #app-main .prog-quick{flex:0 0 auto;grid-template-columns:repeat(4,auto)}html #app-main .prog-quick button{padding:0 1rem !important}}
+/* Tarjetas con tono propio (antes gris sin contraste): Ubicación de la sede y Control de asistencia */
+.geo-card,.att-surface{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(37,99,235,.10)) !important;border:1px solid rgba(45,212,191,.42) !important;color:var(--text)}
+.geo-card{padding:14px;border-radius:16px}
+.geo-card .text-slate-800,.geo-card .text-slate-700,.att-surface .text-slate-900,.att-surface .text-slate-700,.att-surface .text-slate-600{color:var(--text) !important}
+.geo-card .text-slate-500,.geo-card .text-slate-400,.att-surface .text-slate-500,.att-surface .text-slate-400{color:var(--text-2) !important}
+.geo-card button.geo-btn{background:linear-gradient(135deg,#14c4b4,#0b9e91) !important;color:#fff !important;border:0 !important;min-height:44px;border-radius:12px !important;font-weight:800}
+.geo-card summary{color:var(--text);font-weight:800}
+.geo-card .input-box{background:var(--card) !important}
+/* Modal de cliente (misma estructura que el resto de modales móviles) */
+.mx-sheet form.mx-form{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;margin:0}
+/* Calendario: celdas clicables + modal del día */
+#plan-calendar .fc-daygrid-day{cursor:pointer}#plan-calendar .fc-daygrid-day:hover{background:rgba(20,184,166,.08)}
+.mx-sheet.dm-wide{max-width:720px}
+.dm-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.dm-kpi{border-radius:14px;padding:10px 12px;border:1px solid var(--line);background:rgba(127,127,127,.06)}
+.dm-kpi b{display:block;font-size:1.25rem;font-weight:900;line-height:1.1}.dm-kpi span{font-size:.68rem;font-weight:800;opacity:.7}
+.dm-sec{border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.dm-sec>h4{margin:0;display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:.8rem;font-weight:900;background:rgba(127,127,127,.08)}
+.dm-sec>h4 small{margin-left:auto;font-weight:800;opacity:.6}
+.dm-body{padding:10px 12px;display:grid;gap:10px}
+.dm-empty{font-size:.76rem;opacity:.6;padding:6px 2px}
+.dm-card{border:1px solid var(--line);border-left:4px solid #14b8a6;border-radius:12px;padding:10px 12px;display:grid;gap:8px;background:var(--card)}
+.dm-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between}
+.dm-title{font-weight:900;font-size:.82rem;min-width:0;overflow-wrap:anywhere}.dm-sub{font-size:.7rem;opacity:.7}
+.dm-badge{font-size:.66rem;font-weight:900;padding:3px 9px;border-radius:99px;border:1px solid;white-space:nowrap}
+.dm-bar{height:7px;border-radius:99px;background:rgba(127,127,127,.2);overflow:hidden}.dm-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#14b8a6,#22c55e)}
+.dm-chips{display:flex;flex-wrap:wrap;gap:6px}.dm-chip{font-size:.66rem;font-weight:800;padding:2px 9px;border-radius:99px;background:rgba(20,184,166,.15);color:#14b8a6;border:1px solid rgba(20,184,166,.4)}
+.dm-eq{display:grid;gap:6px;padding:8px 10px;border-radius:10px;background:rgba(127,127,127,.07)}
+.dm-eq-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;font-size:.76rem;font-weight:800}
+.dm-photos{display:flex;gap:6px;overflow-x:auto}.dm-photos a{flex:none}.dm-photos img{width:54px;height:54px;object-fit:cover;border-radius:9px;border:1px solid var(--line)}
+.dm-actions{display:flex;flex-wrap:wrap;gap:8px}
+.dm-actions button{height:36px;padding:0 .8rem;border-radius:10px;font-size:.72rem;font-weight:800;background:var(--ctl);border:1px solid var(--line);color:var(--text)}
+.dm-actions button.pri{background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff;border:0}
+.dm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.76rem;padding:6px 2px;border-bottom:1px dashed var(--line)}.dm-row:last-child{border-bottom:0}
+</style>
 </head>
 <body class="min-h-screen flex flex-col antialiased">
 
@@ -922,18 +968,18 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
                 <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-people-group text-teal-600"></i> Programación de Personal</h3>
-                        <div class="flex flex-wrap items-center gap-2">
-                            <div class="grid grid-flow-col auto-cols-max items-center gap-2">
-                                <button type="button" onclick="progShift(-1)" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl" aria-label="Anterior"><i class="fa-solid fa-chevron-left"></i></button>
-                                <input type="date" id="prog-date" onchange="progLoad()" class="input-box text-xs w-40">
-                                <button type="button" onclick="progShift(1)" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl" aria-label="Siguiente"><i class="fa-solid fa-chevron-right"></i></button>
+                        <div class="prog-tools">
+                            <div class="prog-nav">
+                                <button type="button" class="prog-nb" onclick="progShift(-1)" aria-label="Anterior"><i class="fa-solid fa-chevron-left"></i></button>
+                                <input type="date" id="prog-date" onchange="progLoad()" class="input-box prog-date">
+                                <button type="button" class="prog-nb" onclick="progShift(1)" aria-label="Siguiente"><i class="fa-solid fa-chevron-right"></i></button>
+                                <select id="prog-view" onchange="progLoad()" class="input-box prog-view"><option value="day">Día</option><option value="week">Semana</option></select>
                             </div>
-                            <select id="prog-view" onchange="progLoad()" class="input-box text-xs w-28"><option value="day">Día</option><option value="week">Semana</option></select>
-                            <div class="grid grid-flow-col auto-cols-max gap-2">
-                                <button type="button" onclick="progQuick('today')" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Hoy</button>
-                                <button type="button" onclick="progQuick('tomorrow')" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Mañana</button>
-                                <button type="button" onclick="progQuick('sat')" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Sábado</button>
-                                <button type="button" onclick="progQuick('mon')" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Lunes</button>
+                            <div class="prog-quick">
+                                <button type="button" onclick="progQuick('today')">Hoy</button>
+                                <button type="button" onclick="progQuick('tomorrow')">Mañana</button>
+                                <button type="button" onclick="progQuick('sat')">Sábado</button>
+                                <button type="button" onclick="progQuick('mon')">Lunes</button>
                             </div>
                         </div>
                     </div>
@@ -1178,11 +1224,11 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
 
         <!-- VIEW: BILLING -->
         <section id="view-admin-attendance" class="hidden space-y-4">
-            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
+            <div class="att-surface p-5 rounded-2xl shadow-sm page-head">
                 <h2 class="text-lg font-black text-slate-900"><i class="fa-solid fa-location-crosshairs text-teal-600"></i> Historial y Auditoría de Asistencia</h2>
                 <p class="text-xs text-slate-500 mt-1">Check-In / Check-Out de los técnicos con validación GPS frente a las coordenadas maestras de cada sede.</p>
             </div>
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm grid grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div class="att-surface p-4 rounded-2xl shadow-sm grid grid-cols-2 lg:grid-cols-6 gap-3 items-end">
                 <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Desde</label><input type="date" id="att-f-from" class="input-box text-xs"></div>
                 <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Hasta</label><input type="date" id="att-f-to" class="input-box text-xs"></div>
                 <div><label class="block text-[11px] font-bold text-slate-600 mb-1">Técnico</label><select id="att-f-tech" class="input-box text-xs"></select></div>
@@ -2016,13 +2062,11 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
     </div>
 
     <!-- MODAL: CLIENT EDITOR -->
-    <div id="client-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10003;">
-        <div class="modal-card max-w-md">
-            <div class="flex items-center justify-between border-b pb-3.5 mb-4">
-                <h3 id="cli-modal-title" class="font-black text-slate-900 text-sm">Directorio de Cliente (Regular o Esporádico)</h3>
-                <button onclick="closeClientModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <form onsubmit="event.preventDefault(); saveClientRecord();" class="space-y-3.5">
+    <div id="client-modal-backdrop" class="mx-modal hidden" style="z-index:10003" onclick="if(event.target===this)closeClientModal()">
+        <div class="mx-sheet" style="max-width:520px" role="dialog" aria-modal="true" aria-labelledby="cli-modal-title">
+            <div class="mx-head"><h3 id="cli-modal-title">Directorio de Cliente (Regular o Esporádico)</h3><button type="button" onclick="closeClientModal()" class="mx-x" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+            <form onsubmit="event.preventDefault(); saveClientRecord();" class="mx-form">
+                <div class="mx-body">
                 <input type="hidden" id="cli-f-id">
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Nombre / Razón Social *</label>
@@ -2050,12 +2094,12 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
                     <label class="block text-xs font-bold text-slate-700 mb-1">Centro de Costo (número)</label>
                     <input type="text" id="cli-f-costcenter-number" class="input-box text-xs" placeholder="Ej: 100245">
                 </div>
-                <div class="p-3 rounded-xl border border-teal-200 bg-teal-50/50 space-y-2">
+                <div class="geo-card space-y-2">
                     <div class="text-xs font-black text-slate-800"><i class="fa-solid fa-location-dot text-teal-600"></i> Ubicación de la sede (control de asistencia)</div>
                     <div class="text-[11px] text-slate-500">Escribe la <b>Dirección</b> arriba y pulsa <b>Buscar</b>. Si el pin no queda exacto, <b>arrástralo o toca el mapa</b>.</div>
                     <div class="grid grid-cols-2 gap-2">
-                        <button type="button" id="cli-geo-btn" onclick="cliGeoLookup()" class="px-3 py-2.5 text-xs font-bold bg-white border border-teal-300 text-teal-700 rounded-xl inline-flex items-center justify-center gap-2"><i class="fa-solid fa-magnifying-glass-location"></i> Buscar dirección</button>
-                        <button type="button" onclick="cliUseMyLocation()" class="px-3 py-2.5 text-xs font-bold bg-white border border-teal-300 text-teal-700 rounded-xl inline-flex items-center justify-center gap-2"><i class="fa-solid fa-crosshairs"></i> Estoy en la sede</button>
+                        <button type="button" id="cli-geo-btn" onclick="cliGeoLookup()" class="geo-btn px-3 py-2.5 text-xs inline-flex items-center justify-center gap-2"><i class="fa-solid fa-magnifying-glass-location"></i> Buscar dirección</button>
+                        <button type="button" onclick="cliUseMyLocation()" class="geo-btn px-3 py-2.5 text-xs inline-flex items-center justify-center gap-2"><i class="fa-solid fa-crosshairs"></i> Estoy en la sede</button>
                     </div>
                     <div id="cli-geo-status" class="text-[11px] font-bold text-slate-500"></div>
                     <div id="cli-geo-results"></div>
@@ -2068,10 +2112,11 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
                         </div>
                     </details>
                 </div>
-                <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
-                    <button type="button" onclick="closeClientModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
-                    <button type="submit" class="btn-teal text-xs flex-1 sm:flex-none justify-center"><i class="fa-solid fa-floppy-disk"></i> Guardar Cliente</button>
                 </div>
+                <div class="mx-foot"><div class="mx-actions">
+                    <button type="button" onclick="closeClientModal()" class="mx-btn mx-btn-sec">Cancelar</button>
+                    <button type="submit" class="mx-btn mx-btn-pri"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+                </div></div>
             </form>
         </div>
     </div>
@@ -7079,7 +7124,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const signature = (window.HVAC && HVAC.img ? HVAC.img.resolve : (x => x))(order.clientSignature && order.clientSignature.signatureImg);
             if (signature && typeof signature === 'string' && signature.startsWith('data:image')) {
                 try {
-                    const imageType = signature.startsWith('data:image/jpeg') || signature.startsWith('data:image/jpg') ? 'JPEG' : 'PNG';
+                    const imageType = /^data:image\/jpe?g/.test(signature) ? 'JPEG' : 'PNG';
                     const sigW = Math.min(65, cardW - 12);
                     const sigH = 15;
                     const sigY = sigLineY - sigH + 2;
@@ -7774,10 +7819,11 @@ async function planCalInit() {
     const el = document.getElementById('plan-calendar'); el.innerHTML = '';
     planCal = new FullCalendar.Calendar(el, {
         locale: 'es', firstDay: 1, initialView: 'dayGridMonth', height: 'auto', dayMaxEvents: 3,
+        dateClick: i => planDayOpen(i.dateStr),
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listWeek' },
         events: (info, ok) => ok(planCalEvents()),
         datesSet: async info => { await planCalFetchRange(info.start, info.end); planCal.refetchEvents(); planCalLoad(); },
-        eventClick: i => { const o = i.event.extendedProps.o; showToast(`${o.id} · ${o.technician || 'Sin técnico'} · ${o.client} · ${(o.equipmentIds || []).length} equipo(s) · ${o.status}`); }
+        eventClick: i => planDayOpen(String(i.event.startStr).slice(0, 10)),
     });
     planCal.render();
 }
@@ -7991,6 +8037,86 @@ function renderPeriodAlerts() {
         : '<div class="pa-ok">✅ No hay mantenimientos próximos a vencer según la periodicidad.</div>'}</div>`;
 }
 (function () { const _r = window.renderAdminDashboard; if (typeof _r === 'function') window.renderAdminDashboard = function () { const x = _r.apply(this, arguments); try { renderPeriodAlerts(); } catch (e) { console.warn(e); } return x; }; })();
+</script>
+<div id="day-modal" class="mx-modal hidden" onclick="if(event.target===this)planDayClose()">
+  <div class="mx-sheet dm-wide" role="dialog" aria-modal="true" aria-labelledby="dm-title">
+    <div class="mx-head"><div style="min-width:0"><h3 id="dm-title">Actividades del día</h3><div id="dm-sub" style="font-size:.72rem;opacity:.65;margin-top:2px"></div></div><button type="button" class="mx-x" onclick="planDayClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mx-body" id="dm-body"></div>
+    <div class="mx-foot"><div class="mx-actions">
+      <button type="button" onclick="planDayClose()" class="mx-btn mx-btn-sec">Cerrar</button>
+      <button type="button" id="dm-add" class="mx-btn mx-btn-pri"><i class="fa-solid fa-plus"></i> Programar labor</button>
+    </div></div>
+  </div>
+</div>
+<script id="daymodal-module">
+/* ===== Calendario: detalle del día (rutinas, reportes, personal programado y asistencia) ===== */
+const dmEq = id => (typeof equipmentCatalog !== 'undefined' && equipmentCatalog.find(e => e && (e.id === id || e.code === id))) || null;
+const dmTime = iso => { try { return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+const dmLong = d => { const t = new Date(d + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); return t.charAt(0).toUpperCase() + t.slice(1); };
+function planDayClose() { document.getElementById('day-modal').classList.add('hidden'); }
+function dmStatus(o, done, total) {
+    const st = String(o.status || 'PENDING').toUpperCase();
+    if (st === 'COMPLETED' || (total && done >= total)) return ['Completada', '#16a34a'];
+    if (done > 0) return ['En ejecución', '#2563eb'];
+    return ['Pendiente', '#d97706'];
+}
+async function planDayOpen(day) {
+    const body = document.getElementById('dm-body');
+    document.getElementById('dm-title').textContent = dmLong(day);
+    document.getElementById('dm-sub').textContent = 'Cargando actividades…';
+    body.innerHTML = '<div class="dm-empty">Cargando…</div>';
+    document.getElementById('dm-add').onclick = () => { planDayClose(); planTab('prog'); progEl('prog-date').value = day; progLoad(); progOpen('', '', day); };
+    document.getElementById('day-modal').classList.remove('hidden');
+    // Datos remotos del día (programación y asistencia) en paralelo
+    const [prog, asis] = await Promise.all([
+        supabaseFetch('programacion_personal?select=*&fecha_programada=eq.' + day + '&order=created_at.asc', 'GET', null, null, { quiet: true }),
+        supabaseFetch('asistencia?select=*&fecha=eq.' + day + '&order=hora.asc', 'GET', null, null, { quiet: true })
+    ]);
+    const orders = workOrders.filter(o => o && !String(o.id).startsWith('HIST-')).filter(o => String(o.date || '').slice(0, 10) === day
+        || Object.values(o.executions || {}).some(e => e && String(e.timestamp || '').slice(0, 10) === day));
+    let nExec = 0, nPhotos = 0;
+    const orderHtml = orders.map(o => {
+        const ids = o.equipmentIds || [], seen = new Set(), execs = [];
+        Object.entries(o.executions || {}).forEach(([k, e]) => { if (e && !seen.has(e)) { seen.add(e); execs.push([k, e]); } });
+        const doneAll = execs.filter(([, e]) => !e.partial).length, total = ids.length || execs.length, pct = total ? Math.min(100, Math.round(doneAll / total * 100)) : 0;
+        const [stTxt, stCol] = dmStatus(o, doneAll, total);
+        const todayExecs = execs.filter(([, e]) => String(e.timestamp || '').slice(0, 10) === day);
+        nExec += todayExecs.length;
+        const techs = (typeof orderTechs === 'function' ? orderTechs(o) : [o.technician]).filter(Boolean);
+        const eqHtml = todayExecs.map(([k, e]) => {
+            const eq = dmEq(k), ph = Array.isArray(e.photos) ? e.photos : []; nPhotos += ph.length;
+            return `<div class="dm-eq"><div class="dm-eq-top"><span>${esc((eq && (eq.code || eq.name)) || k)}${eq && eq.name && eq.code ? ' · ' + esc(eq.name) : ''}</span>
+              <span style="display:flex;gap:6px;align-items:center">${e.corrective ? '<span class="dm-badge" style="color:#e11d48;border-color:#e11d4855;background:#e11d4814">Correctivo</span>' : '<span class="dm-badge" style="color:#16a34a;border-color:#16a34a55;background:#16a34a14">Ejecutado</span>'}<span class="dm-sub">${esc(dmTime(e.timestamp))}</span></span></div>
+              ${e.obs ? `<div class="dm-sub" style="opacity:.85">“${esc(String(e.obs).slice(0, 160))}”</div>` : ''}${e.correctiveDesc ? `<div class="dm-sub" style="color:#e11d48">Correctivo: ${esc(String(e.correctiveDesc).slice(0, 160))}</div>` : ''}
+              ${ph.length ? `<div class="dm-photos">${ph.slice(0, 8).map(p => `<a href="${esc(p)}" target="_blank" rel="noopener"><img src="${esc(p)}" loading="lazy" alt="Evidencia"></a>`).join('')}</div>` : ''}
+              <div class="dm-actions">${typeof generateSingleEquipmentPDF === 'function' ? `<button type="button" onclick="generateSingleEquipmentPDF('${esc(o.id)}','${esc(k)}')"><i class="fa-solid fa-file-pdf"></i> Informe PDF</button>` : ''}</div></div>`;
+        }).join('');
+        return `<div class="dm-card" style="border-left-color:${stCol}">
+          <div class="dm-top"><div style="min-width:0"><div class="dm-title">${esc(o.client || 'Sin cliente')}</div><div class="dm-sub">Orden ${esc(o.id)} · ${total} equipo(s)</div></div>
+            <span class="dm-badge" style="color:${stCol};border-color:${stCol}55;background:${stCol}14">${stTxt}</span></div>
+          <div class="dm-bar" title="${pct}%"><i style="width:${pct}%"></i></div><div class="dm-sub">${doneAll} de ${total} equipos con reporte · ${pct}%</div>
+          ${techs.length ? `<div class="dm-chips">${techs.map(t => `<span class="dm-chip"><i class="fa-solid fa-user"></i> ${esc(t)}</span>`).join('')}</div>` : ''}
+          ${eqHtml || '<div class="dm-empty">Sin reportes enviados este día.</div>'}
+          <div class="dm-actions">${typeof openOrderHub === 'function' ? `<button type="button" class="pri" onclick="planDayClose();openOrderHub('${esc(o.id)}')"><i class="fa-solid fa-folder-open"></i> Abrir rutina</button>` : ''}</div></div>`;
+    }).join('');
+    const progList = Array.isArray(prog) ? prog : [];
+    const progHtml = progList.map(i => { const t = (PROG_T[i.tipo] || PROG_T.VISITA_LIBRE); return `<div class="dm-row"><div style="min-width:0"><b>${esc(progTechName(i.tecnico_id))}</b> · ${esc(progClientName(i.cliente_id) || i.lugar || 'Sin lugar')}${i.descripcion_labor ? `<div class="dm-sub">${esc(i.descripcion_labor)}</div>` : ''}</div><span class="dm-badge" style="color:${t[0]};border-color:${t[0]}55;background:${t[1]}">${esc(t[2])}</span></div>`; }).join('');
+    const marks = Array.isArray(asis) ? asis : [];
+    const markHtml = marks.map(m => { const ok = m.dentro_rango === true, bad = m.dentro_rango === false, c = ok ? '#16a34a' : bad ? '#e11d48' : '#d97706';
+        return `<div class="dm-row"><div style="min-width:0"><b>${esc(m.tecnico_nombre)}</b> · ${m.tipo === 'CHECK-IN' ? 'Entrada' : 'Salida'} ${esc(dmTime(m.hora))}<div class="dm-sub">${esc(m.cliente_nombre)}${m.distancia_m != null ? ' · ' + esc(m.distancia_m) + ' m' : ''}</div></div>
+          <span style="display:flex;align-items:center;gap:8px">${m.foto_url ? `<a href="${esc(m.foto_url)}" target="_blank" rel="noopener"><img src="${esc(m.foto_url)}" loading="lazy" alt="Foto" style="width:38px;height:38px;border-radius:9px;object-fit:cover"></a>` : ''}<span class="dm-badge" style="color:${c};border-color:${c}55;background:${c}14">${ok ? 'En rango' : bad ? 'Fuera de rango' : 'Sin coordenadas'}</span></span></div>`; }).join('');
+    document.getElementById('dm-sub').textContent = orders.length + ' rutina(s) · ' + nExec + ' reporte(s) · ' + progList.length + ' labor(es) programada(s) · ' + marks.length + ' marcación(es)';
+    body.innerHTML = `<div class="dm-sum">
+        <div class="dm-kpi"><b>${orders.length}</b><span>Rutinas</span></div><div class="dm-kpi"><b>${nExec}</b><span>Reportes</span></div>
+        <div class="dm-kpi"><b>${nPhotos}</b><span>Fotos</span></div><div class="dm-kpi"><b>${progList.length}</b><span>Programadas</span></div><div class="dm-kpi"><b>${marks.length}</b><span>Marcaciones</span></div></div>
+      <div class="dm-sec"><h4><i class="fa-solid fa-screwdriver-wrench" style="color:#14b8a6"></i> Rutinas y reportes<small>${orders.length}</small></h4><div class="dm-body">${orderHtml || '<div class="dm-empty">No hay rutinas ni reportes para este día.</div>'}</div></div>
+      <div class="dm-sec"><h4><i class="fa-solid fa-people-group" style="color:#7c3aed"></i> Personal programado<small>${progList.length}</small></h4><div class="dm-body">${progHtml || '<div class="dm-empty">Nadie programado este día.</div>'}</div></div>
+      <div class="dm-sec"><h4><i class="fa-solid fa-location-crosshairs" style="color:#2563eb"></i> Asistencia<small>${marks.length}</small></h4><div class="dm-body">${markHtml || '<div class="dm-empty">Sin marcaciones este día.</div>'}</div></div>`;
+}
+(function () { const _s = window.saveClientRecord; if (typeof _s === 'function') window.saveClientRecord = async function () {      // al guardar un cliente, refresca Asistencia (el servidor recalcula las marcaciones sin coordenadas)
+    const r = await _s.apply(this, arguments);
+    setTimeout(() => { try { const v = document.getElementById('view-admin-attendance'); if (v && !v.classList.contains('hidden')) attLoad(); } catch (e) {} }, 2500);
+    return r; }; })();
 </script>
 <script id="prog-module">
 /* ===== Programación de Personal (dentro de Planificación) ===== */
