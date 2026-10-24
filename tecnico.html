@@ -2294,8 +2294,6 @@ html[data-theme="light"] .pill-ok{color:#047857}
             const search = (document.getElementById('hub-equipment-search')?.value || '').trim().toLocaleLowerCase('es');
             const statusFilter = document.getElementById('hub-equipment-status-filter')?.value || 'all';
             let completedCount = 0;
-            let checklistDoneTotal = 0;
-            let checklistItemsTotal = 0;
             const allItems = [];
 
             eqIds.forEach(eqId => {
@@ -2303,13 +2301,6 @@ html[data-theme="light"] .pill-ok{color:#047857}
                 const exec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
                 const status = getEquipmentExecutionStatus(eq, eqId, exec);
                 if (status === 'done') completedCount++;
-                const cfg = (exec && exec.formConfigSnapshot) || equipmentFormsConfig[(eq.type || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
-                const checklistItems = String(cfg.checklist || '').split(/\\n/).map(v => v.trim()).filter(Boolean);
-                const checks = (exec && exec.checklist) || {};
-                checklistItemsTotal += checklistItems.length;
-                checklistDoneTotal += checklistItems.filter((_, i) =>
-                    checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true
-                ).length;
                 allItems.push({ eqId, eq, exec, status });
             });
 
@@ -2330,24 +2321,21 @@ html[data-theme="light"] .pill-ok{color:#047857}
                 const corr = !!(exec && exec.corrective);
                 const statusLabel = status === 'done' ? 'Completado' : status === 'progress' ? 'En progreso' : 'Pendiente';
                 const statusClass = status === 'done' ? 'pill-ok' : status === 'progress' ? 'pill-warn' : 'pill-idle';
-                html += `<article class="e-card ${status === 'done' ? 'is-done' : ''} ${corr ? 'is-corr' : ''}" style="position:relative;overflow:hidden;">
-                    <div style="position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#3b82f6,#10b981);"></div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;padding-left:4px;">
-                        <span style="min-width:0;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;overflow-wrap:anywhere;">${esc(order.client || '—')}</span>
+                html += `<article class="e-card ${status === 'done' ? 'is-done' : ''} ${corr ? 'is-corr' : ''}">
+                    <div class="e-head">
                         <span class="e-code">${esc(eq.code || eqId || '—')}</span>
-                    </div>
-                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:8px;">
                         <span class="pill ${statusClass}">${statusLabel}</span>
                         ${corr ? '<span class="pill pill-warn">Correctivo</span>' : ''}
                     </div>
-                    <h3 class="e-name" style="font-size:16px;font-weight:900;margin-bottom:12px;line-height:1.3;">${esc(eq.name || '—')}</h3>
-                    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 8px;font-size:11px;border-top:1px solid var(--line);padding-top:12px;">
-                        <div><span style="color:var(--soft);display:block;font-weight:800;text-transform:uppercase;font-size:9px;">Tipo</span><strong>${esc(eq.type || '—')}</strong></div>
-                        <div><span style="color:var(--soft);display:block;font-weight:800;text-transform:uppercase;font-size:9px;">Capacidad</span><strong>${esc(eq.capacity || '—')}</strong></div>
-                        <div><span style="color:var(--soft);display:block;font-weight:800;text-transform:uppercase;font-size:9px;">Marca</span><strong>${esc(eq.brand || '—')}</strong></div>
-                        <div><span style="color:var(--soft);display:block;font-weight:800;text-transform:uppercase;font-size:9px;">Modelo</span><strong>${esc(eq.model || '—')}</strong></div>
-                        <div><span style="color:var(--soft);display:block;font-weight:800;text-transform:uppercase;font-size:9px;">Nro. Serie</span><strong>${esc(eq.serial || '—')}</strong></div>
-                    </div>
+                    <h4 class="e-name">${esc(eq.name || '—')}</h4>
+                    <dl class="e-specs">
+                        <div><dt>Tipo</dt><dd>${esc(eq.type || '—')}</dd></div>
+                        <div><dt>Capacidad</dt><dd>${esc(eq.capacity || '—')}</dd></div>
+                        <div><dt>Marca</dt><dd>${esc(eq.brand || '—')}</dd></div>
+                        <div><dt>Modelo</dt><dd>${esc(eq.model || '—')}</dd></div>
+                        <div><dt>Serie</dt><dd>${esc(eq.serial || '—')}</dd></div>
+                        <div><dt>ID / Código</dt><dd>${esc(eq.id || eq.code || eqId || '—')}</dd></div>
+                    </dl>
                     ${corr ? `<p class="e-note"><strong>Novedad:</strong> ${esc(exec.correctiveDesc || 'Sin descripción')}</p>` : ''}
                     <button onclick="openEquipmentExecutionModal('${String(order.id).replace(/'/g, '&#39;')}', '${String(eqId).replace(/'/g, '&#39;')}')" class="btn ${status === 'done' ? 'btn-ghost' : 'btn-primary'} btn-lg btn-block">
                         ${status === 'done' ? '<i class="fa-solid fa-pen"></i> Editar intervención' : '<i class="fa-solid fa-play"></i> Intervenir'}
@@ -2356,14 +2344,11 @@ html[data-theme="light"] .pill-ok{color:#047857}
             });
             container.innerHTML = html;
 
-            const percent = checklistItemsTotal > 0 ? Math.round((checklistDoneTotal / checklistItemsTotal) * 100) : 0;
-            const progressBar = document.getElementById('hub-progress-bar');
-            const progressText = document.getElementById('hub-progress-text');
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressText) progressText.innerText = `${checklistDoneTotal} / ${checklistItemsTotal} tareas del checklist · ${completedCount}/${eqIds.length} equipos completos (${percent}%)`;
+            const percent = eqIds.length > 0 ? Math.round((completedCount / eqIds.length) * 100) : 0;
+            document.getElementById('hub-progress-bar').style.width = `${percent}%`;
+            document.getElementById('hub-progress-text').innerText = `${completedCount} / ${eqIds.length} Equipos (${percent}%)`;
             const finalizeBox = document.getElementById('hub-finalize-container');
-            // No permitir finalizar solo porque el checklist esté marcado: cada equipo debe estar realmente completo.
-            if (eqIds.length > 0 && completedCount === eqIds.length && checklistItemsTotal > 0 && checklistDoneTotal === checklistItemsTotal && order.status !== 'COMPLETED' && order.status !== 'BILLED') finalizeBox.classList.remove('hidden');
+            if (eqIds.length > 0 && percent === 100 && order.status !== 'COMPLETED' && order.status !== 'BILLED') finalizeBox.classList.remove('hidden');
             else finalizeBox.classList.add('hidden');
         }
 
