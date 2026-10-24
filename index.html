@@ -8633,7 +8633,7 @@ async function attDelete(id) {
         $('qrm-url-short').textContent = '· ' + (function () { try { return new URL(b).host; } catch (_) { return b; } })();
         const risk = urlRisk(b), w = $('qrm-base-warn');
         w.classList.remove('local', 'preview'); w.classList.toggle('on', !!risk); if (risk) w.classList.add(risk);
-        $('qrm-url-box').open = !!risk;
+        $('qrm-url-box').style.display = risk ? '' : 'none'; $('qrm-url-box').open = !!risk;
     }
     function confirmBase() {
         const b = baseUrl();
@@ -8793,11 +8793,18 @@ async function attDelete(id) {
     }
 
     /* ---------- lista, filtros y selección ---------- */
+    function fillClients() {
+        const sel = $('qrm-client'), prev = sel.value || 'ALL';
+        const list = (clientsCatalog || []).filter(c => c && c.id != null && c.name).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+        sel.innerHTML = '<option value="ALL">Todos los clientes</option>' + list.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+        sel.value = [...sel.options].some(o => o.value === prev) ? prev : 'ALL';
+        st.lastClients = (clientsCatalog || []).length;
+    }
     function filtered() {
         const q = normText($('qrm-search').value), cl = $('qrm-client').value || 'ALL', stt = $('qrm-status').value;
         return equipmentCatalog.filter(e => {
             if (!e || !kid(e)) return false;
-            if (!matchesClientFilter(cname(e), cl)) return false;
+            if (cl !== 'ALL') { const c = clientsCatalog.find(x => String(x.id) === cl); if (String(e.clientId) !== cl && !(c && normText(cname(e)) === normText(c.name))) return false; }
             const h = hasQr(e);
             if (stt === 'WITH' && !h) return false;
             if (stt === 'WITHOUT' && h) return false;
@@ -8829,6 +8836,7 @@ async function attDelete(id) {
         $('qrm-gen').disabled = !missing || st.busy;
     }
     function render(keepScroll) {
+        if (st.lastClients !== (clientsCatalog || []).length) fillClients();
         const box = $('qrm-list'), top = keepScroll ? box.scrollTop : 0;
         const all = filtered(); st.map = new Map(all.map(e => [kid(e), e]));
         const slice = all.slice(0, st.shown), withQ = all.filter(hasQr).length;
@@ -8910,8 +8918,7 @@ async function attDelete(id) {
     /* ---------- abrir / cerrar ---------- */
     function open() {
         try { if (!document.getElementById('eq-filter-client').options.length) populateClientDropdowns(); } catch (_) {}
-        $('qrm-client').innerHTML = document.getElementById('eq-filter-client').innerHTML;
-        $('qrm-client').value = document.getElementById('eq-filter-client').value || 'ALL';
+        $('qrm-client').value = 'ALL'; fillClients();
         $('qrm-search').value = ''; $('qrm-status').value = 'ALL'; st.shown = 60;
         refreshBaseUi();
         $('qrm-back').classList.add('open'); $('qrm-back').setAttribute('aria-hidden', 'false');
@@ -8920,7 +8927,7 @@ async function attDelete(id) {
         clearInterval(st.timer);
         st.timer = setInterval(() => {   // los equipos se cargan por tandas: refresca cuando llegan más
             const loading = typeof eqBackgroundLoading !== 'undefined' && eqBackgroundLoading;
-            if (isOpen() && !st.busy && (equipmentCatalog.length !== st.lastLen || !!loading !== st.lastLoading)) render(true);
+            if (isOpen() && !st.busy && (equipmentCatalog.length !== st.lastLen || st.lastClients !== (clientsCatalog || []).length || !!loading !== st.lastLoading)) render(true);
         }, 1200);
         loadLib().catch(() => {});   // precarga silenciosa
     }
