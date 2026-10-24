@@ -37,4 +37,4 @@ module.exports = async (req, res) => {
   const kSigning = hmac(hmac(hmac(hmac('AWS4' + sk, date), 'auto'), 's3'), 'aws4_request');
   const signature = crypto.createHmac('sha256', kSigning).update(toSign).digest('hex');
   res.status(200).json({ ok: true, uploadUrl: `https://${host}${uri}?${qs}&X-Amz-Signature=${signature}`, publicUrl: pub.replace(/\/+$/, '') + '/' + key });
-};
+}; 
