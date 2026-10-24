@@ -799,12 +799,6 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
                 </div>
             </div>
             <div id="dash-period-alerts"></div>
-            <details class="r2-card"><summary><i class="fa-solid fa-cloud"></i> Almacenamiento de imágenes (Cloudflare R2)</summary>
-                <div class="r2-body">
-                    <p>Las fotos y firmas nuevas se suben directo a R2. Usa <b>Probar conexión</b> para verificar la configuración, y <b>Migrar fotos antiguas</b> para pasar a R2 las que aún están dentro de la base de datos (Base64).</p>
-                    <div class="r2-actions"><button type="button" id="r2-btn-test" onclick="r2Test()"><i class="fa-solid fa-plug"></i> Probar conexión R2</button><button type="button" id="r2-btn-mig" onclick="r2Migrate()"><i class="fa-solid fa-cloud-arrow-up"></i> Migrar fotos antiguas</button></div>
-                    <pre id="r2-log"></pre>
-                </div></details>
 
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-4 filter-bar">
                 <div class="flex items-center gap-3">
@@ -5928,6 +5922,13 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             else clientsCatalog.push(clientObj);
 
             await cloudSaveClient(clientObj);
+            try {   // recalcula todas las marcaciones del cliente con la ubicación guardada
+                if (clientObj.lat != null && clientObj.lng != null) {
+                    const nRec = await supabaseFetch('rpc/recalcular_marcaciones_cliente', 'POST', { p_cliente_id: String(clientObj.id) }, null, { quiet: true });
+                    if (typeof nRec === 'number' && nRec > 0) showToast(nRec + ' marcación(es) recalculada(s) con la nueva ubicación.');
+                    if (typeof attLoad === 'function' && document.getElementById('view-admin-attendance') && !document.getElementById('view-admin-attendance').classList.contains('hidden')) attLoad();
+                }
+            } catch (e) { console.warn('recalculo marcaciones', e); }
             localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(clientsCatalog));
             populateClientDropdowns();
             renderClientCatalog();
@@ -8243,25 +8244,5 @@ async function attDelete(id) {
 }
 </script>
 
-<style>.r2-card{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:0}.r2-card>summary{cursor:pointer;list-style:none;padding:13px 16px;font-weight:900;font-size:.85rem;display:flex;align-items:center;gap:8px}.r2-card>summary::-webkit-details-marker{display:none}.r2-card>summary i{color:#f6821f}
-.r2-body{padding:0 16px 16px}.r2-body p{font-size:.76rem;opacity:.75;margin:0 0 10px;line-height:1.45}.r2-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.r2-actions button{height:44px;border-radius:12px;font-size:.78rem;font-weight:800;border:1px solid var(--line);background:var(--ctl,#e2e8f0);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:8px}
-.r2-actions button:disabled{opacity:.55}#r2-log{margin:10px 0 0;max-height:220px;overflow:auto;font-size:.7rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text-2)}@media(max-width:420px){.r2-actions{grid-template-columns:1fr}}</style>
-<script id="r2-tools">
-const r2Log = (t, reset) => { const el = document.getElementById('r2-log'); el.textContent = (reset ? '' : el.textContent) + t + '\n'; el.scrollTop = el.scrollHeight; };
-async function r2Test() {
-    const b = document.getElementById('r2-btn-test'); b.disabled = true; r2Log('Probando conexión con R2…', true);
-    const r = await HVAC.r2.selfTest(); r2Log((r.ok ? '✅ ' : '❌ ') + r.msg); b.disabled = false;
-}
-async function r2Migrate() {
-    if (!confirm('Se subirán a R2 las fotos y firmas que siguen guardadas dentro de la base de datos. Puede tardar unos minutos. ¿Continuar?')) return;
-    const b = document.getElementById('r2-btn-mig'); b.disabled = true; r2Log('Verificando R2…', true);
-    const t = await HVAC.r2.selfTest(); if (!t.ok) { r2Log('❌ ' + t.msg); r2Log('Corrige la configuración y vuelve a intentar.'); b.disabled = false; return; }
-    r2Log('✅ R2 listo. Migrando…');
-    const r = await HVAC.r2.migrateAll(['hvac_orders', 'hvac_equipments', 'hvac_clients', 'hvac_caja', 'hvac_legalizaciones', 'hvac_agenda'], r2Log);
-    r2Log('— Terminado: ' + r.moved + ' imagen(es) en ' + r.rows + ' registro(s).'); b.disabled = false;
-    if (r.rows) showToast('Migración a R2 completada. Recarga la página para ver los datos actualizados.');
-}
-</script>
 </body>
 </html>
