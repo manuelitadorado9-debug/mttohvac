@@ -12,8 +12,12 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const origin = req.headers.origin || '';
-  const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-  if (allowed.length && origin && !allowed.includes(origin)) return res.status(403).json({ ok: false, error: 'origen no permitido' });
+  const norm = u => String(u || '').trim().replace(/\/+$/, '').toLowerCase();
+  const allowed = (process.env.ALLOWED_ORIGINS || '').split(',').map(norm).filter(Boolean);
+  let oHost = ''; try { oHost = origin ? new URL(origin).host.toLowerCase() : ''; } catch (e) {}
+  // Mismo dominio que sirve la app (producción, previews o dominio propio) = siempre permitido; ALLOWED_ORIGINS solo agrega dominios extra
+  const sameOrigin = !!oHost && oHost === String(req.headers.host || '').toLowerCase();
+  if (origin && !sameOrigin && allowed.length && !allowed.includes(norm(origin))) return res.status(403).json({ ok: false, error: 'origen no permitido: ' + origin + ' (ALLOWED_ORIGINS=' + allowed.join(' | ') + ')' });
   if (origin) { res.setHeader('Access-Control-Allow-Origin', origin); res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); }
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ ok: false });
@@ -37,4 +41,4 @@ module.exports = async (req, res) => {
   const kSigning = hmac(hmac(hmac(hmac('AWS4' + sk, date), 'auto'), 's3'), 'aws4_request');
   const signature = crypto.createHmac('sha256', kSigning).update(toSign).digest('hex');
   res.status(200).json({ ok: true, uploadUrl: `https://${host}${uri}?${qs}&X-Amz-Signature=${signature}`, publicUrl: pub.replace(/\/+$/, '') + '/' + key });
-}; 
+};
