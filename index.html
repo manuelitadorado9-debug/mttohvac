@@ -766,6 +766,9 @@ html[data-theme="dark"] .qrm-back{background:rgba(2,5,14,.74)}
 .qrm-url{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card-2);font-size:.72rem}
 .qrm-url summary{cursor:pointer;padding:.55rem .8rem;font-weight:700;color:var(--text-2);list-style:none;display:flex;align-items:center;gap:.5rem}
 .qrm-url summary::-webkit-details-marker{display:none}
+.qrm-url summary{flex-wrap:nowrap;white-space:nowrap;padding:.5rem .8rem}
+.qrm-url summary #qrm-url-short{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:.68rem}
+.qrm-url-in input{text-overflow:ellipsis}
 .qrm-url summary::after{content:"\f078";font-family:"Font Awesome 6 Free";font-weight:900;font-size:.6rem;margin-left:auto;color:var(--muted);transition:transform .2s}
 .qrm-url[open] summary::after{transform:rotate(180deg)}
 .qrm-url-in{padding:0 .8rem .75rem;display:flex;flex-direction:column;gap:.45rem}
@@ -774,6 +777,8 @@ html[data-theme="dark"] .qrm-back{background:rgba(2,5,14,.74)}
 .qrm-warn{display:none;padding:.5rem .65rem;border-radius:.65rem;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);color:#b45309;font-weight:700;line-height:1.4}
 html[data-theme="dark"] .qrm-warn{color:#fbbf24}
 .qrm-warn.on{display:block}
+.qrm-warn .qrm-w{display:none}
+.qrm-warn.local .qrm-w.l,.qrm-warn.preview .qrm-w.p{display:block}
 .qrm-bar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .qrm-bar .qrm-stats{margin-left:auto;font-size:.7rem;color:var(--muted);font-weight:600}
 .qrm-btn{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;min-height:2.5rem;padding:0 .95rem;border-radius:.8rem;font-size:.75rem;font-weight:800;border:1px solid var(--line);background:var(--card-2);color:var(--text);cursor:pointer;transition:transform .15s,filter .2s,background-color .2s}
@@ -8541,11 +8546,11 @@ async function attDelete(id) {
       </div>
 
       <details class="qrm-url" id="qrm-url-box">
-        <summary><i class="fa-solid fa-link"></i> Dirección de destino del QR <span id="qrm-url-short" style="font-weight:600;color:var(--muted)"></span></summary>
+        <summary><i class="fa-solid fa-link"></i> Destino del QR <span id="qrm-url-short" style="font-weight:600;color:var(--muted)"></span></summary>
         <div class="qrm-url-in">
           <input type="text" id="qrm-base" class="input-box" spellcheck="false" autocomplete="off">
           <div class="qrm-hint">Es la dirección pública de <b>tecnico.html</b>. Se usa solo para los QR <b>nuevos</b>; los ya generados conservan su enlace original.</div>
-          <div class="qrm-warn" id="qrm-base-warn"><i class="fa-solid fa-triangle-exclamation"></i> Esta dirección parece local (localhost / red interna). Los técnicos no podrán abrir los QR desde sus celulares. Escribe la URL pública antes de generar.</div>
+          <div class="qrm-warn" id="qrm-base-warn"><div class="qrm-w l"><i class="fa-solid fa-triangle-exclamation"></i> Esta dirección parece local (localhost / red interna). Los técnicos no podrán abrir los QR desde sus celulares. Escribe la URL pública antes de generar.</div><div class="qrm-w p"><i class="fa-solid fa-triangle-exclamation"></i> Parece un enlace de despliegue de Vercel (cambia en cada versión y puede pedir inicio de sesión). Usa tu dominio estable de producción antes de generar.</div></div>
         </div>
       </details>
 
@@ -8620,18 +8625,21 @@ async function attDelete(id) {
         try { const x = new URL(u); return x.protocol === 'file:' || /^(localhost$|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(x.hostname); }
         catch (_) { return true; }
     }
+    const isPreviewUrl = u => { try { return /^[a-z0-9-]+-[a-z0-9]{9}-[a-z0-9-]+\.vercel\.app$/i.test(new URL(u).hostname); } catch (_) { return false; } };
+    const urlRisk = u => isLocalUrl(u) ? 'local' : isPreviewUrl(u) ? 'preview' : '';
     function refreshBaseUi() {
         const b = baseUrl();
         $('qrm-base').value = b;
         $('qrm-url-short').textContent = '· ' + (function () { try { return new URL(b).host; } catch (_) { return b; } })();
-        const local = isLocalUrl(b);
-        $('qrm-base-warn').classList.toggle('on', local);
-        if (local) $('qrm-url-box').open = true;
+        const risk = urlRisk(b), w = $('qrm-base-warn');
+        w.classList.remove('local', 'preview'); w.classList.toggle('on', !!risk); if (risk) w.classList.add(risk);
+        $('qrm-url-box').open = !!risk;
     }
     function confirmBase() {
         const b = baseUrl();
-        if (!isLocalUrl(b) || st.warnedLocal) return true;
-        const ok = confirm('La dirección de destino parece local:\n' + b + '\n\nLos técnicos no podrán abrir estos QR desde sus celulares y, una vez generados, no se vuelven a crear.\n\n¿Generar de todas formas?');
+        const risk = urlRisk(b);
+        if (!risk || st.warnedLocal) return true;
+        const ok = confirm((risk === 'local' ? 'La dirección de destino parece local:\n' : 'La dirección de destino parece un enlace de despliegue de Vercel (puede cambiar o pedir login):\n') + b + '\n\nUna vez generados, los QR no se vuelven a crear.\n\n¿Generar de todas formas?');
         if (ok) st.warnedLocal = true; else $('qrm-url-box').open = true;
         return ok;
     }
