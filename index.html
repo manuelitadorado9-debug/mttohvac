@@ -6283,9 +6283,27 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             });
         }
 
-        function openEquipmentModal(id) {
-            document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
+        async function openEquipmentModal(id) {
+            // Para registrar/editar equipos, el selector usa exclusivamente la tabla oficial hvac_clients.
+            // No se rellena desde respaldos locales: si la nube falla, se bloquea el formulario para evitar clientes obsoletos.
+            const clientRows = navigator.onLine
+                ? await supabaseFetch('hvac_clients?select=id,payload&order=payload->>name.asc', 'GET', null, null, { quiet: true })
+                : null;
+            if (!Array.isArray(clientRows)) {
+                showToast('No fue posible consultar Gestión de Clientes en Supabase. Verifica la conexión e inténtalo de nuevo.', 'error');
+                return;
+            }
+            clientsCatalog = clientRows
+                .filter(row => row && row.payload && String(row.payload.name || '').trim())
+                .map(row => ({ ...row.payload, id: row.payload.id || row.id }));
             populateClientDropdowns();
+            const clientSelect = document.getElementById('eq-f-client');
+            if (clientSelect) {
+                clientSelect.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' +
+                    clientsCatalog.slice().sort((a,b) => String(a.name).localeCompare(String(b.name), 'es'))
+                    .map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
+            }
+            document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
             if (id) {
                 const e = equipmentCatalog.find(x => x.id === id);
                 document.getElementById('eq-modal-title').innerText = "Editar Equipo";
@@ -6319,6 +6337,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const client = document.getElementById('eq-f-client').value;
             const code = document.getElementById('eq-f-code').value.trim();
             if (!client || !code) return showToast("Cliente y Código son campos obligatorios.", "error");
+            if (!clientsCatalog.some(c => String(c.name || '') === String(client))) {
+                return showToast("El cliente seleccionado ya no existe en Gestión de Clientes. Actualiza el listado y vuelve a intentarlo.", "error");
+            }
 
             const id = document.getElementById('eq-f-id').value || `EQ-${code.replace(/[\/\\]/g, '-')}-${Date.now()}`;
             const eqObj = {
