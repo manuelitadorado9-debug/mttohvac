@@ -300,6 +300,87 @@ html[data-theme="light"] .pill-ok{color:#047857}
 .sheet-foot{box-shadow:0 -12px 30px -18px rgba(0,0,0,.6)}
 .tab.is-active{background:linear-gradient(135deg,#3b82f6,#10b981)}
 .seg button.is-active{background:linear-gradient(135deg,#3b82f6,#2563eb)}
+
+/* ===== Modal de sincronización: diseño centrado y adaptable ===== */
+#tech-sync-modal.modal-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 10020 !important;
+  display: flex;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 18px !important;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, .7) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+#tech-sync-modal.hidden { display: none !important; }
+#tech-sync-modal, #tech-sync-modal * { box-sizing: border-box; }
+#tech-sync-modal .tech-sync-card {
+  display: block;
+  flex: 0 1 380px;
+  width: 380px !important;
+  max-width: 90vw !important;
+  max-height: calc(100dvh - 36px);
+  overflow-y: auto;
+  margin: auto;
+  padding: 26px 22px 21px !important;
+  border: 1px solid var(--line) !important;
+  border-radius: 22px !important;
+  background: var(--surface, var(--bg)) !important;
+  color: var(--text);
+  box-shadow: 0 24px 75px rgba(0,0,0,.32) !important;
+  animation: techSyncCardIn .2s ease-out;
+}
+#tech-sync-modal .tech-sync-head {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  margin: 0 0 22px !important; text-align: center;
+}
+#tech-sync-modal #tech-sync-icon {
+  display: grid; place-items: center; flex: 0 0 58px;
+  width: 58px !important; height: 58px !important; border-radius: 18px !important;
+  background: rgba(59,130,246,.13) !important; color: var(--primary, #3b82f6) !important;
+  font-size: 23px; margin: 0 auto;
+}
+#tech-sync-modal #tech-sync-title {
+  margin: 0 0 7px !important; font-size: 20px !important; line-height: 1.3;
+  font-weight: 850 !important; letter-spacing: -.35px;
+}
+#tech-sync-modal #tech-sync-subtitle {
+  margin: 0 !important; font-size: 13px !important; line-height: 1.55;
+  color: var(--muted); overflow-wrap: anywhere;
+}
+#tech-sync-modal .tech-sync-progress {
+  height: 9px !important; margin: 0 0 10px !important;
+  border-radius: 999px; background: var(--line); overflow: hidden;
+}
+#tech-sync-modal #tech-sync-progress { border-radius: inherit; }
+#tech-sync-modal .tech-sync-progress-meta {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  font-size: 12px !important; line-height: 1.4; color: var(--muted);
+}
+#tech-sync-modal #tech-sync-count { overflow-wrap: anywhere; }
+#tech-sync-modal #tech-sync-percent { flex: 0 0 auto; font-weight: 800; color: var(--text); }
+#tech-sync-modal #tech-sync-detail {
+  margin: 17px 0 0 !important; padding: 12px 13px;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(148,163,184,.07); font-size: 12px !important;
+  line-height: 1.55; color: var(--muted); overflow-wrap: anywhere;
+}
+#tech-sync-modal .tech-sync-close {
+  width: 100%; min-height: 48px; margin: 18px 0 0 !important;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px !important; font-size: 14px; font-weight: 800;
+}
+@keyframes techSyncCardIn { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+@media (max-width: 480px) {
+  #tech-sync-modal.modal-backdrop { padding: 14px !important; }
+  #tech-sync-modal .tech-sync-card { width: 100% !important; max-width: 380px !important; padding: 23px 18px 18px !important; border-radius: 19px !important; max-height: calc(100dvh - 28px); }
+  #tech-sync-modal #tech-sync-title { font-size: 19px !important; }
+}
+@media (prefers-reduced-motion: reduce) { #tech-sync-modal .tech-sync-card { animation: none; } }
+
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <script src="common.js?v=7"></script>
@@ -395,16 +476,24 @@ html[data-theme="light"] .pill-ok{color:#047857}
     </nav>
 
     <!-- Estado visible de sincronización / bandeja de salida -->
-    <div id="tech-sync-modal" class="modal-backdrop hidden" style="z-index:10020;align-items:center;justify-content:center;padding:20px;">
-        <section class="sheet" style="width:min(100%,440px);padding:22px;">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-                <div id="tech-sync-icon" style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--soft);color:var(--primary);"><i class="fa-solid fa-arrows-rotate"></i></div>
-                <div style="flex:1;min-width:0;"><h3 id="tech-sync-title" style="font-size:17px;font-weight:900;color:var(--text);">Preparando sincronización</h3><p id="tech-sync-subtitle" style="font-size:12px;color:var(--muted);">Revisando los datos guardados en este dispositivo.</p></div>
+    <div id="tech-sync-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="tech-sync-title" aria-describedby="tech-sync-subtitle">
+        <section class="tech-sync-card">
+            <div class="tech-sync-head">
+                <div id="tech-sync-icon" aria-hidden="true"><i class="fa-solid fa-arrows-rotate"></i></div>
+                <div style="width:100%;min-width:0;">
+                    <h3 id="tech-sync-title">Preparando sincronización</h3>
+                    <p id="tech-sync-subtitle">Revisando los datos guardados en este dispositivo.</p>
+                </div>
             </div>
-            <div style="height:8px;background:var(--line);border-radius:999px;overflow:hidden;margin:16px 0 8px;"><div id="tech-sync-progress" style="height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#10b981);transition:width .25s;"></div></div>
-            <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);"><span id="tech-sync-count">Bandeja de salida: 0</span><span id="tech-sync-percent">0%</span></div>
-            <p id="tech-sync-detail" role="status" aria-live="polite" style="font-size:12px;color:var(--muted);margin-top:12px;">Tus cambios se conservan en el dispositivo mientras se intenta sincronizar.</p>
-            <button type="button" class="btn btn-primary btn-block" style="margin-top:18px;" onclick="closeTechSyncStatus()">Cerrar</button>
+            <div class="tech-sync-progress" aria-label="Progreso de sincronización" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="tech-sync-progress-track">
+                <div id="tech-sync-progress" style="height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#10b981);transition:width .25s;"></div>
+            </div>
+            <div class="tech-sync-progress-meta">
+                <span id="tech-sync-count">Bandeja de salida: 0</span>
+                <span id="tech-sync-percent">0%</span>
+            </div>
+            <p id="tech-sync-detail" role="status" aria-live="polite">Tus cambios se conservan en el dispositivo mientras se intenta sincronizar.</p>
+            <button type="button" class="btn btn-primary btn-block tech-sync-close" onclick="closeTechSyncStatus()">Cerrar</button>
         </section>
     </div>
 
@@ -1494,7 +1583,18 @@ html[data-theme="light"] .pill-ok{color:#047857}
             put('tech-sync-title', title); put('tech-sync-subtitle', subtitle); put('tech-sync-detail', detail);
             put('tech-sync-count', 'Bandeja de salida: ' + Number(pending || 0));
             put('tech-sync-percent', Math.max(0, Math.min(100, Number(percent || 0))) + '%');
-            const bar = document.getElementById('tech-sync-progress'); if (bar) bar.style.width = Math.max(0, Math.min(100, Number(percent || 0))) + '%';
+            const value = Math.max(0, Math.min(100, Number(percent || 0)));
+            const bar = document.getElementById('tech-sync-progress'); if (bar) bar.style.width = value + '%';
+            const track = document.getElementById('tech-sync-progress-track'); if (track) track.setAttribute('aria-valuenow', String(value));
+            const icon = document.getElementById('tech-sync-icon');
+            if (icon) {
+                const t = String(title || '').toLowerCase();
+                const isSuccess = t.includes('completada');
+                const isError = t.includes('no se pudo') || t.includes('pendiente') || t.includes('parcial');
+                icon.innerHTML = isSuccess ? '<i class="fa-solid fa-circle-check"></i>' : isError ? '<i class="fa-solid fa-triangle-exclamation"></i>' : '<i class="fa-solid fa-arrows-rotate"></i>';
+                icon.style.background = isSuccess ? 'rgba(34,197,94,.14)' : isError ? 'rgba(245,158,11,.14)' : 'rgba(59,130,246,.13)';
+                icon.style.color = isSuccess ? '#22c55e' : isError ? '#f59e0b' : 'var(--primary)';
+            }
         }
         function closeTechSyncStatus() { const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
         async function syncTechNow() {
