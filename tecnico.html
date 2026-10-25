@@ -384,6 +384,27 @@ html[data-theme="light"] .pill-ok{color:#047857}
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <script src="common.js?v=7"></script>
+<style id="hvac-professional-transitions">
+/* HVAC GMAO — transiciones globales ligeras */
+:root{--hvac-motion-duration:240ms;--hvac-motion-ease:cubic-bezier(.22,.68,0,1);--hvac-motion-distance:6px}
+@keyframes hvacFadeSlideIn{from{opacity:0;transform:translate3d(0,var(--hvac-motion-distance),0)}to{opacity:1;transform:translate3d(0,0,0)}}
+@keyframes hvacBackdropIn{from{opacity:0}to{opacity:1}}
+@keyframes hvacBackdropOut{from{opacity:1}to{opacity:0}}
+@keyframes hvacPanelIn{from{opacity:0;transform:translate3d(0,6px,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+@keyframes hvacPanelOut{from{opacity:1;transform:translate3d(0,0,0) scale(1)}to{opacity:0;transform:translate3d(0,4px,0) scale(.995)}}
+.hvac-fade-slide{animation:hvacFadeSlideIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
+/* Las secciones ocultas siguen usando el mecanismo .hidden original */
+main>section.hvac-fade-slide{will-change:opacity,transform}
+.modal-backdrop:not(.hidden):not(#app-login-screen){animation:hvacBackdropIn 200ms ease-out both}
+.modal-backdrop:not(.hidden):not(#app-login-screen)>:is(.modal-card,.sheet,.tech-sync-card){animation:hvacPanelIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
+.modal-backdrop.hvac-modal-closing{pointer-events:none!important;animation:hvacBackdropOut 190ms ease-in both!important}
+.modal-backdrop.hvac-modal-closing>:is(.modal-card,.sheet,.tech-sync-card){animation:hvacPanelOut 190ms ease-in both!important}
+/* Secciones principales/desplegables con esta clase */
+.hvac-section-enter{animation:hvacFadeSlideIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
+@media(prefers-reduced-motion:reduce){
+ .hvac-fade-slide,.hvac-section-enter,.modal-backdrop:not(.hidden):not(#app-login-screen),.modal-backdrop:not(.hidden):not(#app-login-screen)>:is(.modal-card,.sheet,.tech-sync-card),.modal-backdrop.hvac-modal-closing,.modal-backdrop.hvac-modal-closing>:is(.modal-card,.sheet,.tech-sync-card){animation:none!important;transition:none!important}
+}
+</style>
 </head>
 <body>
 
@@ -3589,5 +3610,92 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
 })();
 </script>
 
+<script id="hvac-professional-transitions-script">
+(function(){
+  'use strict';
+  const DURATION = 200;
+  const closeTimers = new WeakMap();
+  const internallyChanging = new WeakSet();
+
+  window.hvacAnimateEntry = function(element){
+    if(!element || !(element instanceof Element)) return;
+    element.classList.remove('hvac-fade-slide','hvac-section-enter');
+    // Reinicia solo la animación del panel visible.
+    void element.offsetWidth;
+    element.classList.add('hvac-fade-slide');
+    element.addEventListener('animationend',function(e){
+      if(e.target===element) element.classList.remove('hvac-fade-slide');
+    },{once:true});
+  };
+
+  // Detecta pestañas/secciones que el código existente muestra quitando .hidden.
+  const sectionObserver = new MutationObserver(function(records){
+    for(const record of records){
+      const el=record.target;
+      if(!(el instanceof Element) || el.classList.contains('hidden')) continue;
+      if(el.matches('main > section, [data-hvac-animate], .hvac-section-content')) window.hvacAnimateEntry(el);
+    }
+  });
+  document.querySelectorAll('main > section, [data-hvac-animate], .hvac-section-content').forEach(function(el){
+    sectionObserver.observe(el,{attributes:true,attributeFilter:['class','style']});
+  });
+
+  // Modal: entrada inmediata y salida breve sin cambiar los handlers existentes.
+  // Al detectar .hidden en un modal, se reproduce la salida antes de ocultarlo.
+  const modalObserver = new MutationObserver(function(records){
+    for(const record of records){
+      const el=record.target;
+      if(!(el instanceof Element) || !el.matches('.modal-backdrop')) continue;
+      if(internallyChanging.has(el)) continue;
+      if(el.classList.contains('hidden') && !el.classList.contains('hvac-modal-closing')){
+        const previous=closeTimers.get(el);
+        if(previous) clearTimeout(previous);
+        internallyChanging.add(el);
+        el.classList.remove('hidden');
+        el.classList.add('hvac-modal-closing');
+        internallyChanging.delete(el);
+        const timer=setTimeout(function(){
+          internallyChanging.add(el);
+          el.classList.add('hidden');
+          // Conserva la clase de cierre mientras el modal está oculto; al reabrirse se retira abajo.
+          internallyChanging.delete(el);
+          closeTimers.delete(el);
+        },DURATION);
+        closeTimers.set(el,timer);
+      } else if(!el.classList.contains('hidden') && el.classList.contains('hvac-modal-closing')){
+        const previous=closeTimers.get(el);
+        if(previous) clearTimeout(previous);
+        closeTimers.delete(el);
+        internallyChanging.add(el);
+        el.classList.remove('hvac-modal-closing');
+        internallyChanging.delete(el);
+      }
+    }
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(function(el){
+    modalObserver.observe(el,{attributes:true,attributeFilter:['class']});
+  });
+  // Incluye modales que se creen dinámicamente después de cargar la aplicación.
+  const bodyObserver=new MutationObserver(function(records){
+    for(const record of records){
+      record.addedNodes.forEach(function(node){
+        if(!(node instanceof Element)) return;
+        const candidates=[];
+        if(node.matches('.modal-backdrop')) candidates.push(node);
+        node.querySelectorAll && node.querySelectorAll('.modal-backdrop').forEach(el=>candidates.push(el));
+        candidates.forEach(function(el){
+          if(!modalObserver.__observed) modalObserver.__observed=new WeakSet();
+          if(modalObserver.__observed.has(el)) return;
+          modalObserver.__observed.add(el);
+          modalObserver.observe(el,{attributes:true,attributeFilter:['class']});
+        });
+      });
+    }
+  });
+  modalObserver.__observed=new WeakSet();
+  document.querySelectorAll('.modal-backdrop').forEach(el=>modalObserver.__observed.add(el));
+  bodyObserver.observe(document.body,{childList:true,subtree:true});
+})();
+</script>
 </body>
 </html>
