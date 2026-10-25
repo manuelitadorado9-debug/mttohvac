@@ -835,26 +835,58 @@ html[data-theme="dark"] .qrm-badge.no{color:#fbbf24}
   .qrm-bar .qrm-stats{margin-left:0;flex-basis:100%}
 }
 </style>
-<style id="hvac-professional-transitions">
-/* HVAC GMAO — transiciones globales ligeras */
-:root{--hvac-motion-duration:240ms;--hvac-motion-ease:cubic-bezier(.22,.68,0,1);--hvac-motion-distance:6px}
-@keyframes hvacFadeSlideIn{from{opacity:0;transform:translate3d(0,var(--hvac-motion-distance),0)}to{opacity:1;transform:translate3d(0,0,0)}}
-@keyframes hvacBackdropIn{from{opacity:0}to{opacity:1}}
-@keyframes hvacBackdropOut{from{opacity:1}to{opacity:0}}
-@keyframes hvacPanelIn{from{opacity:0;transform:translate3d(0,6px,0) scale(.995)}to{opacity:1;transform:translate3d(0,0,0) scale(1)}}
-@keyframes hvacPanelOut{from{opacity:1;transform:translate3d(0,0,0) scale(1)}to{opacity:0;transform:translate3d(0,4px,0) scale(.995)}}
-.hvac-fade-slide{animation:hvacFadeSlideIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
-/* Las secciones ocultas siguen usando el mecanismo .hidden original */
-main>section.hvac-fade-slide{will-change:opacity,transform}
-.modal-backdrop:not(.hidden):not(#app-login-screen){animation:hvacBackdropIn 200ms ease-out both}
-.modal-backdrop:not(.hidden):not(#app-login-screen)>:is(.modal-card,.sheet,.tech-sync-card){animation:hvacPanelIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
-.modal-backdrop.hvac-modal-closing{pointer-events:none!important;animation:hvacBackdropOut 190ms ease-in both!important}
-.modal-backdrop.hvac-modal-closing>:is(.modal-card,.sheet,.tech-sync-card){animation:hvacPanelOut 190ms ease-in both!important}
-/* Secciones principales/desplegables con esta clase */
-.hvac-section-enter{animation:hvacFadeSlideIn var(--hvac-motion-duration) var(--hvac-motion-ease) both}
-@media(prefers-reduced-motion:reduce){
- .hvac-fade-slide,.hvac-section-enter,.modal-backdrop:not(.hidden):not(#app-login-screen),.modal-backdrop:not(.hidden):not(#app-login-screen)>:is(.modal-card,.sheet,.tech-sync-card),.modal-backdrop.hvac-modal-closing,.modal-backdrop.hvac-modal-closing>:is(.modal-card,.sheet,.tech-sync-card){animation:none!important;transition:none!important}
+
+<style id="ui-transitions-v1">
+/* ============================================================
+   Transiciones suaves (fade + slide) · v1
+   Duración 0.26s · curva ease-out · desplazamiento 8px
+   ============================================================ */
+:root{--ui-dur:.26s;--ui-dur-out:.2s;--ui-shift:8px;--ui-ease:cubic-bezier(.22,.61,.36,1)}
+@keyframes uiFadeSlide{from{opacity:0;transform:translateY(var(--ui-shift))}to{opacity:1;transform:none}}
+
+/* 1) Cambio de pestaña / vista principal: se anima cada vez que la sección pasa de oculta a visible */
+main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwards}
+
+/* 2) Modales y paneles flotantes: nunca desaparecen con display:none,
+      así pueden hacer fade-out; al estar ocultos no reciben clics ni foco. */
+.modal-backdrop,.mx-modal{
+  opacity:1;visibility:visible;
+  transition:opacity var(--ui-dur) ease-out,visibility 0s linear 0s;
 }
+.modal-backdrop.hidden,.mx-modal.hidden,
+#tech-sync-modal.modal-backdrop.hidden{
+  display:flex!important;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--ui-dur-out) ease,visibility 0s linear var(--ui-dur-out);
+}
+/* La tarjeta interior sube 8px mientras aparece y baja 8px al cerrarse */
+.modal-backdrop > *,.mx-modal > *{
+  opacity:1;transform:none;
+  transition:opacity var(--ui-dur) ease-out,transform var(--ui-dur) ease-out;
+}
+.modal-backdrop.hidden > *,.mx-modal.hidden > *{
+  opacity:0;transform:translateY(var(--ui-shift));
+  transition:opacity var(--ui-dur-out) ease,transform var(--ui-dur-out) ease;
+}
+/* Se desactivan las animaciones antiguas de entrada: ahora lo hacen las transiciones de arriba */
+.modal-backdrop > .sheet,
+.modal-backdrop > .modal-card,
+.modal-backdrop > .tech-sync-card,
+.modal-backdrop .modal-card,
+#tech-sync-modal .tech-sync-card{animation:none!important}
+
+@media (prefers-reduced-motion:reduce){
+  main > section:not(.hidden){animation:none}
+  .modal-backdrop,.mx-modal,.modal-backdrop > *,.mx-modal > *{transition-duration:.01ms!important;transition-delay:0s!important}
+}
+</style>
+
+<style id="ui-transitions-v1-admin">
+/* Admin: reemplaza el fadeUp original (10px / .35s) por el estándar 8px / .26s */
+#app-main section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwards}
+@media (prefers-reduced-motion:reduce){#app-main section:not(.hidden){animation:none}}
+/* Admin: velo de "procesando" con entrada suave */
+#app-processing-overlay.is-visible{animation:fadeIn .18s ease both}
 </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased">
@@ -9088,91 +9120,67 @@ async function attDelete(id) {
 })();
 </script>
 
-<script id="hvac-professional-transitions-script">
+
+<script id="ui-transitions-v1-js">
+/* Transiciones suaves: reveal de secciones, pestañas internas y paneles desplegables */
 (function(){
   'use strict';
-  const DURATION = 200;
-  const closeTimers = new WeakMap();
-  const internallyChanging = new WeakSet();
+  if (window.__uiTransitions) return; window.__uiTransitions = true;
 
-  window.hvacAnimateEntry = function(element){
-    if(!element || !(element instanceof Element)) return;
-    element.classList.remove('hvac-fade-slide','hvac-section-enter');
-    // Reinicia solo la animación del panel visible.
-    void element.offsetWidth;
-    element.classList.add('hvac-fade-slide');
-    element.addEventListener('animationend',function(e){
-      if(e.target===element) element.classList.remove('hvac-fade-slide');
-    },{once:true});
-  };
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
+  var DUR = 260, SHIFT = 8;
 
-  // Detecta pestañas/secciones que el código existente muestra quitando .hidden.
-  const sectionObserver = new MutationObserver(function(records){
-    for(const record of records){
-      const el=record.target;
-      if(!(el instanceof Element) || el.classList.contains('hidden')) continue;
-      if(el.matches('main > section, [data-hvac-animate], .hvac-section-content')) window.hvacAnimateEntry(el);
-    }
-  });
-  document.querySelectorAll('main > section, [data-hvac-animate], .hvac-section-content').forEach(function(el){
-    sectionObserver.observe(el,{attributes:true,attributeFilter:['class','style']});
-  });
+  /* Anima un elemento (o lista de elementos) con fade + slide. Usa Web Animations API:
+     no deja clases ni estilos residuales y se puede relanzar en cada cambio. */
+  function uiAnimate(target){
+    if (reduce && reduce.matches) return;
+    var els = typeof target === 'string' ? document.querySelectorAll(target)
+            : (target && target.length !== undefined && !target.nodeType) ? target : [target];
+    Array.prototype.forEach.call(els, function(el){
+      if (!el || !el.animate) return;
+      try {
+        el.animate(
+          [{opacity:0, transform:'translateY('+SHIFT+'px)'},{opacity:1, transform:'none'}],
+          {duration:DUR, easing:'ease-out'}
+        );
+      } catch(e){}
+    });
+  }
+  window.uiAnimate = uiAnimate;
 
-  // Modal: entrada inmediata y salida breve sin cambiar los handlers existentes.
-  // Al detectar .hidden en un modal, se reproduce la salida antes de ocultarlo.
-  const modalObserver = new MutationObserver(function(records){
-    for(const record of records){
-      const el=record.target;
-      if(!(el instanceof Element) || !el.matches('.modal-backdrop')) continue;
-      if(internallyChanging.has(el)) continue;
-      if(el.classList.contains('hidden') && !el.classList.contains('hvac-modal-closing')){
-        const previous=closeTimers.get(el);
-        if(previous) clearTimeout(previous);
-        internallyChanging.add(el);
-        el.classList.remove('hidden');
-        el.classList.add('hvac-modal-closing');
-        internallyChanging.delete(el);
-        const timer=setTimeout(function(){
-          internallyChanging.add(el);
-          el.classList.add('hidden');
-          // Conserva la clase de cierre mientras el modal está oculto; al reabrirse se retira abajo.
-          internallyChanging.delete(el);
-          closeTimers.delete(el);
-        },DURATION);
-        closeTimers.set(el,timer);
-      } else if(!el.classList.contains('hidden') && el.classList.contains('hvac-modal-closing')){
-        const previous=closeTimers.get(el);
-        if(previous) clearTimeout(previous);
-        closeTimers.delete(el);
-        internallyChanging.add(el);
-        el.classList.remove('hvac-modal-closing');
-        internallyChanging.delete(el);
-      }
+  /* Envuelve una función global para animar tras ejecutarla (pestañas internas, filtros) */
+  function wrap(name, selector){
+    var fn = window[name];
+    if (typeof fn !== 'function' || fn.__uiWrapped) return;
+    var w = function(){
+      var r = fn.apply(this, arguments);
+      var go = function(){ uiAnimate(selector); };
+      if (r && typeof r.then === 'function') r.then(go, function(){}); else go();
+      return r;
+    };
+    w.__uiWrapped = true;
+    window[name] = w;
+  }
+
+  /* Paneles desplegables: cualquier panel que pase de .hidden a visible entra con fade + slide */
+  var REVEAL = '[id$="-box"],[id$="-panel"],[id$="-container"],[id$="-section"],[id$="-card"],.ui-reveal,#view-admin-planning > *';
+  var SKIP   = '.modal-backdrop,.mx-modal,main > section,#plan-tabs,#toast-container,#app-processing-overlay';
+  var HID = /(^|\s)hidden(\s|$)/;
+  new MutationObserver(function(muts){
+    for (var i = 0; i < muts.length; i++){
+      var m = muts[i], el = m.target;
+      if (m.oldValue == null || !HID.test(m.oldValue) || el.classList.contains('hidden')) continue;
+      if (el.matches && el.matches(REVEAL) && !el.matches(SKIP)) uiAnimate(el);
     }
-  });
-  document.querySelectorAll('.modal-backdrop').forEach(function(el){
-    modalObserver.observe(el,{attributes:true,attributeFilter:['class']});
-  });
-  // Incluye modales que se creen dinámicamente después de cargar la aplicación.
-  const bodyObserver=new MutationObserver(function(records){
-    for(const record of records){
-      record.addedNodes.forEach(function(node){
-        if(!(node instanceof Element)) return;
-        const candidates=[];
-        if(node.matches('.modal-backdrop')) candidates.push(node);
-        node.querySelectorAll && node.querySelectorAll('.modal-backdrop').forEach(el=>candidates.push(el));
-        candidates.forEach(function(el){
-          if(!modalObserver.__observed) modalObserver.__observed=new WeakSet();
-          if(modalObserver.__observed.has(el)) return;
-          modalObserver.__observed.add(el);
-          modalObserver.observe(el,{attributes:true,attributeFilter:['class']});
-        });
-      });
-    }
-  });
-  modalObserver.__observed=new WeakSet();
-  document.querySelectorAll('.modal-backdrop').forEach(el=>modalObserver.__observed.add(el));
-  bodyObserver.observe(document.body,{childList:true,subtree:true});
+  }).observe(document.documentElement, {subtree:true, attributes:true, attributeFilter:['class'], attributeOldValue:true});
+
+  function init(){
+    /* Filtros / pestañas internas (si existen en esta versión de la app) */
+    wrap('setTechFilter', '#tech-orders-container');   /* técnico: Todas / Pendientes / Por terminar */
+    wrap('switchHubTab',  '#hub-equipments-list');     /* hub de rutina: Equipos / Correctivos */
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  window.addEventListener('load', init);
 })();
 </script>
 </body>
