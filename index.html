@@ -1278,6 +1278,7 @@ html[data-theme="dark"] .qrm-badge.no{color:#fbbf24}
                                 <th>Marca</th>
                                 <th>Modelo</th>
                                 <th>Capacidad</th>
+                                <th>Avance último mantenimiento</th>
                                 <th class="text-right">Acciones</th>
                             </tr>
                         </thead>
@@ -6233,6 +6234,36 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             showToast("Usuario eliminado.");
         }
 
+        function getChecklistProgressMetrics(eq, exec) {
+            const typeKey = String((eq && eq.type) || 'EXTRACTOR').trim().toUpperCase();
+            const cfg = (exec && exec.formConfigSnapshot) || equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'] || {};
+            const items = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+            const checks = (exec && exec.checklist) || {};
+            const missing = [];
+            let done = 0;
+            items.forEach((label, i) => {
+                const checked = checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true;
+                if (checked) done++; else missing.push(label);
+            });
+            return { done, total: items.length, missing, percent: items.length ? Math.round(done / items.length * 100) : 0 };
+        }
+
+        function getLatestEquipmentProgress(eq) {
+            const matches = [];
+            (workOrders || []).forEach(order => {
+                const ids = (order.equipmentIds || []).map(String);
+                const included = ids.includes(String(eq.id)) || ids.includes(String(eq.code));
+                if (!included && !eqBelongsToClient(eq, order.client)) return;
+                const executions = order.executions || {};
+                const exec = executions[eq.id] || executions[eq.code] || executions[String(eq.id)] || executions[String(eq.code)];
+                if (!exec) return;
+                matches.push({ order, exec });
+            });
+            matches.sort((a, b) => compareOrdersDesc(a.order, b.order));
+            if (!matches.length) return null;
+            return { ...matches[0], metrics: getChecklistProgressMetrics(eq, matches[0].exec) };
+        }
+
         function renderEquipmentCatalog() {
             const filterClient = document.getElementById('eq-filter-client').value || 'ALL';
             const query = normText(document.getElementById('eq-search-input').value);
@@ -6253,10 +6284,19 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const startIdx = (equipmentPager.page - 1) * PAGER_ROWS;
             const pageList = list.slice(startIdx, startIdx + PAGER_ROWS);
             if (!total) {
-                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400 font-medium">${eqBackgroundLoading ? 'Cargando equipos…' : 'No hay equipos que coincidan con los filtros.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-slate-400 font-medium">${eqBackgroundLoading ? 'Cargando equipos…' : 'No hay equipos que coincidan con los filtros.'}</td></tr>`;
             }
 
             pageList.forEach(e => {
+                const latestProgress = getLatestEquipmentProgress(e);
+                let progressCell = '<span class="text-xs text-slate-400">Sin intervención</span>';
+                if (latestProgress) {
+                    const m = latestProgress.metrics;
+                    const state = m.total > 0 && m.done === m.total ? 'Completo' : m.done > 0 ? 'En progreso' : 'Pendiente';
+                    const stateClass = state === 'Completo' ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : state === 'En progreso' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-slate-600 bg-slate-100 border-slate-200';
+                    const missingText = m.missing.length ? 'Ítems faltantes: ' + m.missing.join(' · ') : 'Checklist completo';
+                    progressCell = `<div title="${esc(missingText)}" class="min-w-[150px] space-y-1"><div class="flex items-center justify-between gap-2"><span class="text-[10px] font-bold px-2 py-1 rounded-full border ${stateClass}">${state}</span><span class="text-[10px] font-black text-slate-700">${m.percent}%</span></div><div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden"><div class="bg-teal-500 h-1.5 rounded-full" style="width:${m.percent}%"></div></div><div class="text-[10px] text-slate-500">${m.done}/${m.total} ítems · Orden ${esc(latestProgress.order.id || '—')}</div>${m.missing.length ? `<div class="text-[10px] text-amber-700">Faltan: ${esc(m.missing.slice(0,3).join(', '))}${m.missing.length > 3 ? '…' : ''}</div>` : ''}</div>`;
+                }
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold font-mono text-teal-700 text-xs">${esc(e.code || '-')}</td>
                     <td class="font-bold text-slate-800">${esc(eqClientName(e) || '-')}</td>
@@ -6266,6 +6306,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     <td class="font-semibold text-slate-700">${esc(e.brand || '-')}</td>
                     <td class="text-slate-600 text-xs">${esc(e.model || '-')}</td>
                     <td class="font-medium text-slate-700">${esc(e.capacity || '-')}</td>
+                    <td>${progressCell}</td>
                     <td class="text-right">
                         <div class="inline-flex gap-1.5">
                             <button onclick="openEquipmentHistoryModal('${escJs(e.id)}')" class="p-2 text-purple-600 hover:bg-purple-50 rounded-xl transition" title="Historial del Equipo"><i class="fa-solid fa-clock-rotate-left"></i></button>
@@ -6283,9 +6324,27 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             });
         }
 
-        function openEquipmentModal(id) {
-            document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
+        async function openEquipmentModal(id) {
+            // Para registrar/editar equipos, el selector usa exclusivamente la tabla oficial hvac_clients.
+            // No se rellena desde respaldos locales: si la nube falla, se bloquea el formulario para evitar clientes obsoletos.
+            const clientRows = navigator.onLine
+                ? await supabaseFetch('hvac_clients?select=id,payload', 'GET', null, null, { quiet: true })
+                : null;
+            if (!Array.isArray(clientRows)) {
+                showToast('No fue posible consultar Gestión de Clientes en Supabase. Verifica la conexión e inténtalo de nuevo.', 'error');
+                return;
+            }
+            clientsCatalog = clientRows
+                .filter(row => row && row.payload && String(row.payload.name || '').trim())
+                .map(row => ({ ...row.payload, id: row.payload.id || row.id }));
             populateClientDropdowns();
+            const clientSelect = document.getElementById('eq-f-client');
+            if (clientSelect) {
+                clientSelect.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' +
+                    clientsCatalog.slice().sort((a,b) => String(a.name).localeCompare(String(b.name), 'es'))
+                    .map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
+            }
+            document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
             if (id) {
                 const e = equipmentCatalog.find(x => x.id === id);
                 document.getElementById('eq-modal-title').innerText = "Editar Equipo";
@@ -6319,6 +6378,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const client = document.getElementById('eq-f-client').value;
             const code = document.getElementById('eq-f-code').value.trim();
             if (!client || !code) return showToast("Cliente y Código son campos obligatorios.", "error");
+            if (!clientsCatalog.some(c => String(c.name || '') === String(client))) {
+                return showToast("El cliente seleccionado ya no existe en Gestión de Clientes. Actualiza el listado y vuelve a intentarlo.", "error");
+            }
 
             const id = document.getElementById('eq-f-id').value || `EQ-${code.replace(/[\/\\]/g, '-')}-${Date.now()}`;
             const eqObj = {
@@ -7498,12 +7560,18 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             pageList.forEach(o => {
                 const eqIds = o.equipmentIds || [];
                 const executions = o.executions || {};
-                let doneCount = 0;
+                let doneCount = 0, checklistDone = 0, checklistTotal = 0;
+                const missingByEquipment = [];
                 eqIds.forEach(eqId => {
-                    if (executions[eqId]) doneCount++;
+                    const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
+                    const exec = executions[eqId] || executions[eq.id] || executions[eq.code];
+                    const metrics = getChecklistProgressMetrics(eq, exec);
+                    checklistDone += metrics.done; checklistTotal += metrics.total;
+                    if (metrics.total > 0 && metrics.done === metrics.total) doneCount++;
+                    if (metrics.missing.length) missingByEquipment.push(`${eq.code || eqId}: ${metrics.missing.join(', ')}`);
                 });
-
-                const percent = eqIds.length > 0 ? Math.round((doneCount / eqIds.length) * 100) : 0;
+                const percent = checklistTotal > 0 ? Math.round((checklistDone / checklistTotal) * 100) : 0;
+                const progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
                 let statusBadge = '<span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Pendiente</span>';
                 if (o.status === 'COMPLETED') statusBadge = '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Completado</span>';
                 if (o.status === 'BILLED') statusBadge = '<span class="bg-indigo-50 text-indigo-700 border border-indigo-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Facturado</span>';
@@ -7514,14 +7582,16 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     <td class="font-medium text-slate-600">${esc(o.technician || 'Sin asignar')}</td>
                     <td class="font-medium">${esc(o.date || '-')}</td>
                     <td>
-                        <div class="w-36 space-y-1">
+                        <div class="w-44 space-y-1" title="${esc(progressTitle)}">
                             <div class="flex justify-between text-[10px] font-bold text-slate-600">
-                                <span>${doneCount}/${esc(eqIds.length)} equipos</span>
+                                <span>${checklistDone}/${checklistTotal} ítems</span>
                                 <span>${percent}%</span>
                             </div>
                             <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                                 <div class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: ${percent}%;"></div>
                             </div>
+                            <div class="text-[10px] text-slate-500">${doneCount}/${esc(eqIds.length)} equipos completos</div>
+                            ${missingByEquipment.length ? `<div class="text-[10px] text-amber-700 truncate">Pendientes (${missingByEquipment.length} equipos): ${esc(missingByEquipment.slice(0,2).join(' | '))}${missingByEquipment.length > 2 ? '…' : ''}</div>` : ''}
                         </div>
                     </td>
                     <td>${statusBadge}</td>
