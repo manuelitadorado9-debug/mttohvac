@@ -389,10 +389,24 @@ html[data-theme="light"] .pill-ok{color:#047857}
     <nav class="tabbar" id="tech-tabbar" aria-label="Navegación principal">
         <div class="tabbar-in">
             <button class="tab is-active" onclick="window.scrollTo({top:0,behavior:'smooth'})"><i class="fa-solid fa-list-check"></i>Rutinas</button>
-            <button class="tab" onclick="window.loadAllCloudData(true)"><i class="fa-solid fa-rotate"></i>Sincronizar</button>
+            <button class="tab" onclick="syncTechNow()"><i class="fa-solid fa-rotate"></i>Sincronizar</button>
             <button class="tab is-danger" onclick="logoutSession()"><i class="fa-solid fa-arrow-right-from-bracket"></i>Salir</button>
         </div>
     </nav>
+
+    <!-- Estado visible de sincronización / bandeja de salida -->
+    <div id="tech-sync-modal" class="modal-backdrop hidden" style="z-index:10020;align-items:center;justify-content:center;padding:20px;">
+        <section class="sheet" style="width:min(100%,440px);padding:22px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <div id="tech-sync-icon" style="width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--soft);color:var(--primary);"><i class="fa-solid fa-arrows-rotate"></i></div>
+                <div style="flex:1;min-width:0;"><h3 id="tech-sync-title" style="font-size:17px;font-weight:900;color:var(--text);">Preparando sincronización</h3><p id="tech-sync-subtitle" style="font-size:12px;color:var(--muted);">Revisando los datos guardados en este dispositivo.</p></div>
+            </div>
+            <div style="height:8px;background:var(--line);border-radius:999px;overflow:hidden;margin:16px 0 8px;"><div id="tech-sync-progress" style="height:100%;width:0;background:linear-gradient(90deg,#3b82f6,#10b981);transition:width .25s;"></div></div>
+            <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:var(--muted);"><span id="tech-sync-count">Bandeja de salida: 0</span><span id="tech-sync-percent">0%</span></div>
+            <p id="tech-sync-detail" role="status" aria-live="polite" style="font-size:12px;color:var(--muted);margin-top:12px;">Tus cambios se conservan en el dispositivo mientras se intenta sincronizar.</p>
+            <button type="button" class="btn btn-primary btn-block" style="margin-top:18px;" onclick="closeTechSyncStatus()">Cerrar</button>
+        </section>
+    </div>
 
     <!-- ===================== HUB DE RUTINA ===================== -->
     <div id="order-hub-modal-backdrop" class="modal-backdrop hidden">
@@ -1470,6 +1484,46 @@ html[data-theme="light"] .pill-ok{color:#047857}
                 }
             }
             return null;
+        }
+
+        // Indicador visible y sincronización manual de la bandeja de salida.
+        function setTechSyncStatus(title, subtitle, detail, percent, pending) {
+            const modal = document.getElementById('tech-sync-modal');
+            if (modal) modal.classList.remove('hidden');
+            const put = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+            put('tech-sync-title', title); put('tech-sync-subtitle', subtitle); put('tech-sync-detail', detail);
+            put('tech-sync-count', 'Bandeja de salida: ' + Number(pending || 0));
+            put('tech-sync-percent', Math.max(0, Math.min(100, Number(percent || 0))) + '%');
+            const bar = document.getElementById('tech-sync-progress'); if (bar) bar.style.width = Math.max(0, Math.min(100, Number(percent || 0))) + '%';
+        }
+        function closeTechSyncStatus() { const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
+        async function syncTechNow() {
+            const pendingBefore = cloudOutboxRead().length;
+            if (!navigator.onLine) {
+                setTechSyncStatus('Esperando red', 'No hay conexión a internet en este momento.', 'Los datos permanecen guardados localmente y se reintentará cuando vuelva la conexión.', 0, pendingBefore);
+                return;
+            }
+            setTechSyncStatus('Preparando sincronización', 'Protegiendo los cambios locales antes de enviarlos.', 'Guardando la bandeja de salida en el almacenamiento persistente…', 10, pendingBefore);
+            try {
+                await hvacStorageReady;
+                await hvacFlushStorageWrites();
+                setTechSyncStatus('Sincronizando datos…', 'Procesando rutinas y cambios pendientes.', 'Enviando ' + pendingBefore + ' cambio(s) de la bandeja de salida y actualizando las rutinas asignadas.', 35, cloudOutboxRead().length);
+                await cloudFlushOutbox();
+                await window.loadAllCloudData(true);
+                await cloudFlushOutbox();
+                await hvacFlushStorageWrites();
+                const pendingAfter = cloudOutboxRead().length;
+                if (!navigator.onLine) {
+                    setTechSyncStatus('Esperando red', 'La conexión se interrumpió durante la sincronización.', 'Los elementos no confirmados siguen en la bandeja de salida.', 60, pendingAfter);
+                } else if (pendingAfter === 0 && cloudCtl.lastStatus !== 401 && cloudCtl.lastStatus !== 403) {
+                    setTechSyncStatus('Sincronización completada', 'Los cambios pendientes fueron procesados.', 'Rutinas cargadas: ' + workOrders.length + '. No quedan operaciones en la bandeja de salida.', 100, 0);
+                } else {
+                    setTechSyncStatus('Sincronización parcial', 'Algunos cambios no recibieron confirmación de la nube.', pendingAfter + ' operación(es) siguen guardadas y se reintentará automáticamente.', 70, pendingAfter);
+                }
+            } catch (err) {
+                console.warn('[Sync] La sincronización manual quedó pendiente:', err);
+                setTechSyncStatus(navigator.onLine ? 'Sincronización pendiente' : 'Esperando red', 'No se pudo confirmar el envío de todos los cambios.', 'Los datos locales se conservan; revisa la conexión y vuelve a sincronizar.', 35, cloudOutboxRead().length);
+            }
         }
 
         // ---- Bandeja de salida: cambios que no llegaron a la nube ----
@@ -2838,6 +2892,18 @@ html[data-theme="light"] .pill-ok{color:#047857}
             setInterval(() => {
                 if (cloudOutboxRead().length) cloudFlushOutbox().catch(err => console.warn('[Offline] Reintento automático pendiente:', err));
             }, 30000);
+            // Fuerza el drenaje de escrituras persistentes cuando la app pasa a segundo plano o vuelve al frente.
+            window.addEventListener('pagehide', () => { try { localStorage.setItem('HVAC_LAST_LOCAL_SAVE', String(Date.now())); } catch (_) {} });
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    hvacFlushStorageWrites().catch(() => {});
+                } else if (navigator.onLine && cloudOutboxRead().length) {
+                    cloudFlushOutbox().catch(err => console.warn('[Offline] Reintento al volver a la app:', err));
+                }
+            });
+            window.addEventListener('online', () => {
+                if (cloudOutboxRead().length) cloudFlushOutbox().catch(err => console.warn('[Offline] Reintento al recuperar red:', err));
+            });
 
             const lock = () => {
                 const open = Array.from(document.querySelectorAll('.modal-backdrop')).some(el => !el.classList.contains('hidden'));

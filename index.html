@@ -7277,7 +7277,8 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
             // Separación moderada entre conclusiones y tarjeta de recepción.
             const cardGap = 7;
-            const cardH = 52;
+            // Altura ampliada para firma, nombre del firmante y fecha/hora exactas.
+            const cardH = 68;
             const cardX = innerX;
             const cardW = innerW;
             const cardY = textY - paraGap + cardGap;
@@ -7311,35 +7312,46 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             doc.setTextColor(64, 56, 120);
             doc.text('RECIBÍ A SATISFACCIÓN', cardX + 4, cardY + 8);
 
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(9);
-            doc.setTextColor(51, 51, 51);
-            doc.text(`Fecha: ${order.date || 'N/A'}`, cardX + 4, cardY + 17);
-            const clientName = order.client || order.clientSignature?.name || 'N/A';
-            const clientLines = doc.splitTextToSize(`Cliente: ${clientName}`, cardW - 8);
-            doc.text(clientLines, cardX + 4, cardY + 24);
+            const signatureRecord = order.clientSignature || {};
+            const signerName = signatureRecord.name || order.client || 'No registrado';
+            const signatureDate = signatureRecord.timestamp ? new Date(signatureRecord.timestamp) : null;
+            const signatureDateText = signatureDate && !Number.isNaN(signatureDate.getTime())
+                ? signatureDate.toLocaleString('es-CO', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                : 'No registrada';
 
-            const sigLabelY = cardY + cardH - 11;
-            const sigLineY = cardY + cardH - 6;
+            doc.setFont('helvetica', 'normal');
             doc.setFontSize(8.5);
             doc.setTextColor(51, 51, 51);
-            doc.text('Firma Recibido a Satisfacción (Cliente)', cardX + 4, sigLabelY - 2);
-            doc.setDrawColor(64, 56, 120);
-            doc.setLineWidth(0.45);
-            doc.line(cardX + 4, sigLineY, cardX + cardW - 4, sigLineY);
+            doc.text(`Cliente: ${order.client || 'N/A'}`, cardX + 4, cardY + 16);
+            const signerLines = doc.splitTextToSize(`Nombre de quien firma: ${signerName}`, cardW - 8);
+            doc.text(signerLines, cardX + 4, cardY + 23);
+            doc.text(`Fecha y hora de firma: ${signatureDateText}`, cardX + 4, cardY + 30);
 
-            // Si existe firma Base64 del cliente, dibujarla sobre la línea; si no, dejar la línea limpia.
-            const signature = (window.HVAC && HVAC.img ? HVAC.img.resolve : (x => x))(order.clientSignature && order.clientSignature.signatureImg);
+            // Firma centrada en una zona propia, debajo de la identidad del firmante.
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text('Firma digital del cliente', cardX + 4, cardY + 38);
+            doc.setDrawColor(64, 56, 120);
+            doc.setLineWidth(0.35);
+            doc.line(cardX + 4, cardY + 59, cardX + cardW - 4, cardY + 59);
+
+            const signature = (window.HVAC && HVAC.img ? HVAC.img.resolve : (x => x))(signatureRecord.signatureImg);
             if (signature && typeof signature === 'string' && signature.startsWith('data:image')) {
                 try {
                     const imageType = /^data:image\/jpe?g/.test(signature) ? 'JPEG' : 'PNG';
-                    const sigW = Math.min(65, cardW - 12);
-                    const sigH = 15;
-                    const sigY = sigLineY - sigH + 2;
-                    doc.addImage(signature, imageType, cardX + 4, sigY, sigW, sigH);
+                    const sigW = Math.min(68, cardW - 16);
+                    const sigH = 18;
+                    const sigX = cardX + (cardW - sigW) / 2;
+                    const sigY = cardY + 39;
+                    doc.addImage(signature, imageType, sigX, sigY, sigW, sigH);
                 } catch (e) {
                     console.warn('No fue posible insertar la firma del cliente en el PDF.', e);
                 }
+            } else {
+                doc.setFont('helvetica', 'italic');
+                doc.setFontSize(8);
+                doc.setTextColor(120, 120, 120);
+                doc.text('Sin firma digital registrada', cardX + cardW / 2, cardY + 49, { align: 'center' });
             }
 
             const fileName = onlyCorrective ? `Informe_Correctivos_AFC_${order.id}.pdf` : `Informe_Oficial_AFC_${order.id}.pdf`;
