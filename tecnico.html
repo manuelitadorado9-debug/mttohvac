@@ -2264,7 +2264,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
                         <span><i class="fa-regular fa-calendar"></i>${esc(o.date)}</span>
                         <span><i class="fa-solid fa-snowflake"></i>${esc(eqIds.length)} ${isCompleted ? 'equipos intervenidos' : 'equipos a intervenir'}</span>
                     </div>
-                    <div class="r-progress"><div class="bar"><i style="width:${pct}%"></i></div><span>${checklistDone}/${checklistTotal} · ${pct}%</span></div>
+                    <div class="r-progress"><div class="bar"><i style="width:${pct}%"></i></div><span>${pct}%</span></div>
                     ${isCompleted
                         ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
                         : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Abrir rutina</button>`}
@@ -2292,15 +2292,28 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
         function getTechChecklistMetrics(eq, exec) {
             const cfg = (exec && exec.formConfigSnapshot) || equipmentFormsConfig[(eq && eq.type || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
-            const items = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+            const paramItems = String(cfg.params || '').split(',').map(v => v.trim()).filter(Boolean);
+            const checklistItems = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+            const values = (exec && exec.paramsValues) || {};
             const checks = (exec && exec.checklist) || {};
             const missing = [];
             let done = 0;
-            items.forEach((label, i) => {
-                const checked = checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true;
-                if (checked) done++; else missing.push(label);
+
+            // Cada parámetro técnico configurado (incluidos Voltaje y Amperaje) es obligatorio.
+            paramItems.forEach((label, i) => {
+                const value = values['param_' + i] ?? (exec && exec['param_' + i]) ?? '';
+                if (String(value).trim()) done++;
+                else missing.push(label);
             });
-            return { done, total: items.length, missing, percent: items.length ? Math.round(done / items.length * 100) : 0 };
+
+            checklistItems.forEach((label, i) => {
+                const checked = checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true;
+                if (checked) done++;
+                else missing.push(label);
+            });
+
+            const total = paramItems.length + checklistItems.length;
+            return { done, total, missing, percent: total ? Math.round(done / total * 100) : 0 };
         }
 
         function renderCurrentHubEquipments() {
@@ -2324,13 +2337,9 @@ html[data-theme="light"] .pill-ok{color:#047857}
                 const exec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
                 const status = getEquipmentExecutionStatus(eq, eqId, exec);
                 if (status === 'done') completedCount++;
-                const cfg = (exec && exec.formConfigSnapshot) || equipmentFormsConfig[(eq.type || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
-                const checklistItems = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
-                const checks = (exec && exec.checklist) || {};
-                checklistItemsTotal += checklistItems.length;
-                checklistDoneTotal += checklistItems.filter((_, i) =>
-                    checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true
-                ).length;
+                const metrics = getTechChecklistMetrics(eq, exec);
+                checklistItemsTotal += metrics.total;
+                checklistDoneTotal += metrics.done;
                 allItems.push({ eqId, eq, exec, status });
             });
 
@@ -2363,7 +2372,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
                     </div>
                     <h3 class="e-name" style="font-size:16px;font-weight:900;margin-bottom:6px;line-height:1.3;">${esc(eq.name || '—')}</h3>
                     <p style="font-size:11px;color:var(--muted);margin-bottom:8px;">${esc(eq.type || '—')} · ${esc(eq.brand || '—')} · ${esc(eq.model || '—')}</p>
-                    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Checklist: <strong style="color:var(--text);">${getTechChecklistMetrics(eq, exec).done}/${getTechChecklistMetrics(eq, exec).total}</strong> (${getTechChecklistMetrics(eq, exec).percent}%)</div>
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Avance del equipo: <strong style="color:var(--text);">${getTechChecklistMetrics(eq, exec).done}/${getTechChecklistMetrics(eq, exec).total}</strong> (${getTechChecklistMetrics(eq, exec).percent}%)</div>
                     ${getTechChecklistMetrics(eq, exec).missing.length ? `<p class="e-note"><strong>Ítems pendientes:</strong> ${esc(getTechChecklistMetrics(eq, exec).missing.join(' · '))}</p>` : ''}
                     ${corr ? `<p class="e-note"><strong>Novedad:</strong> ${esc(exec.correctiveDesc || 'Sin descripción')}</p>` : ''}
                     <button onclick="openEquipmentExecutionModal('${String(order.id).replace(/'/g, '&#39;')}', '${String(eqId).replace(/'/g, '&#39;')}')" class="btn ${status === 'done' ? 'btn-ghost' : 'btn-primary'} btn-lg btn-block">
@@ -2377,7 +2386,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
             const progressBar = document.getElementById('hub-progress-bar');
             const progressText = document.getElementById('hub-progress-text');
             if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressText) progressText.innerText = `${checklistDoneTotal} / ${checklistItemsTotal} tareas del checklist · ${completedCount}/${eqIds.length} equipos completos (${percent}%)`;
+            if (progressText) progressText.innerText = `${percent}%`;
             const finalizeBox = document.getElementById('hub-finalize-container');
             // No permitir finalizar solo porque el checklist esté marcado: cada equipo debe estar realmente completo.
             if (eqIds.length > 0 && completedCount === eqIds.length && checklistItemsTotal > 0 && checklistDoneTotal === checklistItemsTotal && order.status !== 'COMPLETED' && order.status !== 'BILLED') finalizeBox.classList.remove('hidden');
@@ -2401,8 +2410,8 @@ html[data-theme="light"] .pill-ok{color:#047857}
             };
 
             document.getElementById('exec-equipment-modal-backdrop').classList.remove('hidden');
-            document.getElementById('exec-modal-eq-title').innerText = `Intervención: ${eq.code} - ${eq.name || ''} (${typeKey})`;
-            document.getElementById('exec-modal-eq-subtitle').innerText = 'Información del equipo y registro de mantenimiento';
+            document.getElementById('exec-modal-eq-title').innerText = order.client || 'Intervención técnica';
+            document.getElementById('exec-modal-eq-subtitle').innerText = '';
             const identityCard = document.getElementById('exec-equipment-identity-card');
             if (identityCard) identityCard.innerHTML = `
                 <article class="e-card" style="position:relative; overflow:hidden; background:var(--surface); border:1px solid var(--line);">
