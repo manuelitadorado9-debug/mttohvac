@@ -836,6 +836,15 @@ html[data-theme="dark"] .qrm-badge.no{color:#fbbf24}
 }
 </style>
 
+<style id="billing-theme-css">
+.bill-mini{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px}
+.bill-chip{font-size:10px;font-weight:900;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid;white-space:nowrap}
+.bill-chip.prev{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.bill-chip.corr{background:#fffbeb;color:#b45309;border-color:#fde68a}
+html[data-theme="dark"] .bill-mini{background:#0b1328;border-color:rgba(148,163,184,.18)}
+html[data-theme="dark"] .bill-chip.prev{background:rgba(14,165,233,.14);color:#7dd3fc;border-color:rgba(14,165,233,.35)}
+html[data-theme="dark"] .bill-chip.corr{background:rgba(245,158,11,.14);color:#fcd34d;border-color:rgba(245,158,11,.35)}
+</style>
 <style id="ui-transitions-v1">
 /* ============================================================
    Transiciones suaves (fade + slide) · v1
@@ -907,27 +916,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         <div><i class="fa-solid fa-calendar-check"></i> Planificación mensual y agenda de gestión</div>
                         <div><i class="fa-solid fa-file-pdf"></i> Informes PDF oficiales con firma del cliente</div>
                         <div><i class="fa-solid fa-cloud-arrow-up"></i> Datos y evidencias seguras en Supabase y R2</div>
-                        <div class="flex items-end gap-2 flex-wrap">
-                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
-                        <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
-                            <option value="ALL" selected>Todas las Órdenes</option>
-                            <option value="PENDING">Pendientes por Facturar</option>
-                            <option value="BILLED">Facturadas</option>
-                        </select></div>
-                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes de ejecución</label>
-                        <input type="month" id="billing-filter-exec-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
-                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes facturado</label>
-                        <input type="month" id="billing-filter-billed-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
-                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo de rutina</label>
-                        <select id="billing-filter-type" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40">
-                            <option value="ALL" selected>Todos</option>
-                            <option value="PREVENTIVO">Preventivo</option>
-                            <option value="CORRECTIVO">Correctivo</option>
-                        </select></div>
-                    <button type="button" onclick="billingClearFilters()" class="px-3 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"><i class="fa-solid fa-xmark"></i> Limpiar</button>
-                </div>
-            </div>
-            <div id="billing-totals" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm"></div>
+                    </div>
                 </div>
                 <p class="text-[11px] font-semibold" style="color:#52618a">GMAO Enterprise · Smart Maintenance System</p>
             </div>
@@ -1447,15 +1436,27 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     <h2 class="text-base font-black text-slate-900 tracking-tight">Facturación de Órdenes</h2>
                     <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina.</p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <label class="text-xs font-bold text-slate-600 uppercase">Filtrar:</label>
-                    <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-56">
-                        <option value="ALL" selected>Todas las Órdenes</option>
-                        <option value="PENDING">Pendientes por Facturar</option>
-                        <option value="BILLED">Facturadas</option>
-                    </select>
+                <div class="flex items-end gap-2 flex-wrap">
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                        <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
+                            <option value="ALL" selected>Todas las Órdenes</option>
+                            <option value="PENDING">Pendientes por Facturar</option>
+                            <option value="BILLED">Facturadas</option>
+                        </select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes de ejecución</label>
+                        <input type="month" id="billing-filter-exec-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes facturado</label>
+                        <input type="month" id="billing-filter-billed-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo de rutina</label>
+                        <select id="billing-filter-type" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40">
+                            <option value="ALL" selected>Todos</option>
+                            <option value="PREVENTIVO">Preventivo</option>
+                            <option value="CORRECTIVO">Correctivo</option>
+                        </select></div>
+                    <button type="button" onclick="billingClearFilters()" class="px-3 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"><i class="fa-solid fa-xmark"></i> Limpiar</button>
                 </div>
             </div>
+            <div id="billing-totals" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm"></div>
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
                 <div class="overflow-x-auto">
                     <table>
@@ -7809,7 +7810,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (execMonth) chips.push('Ejecución: ' + billingMonthLabel(execMonth));
             if (billedMonth) chips.push('Facturado: ' + billingMonthLabel(billedMonth));
             if (typeFilter !== 'ALL') chips.push(typeFilter === 'PREVENTIVO' ? 'Preventivo' : 'Correctivo');
-            const card = (label, value, cls) => `<div class="bg-slate-50 rounded-xl border border-slate-200/70 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${label}</span><p class="text-lg font-black mt-1 ${cls || 'text-slate-900'}">${value}</p></div>`;
+            const card = (label, value, cls) => `<div class="bill-mini"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${label}</span><p class="text-lg font-black mt-1 ${cls || 'text-slate-900'}">${value}</p></div>`;
             const row = (label, x) => `<tr><td class="font-bold text-slate-800">${label}</td><td class="text-center">${x.n}</td><td class="text-center">${x.billed}</td><td class="text-center">${x.pending}</td><td class="font-bold">${billingMoney(x.amount)}</td><td class="font-bold text-rose-600">${billingMoney(x.expenses)}</td><td class="font-bold text-emerald-600">${billingMoney(net(x))}</td><td class="font-bold text-teal-600">${margin(x)}%</td></tr>`;
             document.getElementById('billing-totals').innerHTML = `
                 <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -7842,7 +7843,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(o.id)}</td>
                     <td class="font-bold text-teal-700">${esc(o.client)}</td>
-                    <td><span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${isCorr ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-sky-50 text-sky-700 border-sky-200'}">${isCorr ? 'Correctivo' : 'Preventivo'}</span></td>
+                    <td><span class="bill-chip ${isCorr ? 'corr' : 'prev'}">${isCorr ? 'Correctivo' : 'Preventivo'}</span></td>
                     <td>${esc(o.date)}</td>
                     <td class="text-xs">${billedOn ? esc(billedOn) : '<span class="text-slate-400">-</span>'}</td>
                     <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
