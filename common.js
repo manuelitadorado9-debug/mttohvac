@@ -153,10 +153,53 @@
     })(obj);
     return out;
   };
+  /* Re-codifica a JPEG (jsPDF solo lee JPEG/PNG: WEBP, GIF y HEIC fallaban sin avisar) */
+  HVAC.img.toJpeg = function (src, maxDim, quality) {
+    maxDim = maxDim || 1600; quality = quality || 0.85;
+    return new Promise((res, rej) => {
+      const im = new Image();
+      im.onload = () => {
+        try {
+          let w = im.naturalWidth, h = im.naturalHeight; if (!w || !h) return rej(new Error('Imagen vacía'));
+          const k = Math.min(1, maxDim / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
+          res(c.toDataURL('image/jpeg', quality));
+        } catch (e) { rej(e); }
+      };
+      im.onerror = () => rej(new Error('No se pudo decodificar la imagen'));
+      im.src = src;
+    });
+  };
+  /* Descarga una imagen remota como data URI listo para jsPDF: timeout, 2 intentos (el 2.º sin caché, que
+     soluciona respuestas cacheadas sin cabeceras CORS) y conversión a JPEG si el formato no es JPEG/PNG. */
+  HVAC.img.fetchData = async function (url) {
+    let lastErr;
+    for (const bust of [false, true]) {
+      const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 20000);
+      try {
+        const u = bust ? url + (url.indexOf('?') > -1 ? '&' : '?') + '_cb=' + Date.now() : url;
+        const r = await fetch(u, { mode: 'cors', credentials: 'omit', cache: bust ? 'reload' : 'default', signal: ctrl.signal });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const blob = await r.blob(); if (!blob || !blob.size) throw new Error('Respuesta vacía');
+        let d = await HVAC.img.toDataUrl(blob);
+        if (!/^data:image\/(jpe?g|png);base64,/i.test(d)) d = await HVAC.img.toJpeg(d);
+        return d;
+      } catch (e) { lastErr = e; } finally { clearTimeout(t); }
+    }
+    throw lastErr;
+  };
   HVAC.img.prefetchIn = async function (obj) {      // descarga en paralelo las imágenes de una orden antes de crear el PDF
-    const urls = [...HVAC.img.collectUrls(obj)].filter(u => !HVAC.img.cache.has(u)); let i = 0;
-    const worker = async () => { while (i < urls.length) { const u = urls[i++]; try { const r = await fetch(u, { mode: 'cors' }); if (r.ok) HVAC.img.cache.set(u, await HVAC.img.toDataUrl(await r.blob())); } catch (e) {} } };
+    const urls = [...HVAC.img.collectUrls(obj)].filter(u => !HVAC.img.cache.has(u)); let i = 0, failed = 0;
+    const worker = async () => {
+      while (i < urls.length) {
+        const u = urls[i++];
+        try { HVAC.img.cache.set(u, await HVAC.img.fetchData(u)); }
+        catch (e) { failed++; console.warn('[img] no se pudo descargar', u, e && e.message); }
+      }
+    };
     await Promise.all(Array.from({ length: Math.min(6, urls.length) }, worker));
+    return { total: urls.length, failed };
   };
   function patchPdf() {
     try {

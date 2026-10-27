@@ -42,7 +42,7 @@
     <!-- Tailwind CSS CDN -->
     <link rel="preload" href="tailwind.css" as="style">
     <link rel="stylesheet" href="tailwind.css" onerror="var s=document.createElement('script');s.src='https://cdn.tailwindcss.com/3.4.17';document.head.appendChild(s)">
-    <script src="common.js?v=7"></script>
+    <script src="common.js?v=8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -6989,6 +6989,121 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         // MOTOR PDF AFC (estructura visual de hoja1.html) - encabezado/pie en cada hoja
         // =========================================================================
         const AFC_NAVY = [27, 54, 93];
+
+        // ============================================================
+        // FOTOS EN EL PDF: descarga robusta (R2 / Supabase / base64) -> JPEG en base64
+        // jsPDF.addImage() NO acepta URLs: necesita data URI. Aquí se convierten todas
+        // las fotos antes de dibujar el PDF, con reintentos, timeout y cache-busting.
+        // ============================================================
+        const AFC_PHOTO_CACHE = new Map();   // src original -> data:image/jpeg;base64,...
+        function afcPhotoSrc(p) {
+            if (!p) return '';
+            if (typeof p === 'string') return p.trim();
+            return String(p.url || p.src || p.data || p.dataUrl || p.path || '').trim();
+        }
+        function afcBlobToDataUrl(blob) {
+            return new Promise((res, rej) => {
+                const fr = new FileReader();
+                fr.onload = () => res(fr.result);
+                fr.onerror = () => rej(new Error('FileReader'));
+                fr.readAsDataURL(blob);
+            });
+        }
+        // Re-codifica a JPEG (jsPDF no soporta WEBP/HEIC/GIF) y limita el lado mayor para PDFs livianos.
+        function afcToJpegDataUrl(src, maxDim = 1600, quality = 0.85) {
+            return new Promise((res, rej) => {
+                const img = new Image();
+                img.onload = () => {
+                    try {
+                        let w = img.naturalWidth, h = img.naturalHeight;
+                        if (!w || !h) return rej(new Error('Imagen vacía'));
+                        const k = Math.min(1, maxDim / Math.max(w, h));
+                        w = Math.round(w * k); h = Math.round(h * k);
+                        const c = document.createElement('canvas'); c.width = w; c.height = h;
+                        const x = c.getContext('2d');
+                        x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);   // evita fondo negro en PNG/WEBP transparentes
+                        x.drawImage(img, 0, 0, w, h);
+                        res(c.toDataURL('image/jpeg', quality));
+                    } catch (e) { rej(e); }
+                };
+                img.onerror = () => rej(new Error('No se pudo decodificar la imagen'));
+                img.src = src;
+            });
+        }
+        async function afcFetchBlob(url, bust) {
+            const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
+            try {
+                const u = bust ? url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now() : url;
+                const r = await fetch(u, { mode: 'cors', credentials: 'omit', cache: bust ? 'reload' : 'default', signal: ctl.signal });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const b = await r.blob();
+                if (!b || !b.size) throw new Error('Respuesta vacía');
+                return b;
+            } finally { clearTimeout(t); }
+        }
+        // <img crossOrigin> + canvas: último recurso si fetch() es bloqueado pero el bucket sí envía CORS en imágenes
+        function afcLoadViaCanvas(url) {
+            return new Promise((res, rej) => {
+                const img = new Image(); img.crossOrigin = 'anonymous';
+                const t = setTimeout(() => rej(new Error('Timeout')), 20000);
+                img.onload = () => { clearTimeout(t); afcToJpegDataUrl(img.src).then(res, rej); };
+                img.onerror = () => { clearTimeout(t); rej(new Error('Canvas/CORS')); };
+                img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
+            });
+        }
+        async function afcResolvePhoto(raw) {
+            const src = afcPhotoSrc(raw);
+            if (!src) return null;
+            if (AFC_PHOTO_CACHE.has(src)) return AFC_PHOTO_CACHE.get(src);
+            let val = src;
+            // Solo caché de HVAC.img (NO resolve(): hace una lectura XHR síncrona que bloquea la pantalla)
+            try { if (window.HVAC && HVAC.img && HVAC.img.cache && HVAC.img.cache.has(src)) val = HVAC.img.cache.get(src) || src; } catch (e) {}
+            let out = null;
+            try {
+                if (/^data:image\//i.test(val)) {
+                    out = /^data:image\/jpe?g/i.test(val) ? val : await afcToJpegDataUrl(val).catch(() => val);
+                } else if (/^(https?:)?\/\//i.test(val) || /^blob:/i.test(val)) {
+                    let blob = null, lastErr = null;
+                    for (const bust of [false, true]) {          // 2.º intento ignora caché sin CORS
+                        try { blob = await afcFetchBlob(val, bust); break; } catch (e) { lastErr = e; }
+                    }
+                    if (blob) {
+                        const d = await afcBlobToDataUrl(blob);
+                        out = /^data:image\/jpe?g/i.test(d) ? d : await afcToJpegDataUrl(d);
+                    } else {
+                        try { out = await afcLoadViaCanvas(val); }
+                        catch (e2) { throw lastErr || e2; }
+                    }
+                } else {
+                    console.warn('[PDF] Formato de foto no reconocido:', src.slice(0, 80));
+                }
+            } catch (e) {
+                console.warn('[PDF] No se pudo cargar la foto:', src.slice(0, 120), e && e.message);
+            }
+            if (out) AFC_PHOTO_CACHE.set(src, out);   // los fallos no se cachean: se reintentan en la próxima descarga
+            return out;
+        }
+        // Descarga todas las fotos (4 en paralelo). Devuelve { total, failed }.
+        async function afcPreloadPhotos(photoList) {
+            const list = (photoList || []).filter(p => afcPhotoSrc(p));
+            let i = 0, failed = 0;
+            const worker = async () => { while (i < list.length) { const p = list[i++]; if (!(await afcResolvePhoto(p))) failed++; } };
+            await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+            return { total: list.length, failed };
+        }
+        function afcCollectPhotos(order, eqIds) {
+            const all = [];
+            (eqIds || []).forEach(id => {
+                const eq = equipmentCatalog.find(e => e.id === id || e.code === id);
+                const ex = order.executions && (order.executions[id] || (eq && (order.executions[eq.id] || order.executions[eq.code])));
+                if (ex && Array.isArray(ex.photos)) all.push(...ex.photos);
+            });
+            return all;
+        }
+        function afcReportPhotoStats(st) {
+            if (st && st.failed) showToast(`${st.failed} de ${st.total} foto(s) no se pudieron descargar y no aparecerán en el PDF. Revisa la conexión o el CORS del bucket.`, 'error');
+        }
+
         function afcPdfCreate(orderId) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('portrait', 'mm', 'letter');
@@ -7109,8 +7224,15 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 // Topes estrictos para evitar que una foto aislada se sobredimensione.
                 const MAX_PHOTO_H = 85; // mm: altura máxima del marco/fila fotográfica
                 const MAX_SINGLE_PHOTO_W = Math.min(CW, 150); // mm: ancho máximo para foto individual
-                const photoList = (photos || []).filter(Boolean);
-                if (!photoList.length) return;
+                const rawPhotos = (photos || []).filter(p => afcPhotoSrc(p));
+                const photoList = rawPhotos.map(p => AFC_PHOTO_CACHE.get(afcPhotoSrc(p))).filter(Boolean);
+                if (!photoList.length) {
+                    if (rawPhotos.length) {   // había fotos pero no se pudieron descargar: se deja constancia en el PDF
+                        ctx.sectionTitle(label, 14);
+                        ctx.paragraph(`No fue posible incorporar ${rawPhotos.length} fotografía(s) en este informe (error de descarga). Vuelva a generar el informe con conexión estable.`);
+                    }
+                    return;
+                }
 
                 const getImageRatio = (photo) => {
                     try {
@@ -7139,7 +7261,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                         const ix = px + (boxW - w) / 2;
                         const iy = rowY + (rowH - h) / 2;
                         try { doc.addImage(photo, 'JPEG', ix, iy, w, h); }
-                        catch (e1) { try { doc.addImage(photo, ix, iy, w, h); } catch (e2) {} }
+                        catch (e1) { try { doc.addImage(photo, ix, iy, w, h); } catch (e2) { console.warn('[PDF] addImage falló', e2); } }
                     });
                 };
 
@@ -7258,7 +7380,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
             await ensureOrderEquipments(order);
-            await hvacPrefetch(order);   // descarga en paralelo las fotos y firma alojadas en R2
+            try { await hvacPrefetch(order); } catch (e) { console.warn('[PDF] prefetch', e); }   // fotos y firma alojadas en R2
 
             showToast(onlyCorrective ? "Generando informe exclusivo de correctivos..." : "Generando informe técnico general oficial...");
 
@@ -7274,6 +7396,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 showToast(onlyCorrective ? "No hay equipos con correctivos para generar este informe." : "La orden no tiene equipos para generar el informe.", "error");
                 return;
             }
+
+            // Convierte TODAS las fotos a base64 antes de dibujar (jsPDF no admite URLs)
+            afcReportPhotoStats(await afcPreloadPhotos(afcCollectPhotos(order, eqIds)));
 
             const ctx = afcPdfCreate(order.id);
             const doc = ctx.doc;
@@ -7416,7 +7541,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const order = workOrders.find(o => o.id === orderId);
             if (!order) return;
             await ensureOrderEquipments({ equipmentIds: [eqId] });
-            await hvacPrefetch(order);
+            try { await hvacPrefetch(order); } catch (e) { console.warn('[PDF] prefetch', e); }
             const eq = equipmentCatalog.find(e => e.id === eqId || e.code === eqId) || { code: eqId, type: 'EXTRACTOR' };
             const exec = (order.executions && (order.executions[eq.id] || order.executions[eq.code] || order.executions[eqId])) || {};
 
@@ -7427,6 +7552,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             };
 
             showToast(`Generando informe individual para equipo ${eq.code}...`);
+            afcReportPhotoStats(await afcPreloadPhotos(exec.photos || []));
 
             const ctx = afcPdfCreate(order.id);
             afcRenderEquipment(ctx, order, eq, exec, typeKey, formCfg);

@@ -383,7 +383,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="common.js?v=7"></script>
+    <script src="common.js?v=8"></script>
 
 <style id="ui-transitions-v1">
 /* ============================================================
@@ -1637,7 +1637,9 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
 
         // Indicador visible y sincronización manual de la bandeja de salida.
+        let techSyncCloseTimer = null;
         function setTechSyncStatus(title, subtitle, detail, percent, pending) {
+            clearTimeout(techSyncCloseTimer); techSyncCloseTimer = null;   // cualquier estado nuevo cancela un cierre pendiente
             const modal = document.getElementById('tech-sync-modal');
             if (modal) modal.classList.remove('hidden');
             const put = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
@@ -1655,9 +1657,11 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 icon.innerHTML = isSuccess ? '<i class="fa-solid fa-circle-check"></i>' : isError ? '<i class="fa-solid fa-triangle-exclamation"></i>' : '<i class="fa-solid fa-arrows-rotate"></i>';
                 icon.style.background = isSuccess ? 'rgba(34,197,94,.14)' : isError ? 'rgba(245,158,11,.14)' : 'rgba(59,130,246,.13)';
                 icon.style.color = isSuccess ? '#22c55e' : isError ? '#f59e0b' : 'var(--primary)';
+                // Sincronización exitosa: el aviso se cierra solo 1 segundo después
+                if (isSuccess) techSyncCloseTimer = setTimeout(closeTechSyncStatus, 1000);
             }
         }
-        function closeTechSyncStatus() { const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
+        function closeTechSyncStatus() { clearTimeout(techSyncCloseTimer); techSyncCloseTimer = null; const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
         async function syncTechNow() {
             const pendingBefore = cloudOutboxRead().length;
             if (!navigator.onLine) {
