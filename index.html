@@ -907,7 +907,27 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         <div><i class="fa-solid fa-calendar-check"></i> Planificación mensual y agenda de gestión</div>
                         <div><i class="fa-solid fa-file-pdf"></i> Informes PDF oficiales con firma del cliente</div>
                         <div><i class="fa-solid fa-cloud-arrow-up"></i> Datos y evidencias seguras en Supabase y R2</div>
-                    </div>
+                        <div class="flex items-end gap-2 flex-wrap">
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                        <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
+                            <option value="ALL" selected>Todas las Órdenes</option>
+                            <option value="PENDING">Pendientes por Facturar</option>
+                            <option value="BILLED">Facturadas</option>
+                        </select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes de ejecución</label>
+                        <input type="month" id="billing-filter-exec-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Mes facturado</label>
+                        <input type="month" id="billing-filter-billed-month" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo de rutina</label>
+                        <select id="billing-filter-type" onchange="renderBillingModule()" class="input-box font-bold text-xs w-40">
+                            <option value="ALL" selected>Todos</option>
+                            <option value="PREVENTIVO">Preventivo</option>
+                            <option value="CORRECTIVO">Correctivo</option>
+                        </select></div>
+                    <button type="button" onclick="billingClearFilters()" class="px-3 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"><i class="fa-solid fa-xmark"></i> Limpiar</button>
+                </div>
+            </div>
+            <div id="billing-totals" class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm"></div>
                 </div>
                 <p class="text-[11px] font-semibold" style="color:#52618a">GMAO Enterprise · Smart Maintenance System</p>
             </div>
@@ -1443,7 +1463,9 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <tr>
                                 <th>Orden</th>
                                 <th>Cliente</th>
-                                <th>Fecha</th>
+                                <th>Tipo</th>
+                                <th>Ejecución</th>
+                                <th>Facturado</th>
                                 <th>Factura #</th>
                                 <th>Valor Cobrado</th>
                                 <th>Gastos Reales</th>
@@ -1789,15 +1811,15 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
     <div id="new-routine-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10003;">
         <div class="modal-card max-w-xl">
             <div class="flex items-center justify-between border-b pb-3.5 mb-4">
-                <h3 class="font-black text-slate-900 text-sm">Nueva Rutina de Mantenimiento (Manual)</h3>
+                <h3 id="nr-modal-title" class="font-black text-slate-900 text-sm">Nueva Rutina de Mantenimiento (Manual)</h3>
                 <button onclick="closeNewRoutineModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form onsubmit="event.preventDefault(); saveNewRoutineManual();" class="space-y-3.5">
                 <div>
-                    <label class="block text-xs font-bold text-slate-700 mb-1">Cliente / Sede *</label>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Cliente / Sede *<span id="nr-client-lock" class="hidden ml-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md"><i class="fa-solid fa-lock"></i> Bloqueado en edición</span></label>
                     <select id="nr-client" required onchange="renderAvailableEquipmentForNewRoutine()" class="input-box font-bold text-xs"></select>
                 </div>
-                <div class="grid grid-cols-2 gap-2.5">
+                <div id="nr-pb-row" class="grid grid-cols-2 gap-2.5">
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Periodicidad *</label>
                         <select id="nr-periodicity" required class="input-box font-bold text-xs">
@@ -1833,7 +1855,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 </div>
                 <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
                     <button type="button" onclick="closeNewRoutineModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
-                    <button type="submit" class="btn-teal text-xs flex-1 sm:flex-none justify-center"><i class="fa-solid fa-circle-plus"></i> Registrar y Programar Rutina</button>
+                    <button type="submit" id="nr-submit-btn" class="btn-teal text-xs flex-1 sm:flex-none justify-center"><i class="fa-solid fa-circle-plus"></i> <span id="nr-submit-label">Registrar y Programar Rutina</span></button>
                 </div>
             </form>
         </div>
@@ -3279,7 +3301,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 return showToast('No se pudo subir el PDF de la factura: ' + (err && err.message ? err.message : err), 'error');
             }
 
-            order.invoice = { number, amount, expenses, pdfUrl: pdfUrl || null, date: new Date().toISOString() }; // ya sin pdfData (base64)
+            order.invoice = { number, amount, expenses, pdfUrl: pdfUrl || null, date: (yaFacturada && previa.date) ? previa.date : new Date().toISOString() }; // ya sin pdfData (base64)
             order.status = 'BILLED';
 
             await cloudSaveOrder(order);
@@ -4556,8 +4578,8 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         function populateClientDropdowns() {
-            const filterIds = ['dash-filter-client', 'eq-filter-client', 'hist-filter-client', 'fin-filter-client'];
-            const formIds = ['nr-client', 'eq-f-client', 'ag-f-client'];
+            const filterIds = ['dash-filter-client', 'hist-filter-client', 'fin-filter-client'];   // eq-filter-client / eq-f-client: solo clientes oficiales (ver syncEquipmentClientSelectors)
+            const formIds = ['nr-client', 'ag-f-client'];
             const names = getCanonicalClientNames();
 
             // Filtros: agrupados por raíz ("Jocol piso 16" y "Jocol piso 3" → "Jocol")
@@ -4576,6 +4598,34 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             filterIds.forEach(id => fill(id, id === 'fin-filter-client' ? '<option value="ALL">Todos</option>' : '<option value="ALL">Todos los Clientes</option>', filterOptions));
             formIds.forEach(id => fill(id, '<option value="">-- Selecciona un Cliente --</option>', formOptions));
             populateCajaClientDropdown();
+            syncEquipmentClientSelectors(true);
+        }
+
+        // Clientes OFICIALES = únicamente los del módulo "Gestión de Clientes" (sin nombres sueltos de equipos u órdenes antiguas)
+        function getOfficialClientNames() {
+            const seen = new Map();
+            clientsCatalog.forEach(c => { const n = cleanSpaces(c && c.name), k = normText(n); if (k && !seen.has(k)) seen.set(k, n); });
+            return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+        }
+        let eqClientSelSig = '';
+        // Reconstruye filtro y selector del catálogo de equipos; solo toca el DOM si cambió la lista oficial
+        function syncEquipmentClientSelectors(force) {
+            const names = getOfficialClientNames();
+            const sig = names.map(normText).join('|');
+            const f = document.getElementById('eq-filter-client'), fm = document.getElementById('eq-f-client');
+            if (!force && sig === eqClientSelSig && f && f.options.length) return;
+            eqClientSelSig = sig;
+            if (f) {
+                const prev = f.value, groups = new Map();
+                names.forEach(n => { const k = clientRootKey(n); if (k && !groups.has(k)) groups.set(k, clientRootLabel(n)); });
+                f.innerHTML = '<option value="ALL">Todos los Clientes</option>' + [...groups.entries()].map(([k, l]) => `<option value="${corrEsc(k)}">${corrEsc(l)}</option>`).join('');
+                f.value = Array.from(f.options).some(o => o.value === prev) ? prev : 'ALL';
+            }
+            if (fm) {
+                const prev = fm.value;
+                fm.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' + names.map(n => `<option value="${corrEsc(n)}">${corrEsc(n)}</option>`).join('');
+                if (prev && Array.from(fm.options).some(o => o.value === prev)) fm.value = prev;
+            }
         }
 
         function populateCajaClientDropdown(selectedId = '') {
@@ -5999,15 +6049,150 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             showToast(`Orden ${orderId} programada correctamente.`);
         }
 
+        // ===== Rutina: modo CREAR / modo EDITAR (el cliente queda bloqueado al editar) =====
+        let nrEditingId = null;
+
+        function nrApplyMode(order) {
+            const editing = !!order;
+            const proj = editing ? monthlyProjections.find(p => p.orderId === order.id) : null;
+            const sel = document.getElementById('nr-client');
+            if (sel) sel.disabled = editing;                                   // integridad: no se cambia el cliente
+            document.getElementById('nr-client-lock').classList.toggle('hidden', !editing);
+            document.getElementById('nr-modal-title').innerText = editing ? `Editar Rutina ${order.id}` : 'Nueva Rutina de Mantenimiento (Manual)';
+            document.getElementById('nr-submit-label').innerText = editing ? 'Guardar Cambios' : 'Registrar y Programar Rutina';
+            document.querySelector('#nr-submit-btn i').className = editing ? 'fa-solid fa-floppy-disk' : 'fa-solid fa-circle-plus';
+            // Periodicidad / presupuesto solo existen si la rutina nació de una proyección
+            const showPB = !editing || !!proj;
+            document.getElementById('nr-pb-row').classList.toggle('hidden', !showPB);
+            document.getElementById('nr-periodicity').required = showPB;
+            document.getElementById('nr-budget').required = showPB;
+        }
+
+        function nrResetForm() {
+            document.getElementById('nr-client').value = '';
+            document.getElementById('nr-date').value = '';
+            document.getElementById('nr-budget').value = '';
+            document.querySelectorAll('#nr-tech input[type=checkbox]').forEach(c => { c.checked = false; });
+        }
+
         function openNewRoutineModal() {
+            const wasEditing = nrEditingId !== null;
+            nrEditingId = null;
             document.getElementById('new-routine-modal-backdrop').classList.remove('hidden');
             populateClientDropdowns();
             populateTechDropdown();
+            nrApplyMode(null);
+            if (wasEditing) nrResetForm();
             document.getElementById('nr-equipments-picker').innerHTML = '<p class="text-slate-400 p-2 text-center text-xs">Selecciona un cliente para ver sus equipos.</p>';
         }
 
         function closeNewRoutineModal() {
             document.getElementById('new-routine-modal-backdrop').classList.add('hidden');
+            if (nrEditingId !== null) { nrEditingId = null; nrApplyMode(null); nrResetForm(); }
+        }
+
+        // ¿El equipo ya tiene ejecución registrada en esa rutina? (entonces no se puede quitar)
+        function nrEqHasExec(order, eqId) {
+            const ex = order.executions || {};
+            const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId));
+            return !!(ex[eqId] || (eq && (ex[eq.id] || ex[eq.code])));
+        }
+
+        // Abre el MISMO formulario de una rutina nueva, pre-cargado, con el cliente bloqueado
+        async function openEditRoutineModal(orderId) {
+            const order = workOrders.find(o => String(o.id) === String(orderId));
+            if (!order) return showToast('No se encontró la rutina.', 'error');
+            nrEditingId = order.id;
+            document.getElementById('new-routine-modal-backdrop').classList.remove('hidden');
+            populateClientDropdowns();
+            populateTechDropdown();
+
+            const client = order.client || order.clientName || '';
+            const sel = document.getElementById('nr-client');
+            if (client && !Array.from(sel.options).some(o => o.value === client)) sel.insertAdjacentHTML('beforeend', `<option value="${esc(client)}">${esc(client)}</option>`);
+            sel.value = client;
+            nrApplyMode(order);
+
+            const proj = monthlyProjections.find(p => p.orderId === order.id);
+            if (proj) {
+                document.getElementById('nr-periodicity').value = proj.periodicity || 'Trimestral';
+                document.getElementById('nr-budget').value = proj.budget || '';
+            }
+            document.getElementById('nr-date').value = String(order.date || '').slice(0, 10);
+
+            // Técnicos: marca los asignados; los que ya no están activos se conservan como opción
+            const box = document.getElementById('nr-tech');
+            const names = orderTechs(order);
+            const boxes = Array.from(box.querySelectorAll('input[type=checkbox]'));
+            boxes.forEach(c => { c.checked = names.includes(c.value); });
+            names.filter(n => !boxes.some(c => c.value === n)).forEach(n =>
+                box.insertAdjacentHTML('beforeend', `<label class="tech-opt"><input type="checkbox" value="${esc(n)}" checked><span>${esc(n)} <small>(inactivo)</small></span></label>`));
+
+            // Equipos del cliente + marca los de la rutina (los ya ejecutados quedan bloqueados)
+            await renderAvailableEquipmentForNewRoutine();
+            if (nrEditingId !== order.id) return;                              // se cerró/cambió mientras cargaba
+            const picker = document.getElementById('nr-equipments-picker');
+            const ids = (order.equipmentIds || []).map(String);
+            const have = new Set(Array.from(picker.querySelectorAll('.nr-eq-checkbox')).map(c => String(c.value)));
+            if (picker.querySelector('p')) picker.innerHTML = '';              // mensaje "sin equipos"
+            ids.filter(id => !have.has(id)).forEach(id => {
+                const e = equipmentCatalog.find(x => String(x.id) === id || String(x.code) === id) || { id, code: id };
+                picker.insertAdjacentHTML('beforeend', `<label class="flex items-center gap-3 p-2 bg-white hover:bg-slate-100/70 rounded-xl cursor-pointer border border-slate-100 transition">
+                    <input type="checkbox" value="${esc(e.id)}" class="nr-eq-checkbox rounded text-teal-600 w-4 h-4">
+                    <span class="font-mono font-bold text-slate-800 text-xs">${esc(e.code)}</span>
+                    <span class="text-slate-500 text-xs font-medium">- ${esc(e.name || e.type || 'Sin nombre')}</span>
+                </label>`);
+            });
+            picker.querySelectorAll('.nr-eq-checkbox').forEach(cb => {
+                const on = ids.includes(String(cb.value));
+                cb.checked = on;
+                if (on && nrEqHasExec(order, cb.value)) {
+                    cb.disabled = true;
+                    cb.parentElement.insertAdjacentHTML('beforeend', '<span class="ml-auto text-[10px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">Ejecutado</span>');
+                }
+            });
+        }
+
+        async function saveEditedRoutine() {
+            const order = workOrders.find(o => String(o.id) === String(nrEditingId));
+            if (!order) return showToast('No se encontró la rutina a editar.', 'error');
+
+            const date = document.getElementById('nr-date').value;
+            const technicians = techPickerValues('nr-tech');
+            if (!date || !technicians.length) return showToast('Completa los campos obligatorios (fecha y técnico).', 'error');
+
+            const prevIds = (order.equipmentIds || []).map(String);
+            const equipmentIds = Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(c => String(c.value));
+            prevIds.forEach(id => { if (!equipmentIds.includes(id) && nrEqHasExec(order, id)) equipmentIds.push(id); });  // nunca se pierde una ejecución
+            if (!equipmentIds.length) return showToast('Selecciona al menos un equipo.', 'error');
+
+            const added = equipmentIds.filter(id => !prevIds.includes(id));
+            if (added.length && (order.status === 'COMPLETED' || order.status === 'BILLED') &&
+                !confirm(`La rutina ya está ${order.status === 'BILLED' ? 'facturada' : 'completada'}. Los ${added.length} equipo(s) nuevo(s) quedarán sin ejecutar. ¿Continuar?`)) return;
+
+            order.date = date;
+            order.technicians = technicians;
+            order.technician = technicians.join(', ');
+            order.equipmentIds = equipmentIds;
+            order.updatedAt = new Date().toISOString();
+
+            const proj = monthlyProjections.find(p => p.orderId === order.id);
+            if (proj) {
+                const d = new Date(date + 'T00:00:00');
+                proj.month = d.getMonth() + 1; proj.year = d.getFullYear();
+                proj.periodicity = document.getElementById('nr-periodicity').value || proj.periodicity;
+                proj.budget = parseFloat(document.getElementById('nr-budget').value) || 0;
+                proj.equipmentIds = equipmentIds.slice();
+            }
+
+            await cloudSaveOrder(order);
+            registrarAuditoria('EDITAR', 'hvac_orders', order.id);
+            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+            localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
+
+            closeNewRoutineModal();
+            [renderAdminDashboard, renderPlanningModule, renderHistoryModule, renderBillingModule].forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
+            showToast(`Rutina ${order.id} actualizada correctamente.`);
         }
 
         async function renderAvailableEquipmentForNewRoutine() {
@@ -6040,6 +6225,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         async function saveNewRoutineManual() {
+            if (nrEditingId !== null) return saveEditedRoutine();
             const client = document.getElementById('nr-client').value;
             const periodicity = document.getElementById('nr-periodicity').value;
             const budget = parseFloat(document.getElementById('nr-budget').value) || 0;
@@ -6318,6 +6504,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         function renderEquipmentCatalog() {
+            syncEquipmentClientSelectors();      // en tiempo real: refleja altas/bajas de Gestión de Clientes
             const filterClient = document.getElementById('eq-filter-client').value || 'ALL';
             const query = normText(document.getElementById('eq-search-input').value);
             const tbody = document.getElementById('equipments-table-body');
@@ -6402,7 +6589,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 const e = equipmentCatalog.find(x => x.id === id);
                 document.getElementById('eq-modal-title').innerText = "Editar Equipo";
                 document.getElementById('eq-f-id').value = e.id;
-                document.getElementById('eq-f-client').value = canonicalClientName(eqClientName(e));
+                {
+                    const cs = document.getElementById('eq-f-client'), cn = canonicalClientName(eqClientName(e));
+                    if (cn && !Array.from(cs.options).some(o => o.value === cn)) cs.insertAdjacentHTML('beforeend', `<option value="${corrEsc(cn)}">${corrEsc(cn)} (no registrado en Gestión de Clientes)</option>`);
+                    cs.value = cn;
+                }
                 document.getElementById('eq-f-code').value = e.code || '';
                 document.getElementById('eq-f-name').value = e.name || '';
                 document.getElementById('eq-f-serial').value = e.serial || '';
@@ -7561,25 +7752,99 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             showToast("¡PDF del equipo generado con éxito!");
         }
 
+        // Mes (YYYY-MM) de una fecha: las fechas "YYYY-MM-DD" se leen tal cual (sin desfase de zona horaria)
+        function billingMonthKey(v) {
+            if (!v) return '';
+            const str = String(v);
+            if (/^\d{4}-\d{2}(-\d{2})?$/.test(str)) return str.slice(0, 7);
+            const d = new Date(str);
+            return isNaN(d) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }
+        function billingRoutineType(o) {
+            return (o.maintenanceType === 'CORRECTIVO' || /^COR-/i.test(String(o.id || ''))) ? 'CORRECTIVO' : 'PREVENTIVO';
+        }
+        function billingClearFilters() {
+            document.getElementById('billing-filter-status').value = 'ALL';
+            document.getElementById('billing-filter-exec-month').value = '';
+            document.getElementById('billing-filter-billed-month').value = '';
+            document.getElementById('billing-filter-type').value = 'ALL';
+            renderBillingModule();
+        }
+        const billingMoney = n => '$ ' + Number(n || 0).toLocaleString();
+        const billingMonthLabel = k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('es', { month: 'long', year: 'numeric' }); };
+
         function renderBillingModule() {
-            const filter = document.getElementById('billing-filter-status').value || 'ALL';
+            const status = document.getElementById('billing-filter-status').value || 'ALL';
+            const execMonth = document.getElementById('billing-filter-exec-month').value || '';
+            const billedMonth = document.getElementById('billing-filter-billed-month').value || '';
+            const typeFilter = document.getElementById('billing-filter-type').value || 'ALL';
             const tbody = document.getElementById('billing-table-body');
             tbody.innerHTML = '';
 
+            // Los filtros son independientes y se combinan entre sí (AND)
             const list = workOrders.filter(o => {
                 if (String(o.id || '').startsWith('HIST-')) return false;
-                if (filter === 'PENDING') return o.status === 'COMPLETED';
-                if (filter === 'BILLED') return o.status === 'BILLED';
+                if (status === 'PENDING' && o.status !== 'COMPLETED') return false;
+                if (status === 'BILLED' && o.status !== 'BILLED') return false;
+                if (execMonth && billingMonthKey(o.date) !== execMonth) return false;
+                if (billedMonth && billingMonthKey(o.invoice && o.invoice.date) !== billedMonth) return false;
+                if (typeFilter !== 'ALL' && billingRoutineType(o) !== typeFilter) return false;
                 return true;
             });
 
+            // ---- Totales dinámicos (según los filtros aplicados) ----
+            const mk = () => ({ n: 0, billed: 0, amount: 0, expenses: 0, pending: 0 });
+            const T = mk(), byType = { PREVENTIVO: mk(), CORRECTIVO: mk() };
+            list.forEach(o => {
+                const inv = o.invoice || {}, isBilled = o.status === 'BILLED', t = byType[billingRoutineType(o)];
+                [T, t].forEach(x => {
+                    x.n++;
+                    if (isBilled) { x.billed++; x.amount += Number(inv.amount || 0); x.expenses += Number(inv.expenses || 0); }
+                    else if (o.status === 'COMPLETED') x.pending++;
+                });
+            });
+            const net = x => x.amount - x.expenses, margin = x => x.amount > 0 ? Math.round(net(x) / x.amount * 100) : 0;
+            const chips = [];
+            if (status !== 'ALL') chips.push(status === 'PENDING' ? 'Pendientes por facturar' : 'Facturadas');
+            if (execMonth) chips.push('Ejecución: ' + billingMonthLabel(execMonth));
+            if (billedMonth) chips.push('Facturado: ' + billingMonthLabel(billedMonth));
+            if (typeFilter !== 'ALL') chips.push(typeFilter === 'PREVENTIVO' ? 'Preventivo' : 'Correctivo');
+            const card = (label, value, cls) => `<div class="bg-slate-50 rounded-xl border border-slate-200/70 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${label}</span><p class="text-lg font-black mt-1 ${cls || 'text-slate-900'}">${value}</p></div>`;
+            const row = (label, x) => `<tr><td class="font-bold text-slate-800">${label}</td><td class="text-center">${x.n}</td><td class="text-center">${x.billed}</td><td class="text-center">${x.pending}</td><td class="font-bold">${billingMoney(x.amount)}</td><td class="font-bold text-rose-600">${billingMoney(x.expenses)}</td><td class="font-bold text-emerald-600">${billingMoney(net(x))}</td><td class="font-bold text-teal-600">${margin(x)}%</td></tr>`;
+            document.getElementById('billing-totals').innerHTML = `
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                    <h3 class="text-sm font-black text-slate-900 tracking-tight"><i class="fa-solid fa-calculator text-teal-600 mr-1.5"></i>Totales</h3>
+                    <span class="text-[11px] text-slate-500 font-medium">${chips.length ? esc(chips.join(' · ')) : 'Sin filtros: todas las órdenes'}</span>
+                </div>
+                <div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
+                    ${card('Órdenes', `${T.n} <span class="text-[11px] font-bold text-slate-500">(${T.billed} fact. · ${T.pending} pend.)</span>`)}
+                    ${card('Valor cobrado', billingMoney(T.amount))}
+                    ${card('Gastos reales', billingMoney(T.expenses), 'text-rose-600')}
+                    ${card('Neto', billingMoney(net(T)), 'text-emerald-600')}
+                    ${card('Margen', margin(T) + '%', 'text-teal-600')}
+                </div>
+                <div class="overflow-x-auto mt-3">
+                    <table>
+                        <thead><tr><th>Subtotal por tipo</th><th class="text-center">Órdenes</th><th class="text-center">Facturadas</th><th class="text-center">Pendientes</th><th>Cobrado</th><th>Gastos</th><th>Neto</th><th>Margen</th></tr></thead>
+                        <tbody>${row('Preventivo', byType.PREVENTIVO)}${row('Correctivo', byType.CORRECTIVO)}</tbody>
+                    </table>
+                </div>`;
+
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-slate-400 text-xs font-medium py-8">No hay órdenes que coincidan con los filtros seleccionados.</td></tr>';
+                return;
+            }
             list.forEach(o => {
                 const inv = o.invoice || {};
                 const isBilled = o.status === 'BILLED';
+                const isCorr = billingRoutineType(o) === 'CORRECTIVO';
+                const billedOn = isBilled && inv.date ? billingMonthKey(inv.date) : '';
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(o.id)}</td>
                     <td class="font-bold text-teal-700">${esc(o.client)}</td>
+                    <td><span class="text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${isCorr ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-sky-50 text-sky-700 border-sky-200'}">${isCorr ? 'Correctivo' : 'Preventivo'}</span></td>
                     <td>${esc(o.date)}</td>
+                    <td class="text-xs">${billedOn ? esc(billedOn) : '<span class="text-slate-400">-</span>'}</td>
                     <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
                     <td class="font-bold text-slate-900">$ ${Number(inv.amount || 0).toLocaleString()}</td>
                     <td class="font-bold text-rose-600">$ ${Number(inv.expenses || 0).toLocaleString()}</td>
@@ -7788,6 +8053,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     <td>${statusBadge}</td>
                     <td class="text-right">
                         <div class="inline-flex items-center gap-1.5">
+                            <button onclick="openEditRoutineModal('${escJs(o.id)}')" class="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition" title="Editar rutina (técnicos, equipos y fechas)"><i class="fa-solid fa-pen"></i></button>
                             <button onclick="openOrderHub('${escJs(o.id)}')" class="btn-teal text-xs py-1.5 px-3"><i class="fa-solid fa-folder-open"></i> Revisar</button>
                             ${isCurrentAdmin() ? `<button onclick="deleteRoutineFromHistory('${escJs(o.id)}')" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Eliminar rutina y sus intervenciones"><i class="fa-solid fa-trash"></i></button>` : ''}
                         </div>
