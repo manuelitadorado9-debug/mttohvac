@@ -836,6 +836,37 @@ html[data-theme="dark"] .qrm-badge.no{color:#fbbf24}
 }
 </style>
 
+<style id="billing-breakdown-css">
+.bbd-wrap{margin-bottom:16px}
+.bbd-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.bbd-title{font-size:12px;font-weight:900;letter-spacing:.02em;color:#0f172a;text-transform:uppercase}
+.bbd-base{font-size:10px;font-weight:800;color:#0f766e;background:#f0fdfa;border:1px solid #99f6e4;padding:2px 9px;border-radius:999px}
+.bbd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+.bbd-card{background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #94a3b8;border-radius:14px;padding:14px 14px 12px}
+.bbd-card.same{border-left-color:#10b981}
+.bbd-card.other{border-left-color:#f59e0b}
+.bbd-card.total{border-left-color:#0d9488;background:#f0fdfa;border-color:#99f6e4;border-left-color:#0d9488}
+.bbd-lbl{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#475569}
+.bbd-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:none}
+.same .bbd-dot{background:#10b981}.other .bbd-dot{background:#f59e0b}.total .bbd-dot{background:#0d9488}
+.bbd-sub{font-size:11px;font-weight:600;color:#64748b;margin-top:2px;line-height:1.35}
+.bbd-val{font-size:22px;font-weight:900;color:#0f172a;margin:8px 0 6px;letter-spacing:-.01em}
+.bbd-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;font-weight:700;color:#64748b}
+.bbd-meta b{color:#0f172a}.bbd-meta .neg b{color:#e11d48}.bbd-meta .pos b{color:#059669}
+.bbd-months{margin-top:8px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:10.5px;font-weight:600;color:#64748b;line-height:1.5}
+.bbd-hint{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:12px 14px;font-size:12px;font-weight:600;color:#64748b}
+html[data-theme="dark"] .bbd-title,html[data-theme="dark"] .bbd-val,html[data-theme="dark"] .bbd-meta b{color:#e8edf7}
+html[data-theme="dark"] .bbd-base{background:rgba(20,184,166,.14);border-color:rgba(20,184,166,.4);color:#5eead4}
+html[data-theme="dark"] .bbd-card{background:#0b1328;border-color:rgba(148,163,184,.18)}
+html[data-theme="dark"] .bbd-card.same{border-left-color:#10b981}
+html[data-theme="dark"] .bbd-card.other{border-left-color:#f59e0b}
+html[data-theme="dark"] .bbd-card.total{background:rgba(20,184,166,.10);border-color:rgba(20,184,166,.35);border-left-color:#14b8a6}
+html[data-theme="dark"] .bbd-lbl{color:#cbd5e1}
+html[data-theme="dark"] .bbd-sub,html[data-theme="dark"] .bbd-meta,html[data-theme="dark"] .bbd-months{color:#94a3b8}
+html[data-theme="dark"] .bbd-months{border-top-color:rgba(148,163,184,.25)}
+html[data-theme="dark"] .bbd-meta .neg b{color:#fb7185}html[data-theme="dark"] .bbd-meta .pos b{color:#34d399}
+html[data-theme="dark"] .bbd-hint{background:#0b1328;border-color:rgba(148,163,184,.3);color:#94a3b8}
+</style>
 <style id="billing-theme-css">
 .bill-mini{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px}
 .bill-chip{font-size:10px;font-weight:900;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid;white-space:nowrap}
@@ -1830,6 +1861,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <option value="Cuatrimestral">Cuatrimestral</option>
                             <option value="Semestral">Semestral</option>
                             <option value="Anual">Anual</option>
+                            <option value="Sin periodicidad">Sin periodicidad (manual)</option>
                         </select>
                     </div>
                     <div>
@@ -7805,6 +7837,28 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 });
             });
             const net = x => x.amount - x.expenses, margin = x => x.amount > 0 ? Math.round(net(x) / x.amount * 100) : 0;
+            // ---- Desglose del mes base: facturado en el mes M según su ejecución sea del mismo mes o de otros ----
+            // M = mes facturado (si se eligió); si no, el mes de ejecución se usa como mes base.
+            // Respeta estado y tipo de rutina. El mes de ejecución solo restringe cuando hay mes facturado
+            // (si fuese el mes base, dejaría vacía la fila "otros meses").
+            const baseMonth = billedMonth || execMonth;
+            let bd = null;
+            if (baseMonth) {
+                const pool = workOrders.filter(o => {
+                    if (String(o.id || '').startsWith('HIST-')) return false;
+                    if (o.status !== 'BILLED' || billingMonthKey(o.invoice && o.invoice.date) !== baseMonth) return false;
+                    if (status === 'PENDING') return false;
+                    if (typeFilter !== 'ALL' && billingRoutineType(o) !== typeFilter) return false;
+                    if (billedMonth && execMonth && billingMonthKey(o.date) !== execMonth) return false;
+                    return true;
+                });
+                const sum = arr => arr.reduce((a, o) => { const inv = o.invoice || {}; a.n++; a.amount += Number(inv.amount || 0); a.expenses += Number(inv.expenses || 0); return a; }, { n: 0, amount: 0, expenses: 0 });
+                const sameArr = pool.filter(o => billingMonthKey(o.date) === baseMonth);
+                const otherArr = pool.filter(o => billingMonthKey(o.date) !== baseMonth);
+                const otherMonths = {};
+                otherArr.forEach(o => { const k = billingMonthKey(o.date) || 'sin fecha'; otherMonths[k] = (otherMonths[k] || 0) + 1; });
+                bd = { same: sum(sameArr), other: sum(otherArr), total: sum(pool), otherMonths };
+            }
             const chips = [];
             if (status !== 'ALL') chips.push(status === 'PENDING' ? 'Pendientes por facturar' : 'Facturadas');
             if (execMonth) chips.push('Ejecución: ' + billingMonthLabel(execMonth));
@@ -7812,11 +7866,38 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (typeFilter !== 'ALL') chips.push(typeFilter === 'PREVENTIVO' ? 'Preventivo' : 'Correctivo');
             const card = (label, value, cls) => `<div class="bill-mini"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${label}</span><p class="text-lg font-black mt-1 ${cls || 'text-slate-900'}">${value}</p></div>`;
             const row = (label, x) => `<tr><td class="font-bold text-slate-800">${label}</td><td class="text-center">${x.n}</td><td class="text-center">${x.billed}</td><td class="text-center">${x.pending}</td><td class="font-bold">${billingMoney(x.amount)}</td><td class="font-bold text-rose-600">${billingMoney(x.expenses)}</td><td class="font-bold text-emerald-600">${billingMoney(net(x))}</td><td class="font-bold text-teal-600">${margin(x)}%</td></tr>`;
+            const bdNet = x => x.amount - x.expenses;
+            const bdCard = (cls, label, sub, x, extra) => `<div class="bbd-card ${cls}">
+                    <div class="bbd-lbl"><span class="bbd-dot"></span>${label}</div>
+                    <div class="bbd-sub">${sub}</div>
+                    <div class="bbd-val">${billingMoney(x.amount)}</div>
+                    <div class="bbd-meta"><span><b>${x.n}</b> ${x.n === 1 ? 'orden' : 'órdenes'}</span><span class="neg">Gastos <b>${billingMoney(x.expenses)}</b></span><span class="pos">Neto <b>${billingMoney(bdNet(x))}</b></span></div>
+                    ${extra || ''}
+                </div>`;
+            let breakdownHTML;
+            if (bd) {
+                const ML = billingMonthLabel(baseMonth), typeTxt = typeFilter === 'ALL' ? '' : (typeFilter === 'PREVENTIVO' ? ' · Preventivo' : ' · Correctivo');
+                const om = Object.keys(bd.otherMonths).sort().map(k => `${k === 'sin fecha' ? 'Sin fecha' : esc(billingMonthLabel(k))} (${bd.otherMonths[k]})`).join(' · ');
+                breakdownHTML = `<div class="bbd-wrap">
+                    <div class="bbd-head">
+                        <span class="bbd-title"><i class="fa-solid fa-sitemap"></i> Subtotales facturados en ${esc(ML)}${typeTxt}</span>
+                        <span class="bbd-base">Base: ${billedMonth ? 'mes facturado' : 'mes de ejecución'}</span>
+                    </div>
+                    <div class="bbd-grid">
+                        ${bdCard('same', 'Del mismo mes', `Facturado en ${esc(ML)} y ejecutado en ${esc(ML)}`, bd.same)}
+                        ${bdCard('other', 'De otros meses', `Facturado en ${esc(ML)} pero ejecutado en otros meses`, bd.other, om ? `<div class="bbd-months">Ejecutado en: ${om}</div>` : '')}
+                        ${bdCard('total', 'Total facturado', `Suma de ambas filas · ${esc(ML)}`, bd.total)}
+                    </div>
+                </div>`;
+            } else {
+                breakdownHTML = `<div class="bbd-wrap"><div class="bbd-hint"><i class="fa-solid fa-circle-info"></i> Elige un <b>mes facturado</b> (o un mes de ejecución) para ver cuánto de lo facturado corresponde a ese mismo mes y cuánto a otros meses.</div></div>`;
+            }
             document.getElementById('billing-totals').innerHTML = `
                 <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
                     <h3 class="text-sm font-black text-slate-900 tracking-tight"><i class="fa-solid fa-calculator text-teal-600 mr-1.5"></i>Totales</h3>
                     <span class="text-[11px] text-slate-500 font-medium">${chips.length ? esc(chips.join(' · ')) : 'Sin filtros: todas las órdenes'}</span>
                 </div>
+                ${breakdownHTML}
                 <div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5">
                     ${card('Órdenes', `${T.n} <span class="text-[11px] font-bold text-slate-500">(${T.billed} fact. · ${T.pending} pend.)</span>`)}
                     ${card('Valor cobrado', billingMoney(T.amount))}
@@ -8040,15 +8121,13 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     <td class="font-medium">${esc(o.date || '-')}</td>
                     <td>
                         <div class="w-44 space-y-1" title="${esc(progressTitle)}">
-                            <div class="flex justify-between text-[10px] font-bold text-slate-600">
-                                <span>${checklistDone}/${checklistTotal} ítems</span>
-                                <span>${percent}%</span>
-                            </div>
-                            <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                                <div class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: ${percent}%;"></div>
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
+                                    <div class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: ${percent}%;"></div>
+                                </div>
+                                <span class="text-[11px] font-bold text-slate-600 w-9 text-right">${percent}%</span>
                             </div>
                             <div class="text-[10px] text-slate-500">${doneCount}/${esc(eqIds.length)} equipos completos</div>
-                            ${missingByEquipment.length ? `<div class="text-[10px] text-amber-700 truncate">Pendientes (${missingByEquipment.length} equipos): ${esc(missingByEquipment.slice(0,2).join(' | '))}${missingByEquipment.length > 2 ? '…' : ''}</div>` : ''}
                         </div>
                     </td>
                     <td>${statusBadge}</td>
@@ -8682,12 +8761,14 @@ function cliUseMyLocation() {
 const PERIOD_MONTHS = { Mensual: 1, Bimensual: 2, Trimestral: 3, Cuatrimestral: 4, Semestral: 6, Anual: 12 };
 const PERIOD_ALERT_DAYS = 30;                              // avisa cuando faltan 30 días o menos
 const PERIOD_MES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const periodIsNone = v => /^\s*(sin\s+periodicidad|manual)\s*$/i.test(String(v || ''));   // rutinas aisladas: sin ciclo recurrente
 function periodAddMonths(iso, n) { const d = new Date(String(iso).slice(0, 10) + 'T12:00:00'), day = d.getDate(); d.setMonth(d.getMonth() + n); if (d.getDate() < day) d.setDate(0); return d; }
 function periodAlerts() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const iso = d => d.toLocaleDateString('en-CA'), todayIso = iso(today), by = {};
-    (monthlyProjections || []).forEach(p => { if (p && p.client) (by[p.client] = by[p.client] || { projs: [], orders: [] }).projs.push(p); });
-    (workOrders || []).forEach(o => { if (o && o.client && o.date && by[o.client]) by[o.client].orders.push(o); });
+    const isolated = new Set((monthlyProjections || []).filter(p => p && p.orderId && periodIsNone(p.periodicity)).map(p => String(p.orderId)));   // órdenes sin periodicidad: no cuentan para el ciclo
+    (monthlyProjections || []).forEach(p => { if (p && p.client && !periodIsNone(p.periodicity)) (by[p.client] = by[p.client] || { projs: [], orders: [] }).projs.push(p); });
+    (workOrders || []).forEach(o => { if (o && o.client && o.date && by[o.client] && !isolated.has(String(o.id))) by[o.client].orders.push(o); });
     const out = [];
     Object.entries(by).forEach(([client, c]) => {
         const latest = [...c.projs].sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month))[0], per = latest.periodicity;
