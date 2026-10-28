@@ -383,7 +383,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=7"></script>
 
 <style id="ui-transitions-v1">
 /* ============================================================
@@ -1637,9 +1637,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
 
         // Indicador visible y sincronización manual de la bandeja de salida.
-        let techSyncCloseTimer = null;
         function setTechSyncStatus(title, subtitle, detail, percent, pending) {
-            clearTimeout(techSyncCloseTimer); techSyncCloseTimer = null;   // cualquier estado nuevo cancela un cierre pendiente
             const modal = document.getElementById('tech-sync-modal');
             if (modal) modal.classList.remove('hidden');
             const put = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
@@ -1657,11 +1655,9 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 icon.innerHTML = isSuccess ? '<i class="fa-solid fa-circle-check"></i>' : isError ? '<i class="fa-solid fa-triangle-exclamation"></i>' : '<i class="fa-solid fa-arrows-rotate"></i>';
                 icon.style.background = isSuccess ? 'rgba(34,197,94,.14)' : isError ? 'rgba(245,158,11,.14)' : 'rgba(59,130,246,.13)';
                 icon.style.color = isSuccess ? '#22c55e' : isError ? '#f59e0b' : 'var(--primary)';
-                // Sincronización exitosa: el aviso se cierra solo 1 segundo después
-                if (isSuccess) techSyncCloseTimer = setTimeout(closeTechSyncStatus, 1000);
             }
         }
-        function closeTechSyncStatus() { clearTimeout(techSyncCloseTimer); techSyncCloseTimer = null; const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
+        function closeTechSyncStatus() { const el = document.getElementById('tech-sync-modal'); if (el) el.classList.add('hidden'); }
         async function syncTechNow() {
             const pendingBefore = cloudOutboxRead().length;
             if (!navigator.onLine) {
@@ -1759,13 +1755,16 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             Object.entries(local.executions || {}).forEach(([k, v]) => { if (!ex[k] || execTs(v) >= execTs(ex[k])) ex[k] = v; });
             out.executions = ex;
             if (remote.technicianFinished) { out.technicianFinished = true; out.technicianFinishedAt = remote.technicianFinishedAt; }
-            const ids = out.equipmentIds || [];
-            if (String(out.status).toUpperCase() === 'PENDING' && ids.length && ids.every(id => ex[id] && !ex[id].partial)) out.status = 'COMPLETED';
+            const ids = [...new Set([...(Array.isArray(remote.equipmentIds) ? remote.equipmentIds : []), ...(Array.isArray(local.equipmentIds) ? local.equipmentIds : [])].map(String))];
+            out.equipmentIds = ids;
+            const allDone = ids.length > 0 && ids.every(id => { const e = ex[id] || {}; return !!e && !e.partial && String(e.status || '').toLowerCase() !== 'pending' && String(e.status || '').toLowerCase() !== 'in progress'; });
+            if (!allDone) { out.status = 'PENDING'; out.technicianFinished = false; }
+            else if (String(remote.status).toUpperCase() === 'COMPLETED' || String(local.status).toUpperCase() === 'COMPLETED') out.status = 'COMPLETED';
             return out;
         }
         function applyMergedToLocal(id, merged) {
             const lo = (typeof workOrders !== 'undefined') && workOrders.find(o => o && o.id === id); if (!lo) return;
-            lo.executions = Object.assign({}, merged.executions); lo.status = merged.status;
+            lo.executions = Object.assign({}, merged.executions); lo.equipmentIds = [...new Set([...(lo.equipmentIds || []), ...(merged.equipmentIds || [])].map(String))]; lo.status = merged.status;
             if (merged.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = merged.technicianFinishedAt; }
         }
         function cloudUpsert(table, rawId, obj) {
@@ -2435,18 +2434,42 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             return order.executions && (order.executions[eqId] || (eq && order.executions[eq.code]));
         }
 
+        // Estado efectivo calculado desde TODOS los equipos asignados, no desde el estado antiguo de la orden.
+        // Una orden marcada COMPLETED vuelve a estar disponible si se añadieron equipos sin informe completo.
+        function techOrderProgress(order) {
+            const ids = [...new Set((order && order.equipmentIds || []).map(String).filter(Boolean))];
+            let done = 0;
+            ids.forEach(id => {
+                const eq = techFindEq(id) || { id, code: id, type: 'EXTRACTOR' };
+                const exec = techExecFor(order, id);
+                if (getEquipmentExecutionStatus(eq, id, exec) === 'done') done++;
+            });
+            const total = ids.length;
+            const allDone = total > 0 && done === total;
+            return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone };
+        }
+        function techOrderNeedsWork(order) {
+            const p = techOrderProgress(order);
+            return p.total === 0 || !p.allDone;
+        }
+        function techEffectiveStatus(order) {
+            if (String(order && order.status || '').toUpperCase() === 'BILLED') return 'BILLED';
+            return techOrderNeedsWork(order) ? 'PENDING' : 'COMPLETED';
+        }
+
         function renderTechAgenda() {
             const container = document.getElementById('tech-orders-container');
             if (!container) return;
             const u = systemUsers.find(x => x.id === activeUser);
-            const myOrders = workOrders.filter(o =>
-                isPreventiveOrder(o) &&
-                techMatches(o, u) &&
-                (o.status === 'PENDING' || (o.status === 'COMPLETED' && !o.technicianFinished))
-            ).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+            const myOrders = workOrders.filter(o => {
+                if (!isPreventiveOrder(o) || !techMatches(o, u)) return false;
+                const effective = techEffectiveStatus(o);
+                // Si hay equipos pendientes, la rutina siempre debe poder abrirse aunque status diga COMPLETED.
+                return effective === 'PENDING' || (effective === 'COMPLETED' && !o.technicianFinished);
+            }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
 
-            const nPend = myOrders.filter(o => o.status === 'PENDING').length;
-            const nDone = myOrders.length - nPend;
+            const nPend = myOrders.filter(o => techEffectiveStatus(o) === 'PENDING').length;
+            const nDone = myOrders.filter(o => techEffectiveStatus(o) === 'COMPLETED').length;
             const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
             set('stat-pending', nPend); set('stat-done', nDone);
             set('seg-count-all', myOrders.length); set('seg-count-pending', nPend); set('seg-count-done', nDone);
@@ -2455,14 +2478,15 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 if (b) b.classList.toggle('is-active', techFilter === k);
             });
 
-            const visible = myOrders.filter(o => techFilter === 'all' || (techFilter === 'pending' ? o.status === 'PENDING' : o.status === 'COMPLETED'));
+            const visible = myOrders.filter(o => techFilter === 'all' || (techFilter === 'pending' ? techEffectiveStatus(o) === 'PENDING' : techEffectiveStatus(o) === 'COMPLETED'));
             if (visible.length === 0) {
                 container.innerHTML = '<div class="empty"><i class="fa-solid fa-clipboard-check"></i>No tienes rutinas pendientes por ejecutar o terminar.</div>';
                 return;
             }
 
             container.innerHTML = visible.map(o => {
-                const isCompleted = o.status === 'COMPLETED';
+                const progress = techOrderProgress(o);
+                const isCompleted = techEffectiveStatus(o) === 'COMPLETED';
                 const eqIds = o.equipmentIds || [];
                 let checklistDone = 0, checklistTotal = 0, done = 0;
                 eqIds.forEach(id => {
@@ -2476,17 +2500,17 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
                     <div class="r-top">
                         <span class="r-id">${esc(o.id)}</span>
-                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Completada · por terminar' : 'Pendiente'}</span>
+                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Todos los equipos finalizados' : 'Pendiente · continuar rutina'}</span>
                     </div>
                     <h3 class="r-client">${esc(o.client)}</h3>
                     <div class="r-meta">
                         <span><i class="fa-regular fa-calendar"></i>${esc(o.date)}</span>
-                        <span><i class="fa-solid fa-snowflake"></i>${esc(eqIds.length)} ${isCompleted ? 'equipos intervenidos' : 'equipos a intervenir'}</span>
+                        <span><i class="fa-solid fa-snowflake"></i>${progress.done} de ${progress.total} equipos finalizados</span>
                     </div>
-                    <div class="r-progress"><div class="bar"><i style="width:${pct}%"></i></div><span>${pct}%</span></div>
+                    <div class="r-progress"><div class="bar"><i style="width:${progress.percent}%"></i></div><span>${progress.percent}%</span></div>
                     ${isCompleted
                         ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
-                        : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Abrir rutina</button>`}
+                        : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Continuar ejecutando rutina</button>`}
                 </article>`;
             }).join('');
         }
@@ -2608,7 +2632,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             if (progressText) progressText.innerText = `${percent}%`;
             const finalizeBox = document.getElementById('hub-finalize-container');
             // No permitir finalizar solo porque el checklist esté marcado: cada equipo debe estar realmente completo.
-            if (eqIds.length > 0 && completedCount === eqIds.length && checklistItemsTotal > 0 && checklistDoneTotal === checklistItemsTotal && order.status !== 'COMPLETED' && order.status !== 'BILLED') finalizeBox.classList.remove('hidden');
+            if (eqIds.length > 0 && completedCount === eqIds.length && checklistItemsTotal > 0 && checklistDoneTotal === checklistItemsTotal && String(order.status).toUpperCase() !== 'BILLED') finalizeBox.classList.remove('hidden');
             else finalizeBox.classList.add('hidden');
         }
 
@@ -2942,6 +2966,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         async function submitGlobalSignature() {
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
+            if (!techOrderProgress(order).allDone) { showToast('No puedes cerrar la orden: todavía hay equipos pendientes o informes incompletos.', 'error'); order.status = 'PENDING'; return; }
             const clientName = document.getElementById('sig-client-name').value.trim();
             const sigData = await r2keep(sigCanvas.toDataURL('image/png'), 'firmas');
 
@@ -2958,6 +2983,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         async function finalizeRoutineWithoutSignature() {
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
+            if (!techOrderProgress(order).allDone) { showToast('No puedes cerrar la orden: todavía hay equipos pendientes o informes incompletos.', 'error'); order.status = 'PENDING'; return; }
 
             order.clientSignature = { name: 'Completado sin firma', signatureImg: null, timestamp: new Date().toISOString() };
             order.status = 'COMPLETED';
@@ -2971,10 +2997,12 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
 
         async function finishTechnicianRoutine(orderId) {
             const order = workOrders.find(o => o.id === orderId);
-            if (!order || order.status !== 'COMPLETED') {
-                showToast("Solo puedes terminar una rutina que ya esté completada.", "error");
+            if (!order || !techOrderProgress(order).allDone) {
+                showToast("Aún hay equipos pendientes o con informes incompletos. Continúa la rutina antes de terminarla.", "error");
+                if (order) { order.status = 'PENDING'; order.technicianFinished = false; renderTechAgenda(); }
                 return;
             }
+            order.status = 'COMPLETED';
             if (order.technicianFinished) return;
 
             order.technicianFinished = true;
@@ -3470,8 +3498,12 @@ async function mxPullShared() {
     if (!lo) { workOrders.push(r); changed = true; return; }
     lo.executions = lo.executions || {};
     Object.entries(r.executions || {}).forEach(([k, v]) => { if (!lo.executions[k] || execTs(v) > execTs(lo.executions[k])) { lo.executions[k] = v; changed = true; } });
+    const mergedIds = [...new Set([...(lo.equipmentIds || []), ...(r.equipmentIds || [])].map(String))];
+    if (mergedIds.length !== (lo.equipmentIds || []).length) { lo.equipmentIds = mergedIds; changed = true; }
     if (r.technicianFinished && !lo.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = r.technicianFinishedAt; changed = true; }
-    if (String(r.status).toUpperCase() === 'COMPLETED' && String(lo.status).toUpperCase() === 'PENDING') { lo.status = 'COMPLETED'; changed = true; }
+    const effective = techEffectiveStatus(lo);
+    if (effective === 'PENDING' && String(lo.status).toUpperCase() !== 'PENDING') { lo.status = 'PENDING'; lo.technicianFinished = false; changed = true; }
+    else if (effective === 'COMPLETED' && String(r.status).toUpperCase() === 'COMPLETED' && String(lo.status).toUpperCase() === 'PENDING') { lo.status = 'COMPLETED'; changed = true; }
   });
   if (!changed) return;
   try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (e) {}
