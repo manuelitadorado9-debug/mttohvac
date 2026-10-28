@@ -3832,7 +3832,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             } catch (e) {}
         }
 
-        function cloudUpsert(table, rawId, obj) {
+        function cloudUpsertLegacy(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
             const payload = JSON.parse(JSON.stringify(obj));
             cloudGuardSize(table, cleanId, payload);
@@ -3854,6 +3854,57 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 }
                 if (r) cloudOutboxClear(table, cleanId);
                 return r || null;
+            });
+        }
+
+        // Guardado atómico de órdenes: la BD fusiona equipos/ejecuciones; nunca reemplaza el JSONB completo.
+        function cloudUpsert(table, rawId, obj) {
+            if (table !== 'hvac_orders') return cloudUpsertLegacy(table, rawId, obj);
+            const cleanId = cloudCleanId(rawId);
+            const payload = JSON.parse(JSON.stringify(obj));
+            const forceIds = window.__HVAC_FORCE_ORDER_EQUIPMENT_IDS === cleanId || !!payload.__hvacReplaceEquipmentIds;
+            if (forceIds) payload.__hvacReplaceEquipmentIds = true; // persiste en outbox si el dispositivo está offline
+            cloudGuardSize(table, cleanId, payload);
+            const durable = cloudOutboxAdd(table, cleanId, 'save', payload);
+            return cloudEnqueue(table + ':' + cleanId, async () => {
+                await durable;
+                let sendPayload = JSON.parse(JSON.stringify(payload));
+                delete sendPayload.__hvacReplaceEquipmentIds; // metadato local, nunca se almacena dentro del payload de la orden
+                // Mantener la externalización existente de fotos para no inflar el JSONB.
+                if (window.HVAC && HVAC.r2 && HVAC.r2.hasInline(sendPayload)) {
+                    const m = await HVAC.r2.externalize(sendPayload, table);
+                    if (m && m.size) {
+                        HVAC.r2.applyLocal(table, cleanId, m, { hvac_orders: workOrders, hvac_equipments: equipmentCatalog, hvac_clients: clientsCatalog });
+                    }
+                }
+                const r = await supabaseFetch('rpc/hvac_merge_order_payload', 'POST', {
+                    p_order_id: cleanId,
+                    p_payload: sendPayload,
+                    p_replace_equipment_ids: forceIds
+                }, null, { quiet: true });
+                if (r) {
+                    // Confirmar lectura de la fila antes de retirar la operación durable de la cola.
+                    const verify = await supabaseFetch('hvac_orders?id=eq.' + encodeURIComponent(cleanId) + '&select=id,payload', 'GET', null, null, { quiet: true });
+                    const remote = Array.isArray(verify) && verify[0] && verify[0].payload;
+                    const localExec = sendPayload.executions || {};
+                    const remoteExec = remote && remote.executions || {};
+                    const localIds = Array.isArray(sendPayload.equipmentIds) ? sendPayload.equipmentIds : [];
+                    const remoteIds = Array.isArray(remote && remote.equipmentIds) ? remote.equipmentIds : [];
+                    const localKeys = Object.keys(localExec);
+                    const keysPresent = localKeys.every(k => Object.prototype.hasOwnProperty.call(remoteExec, k));
+                    const idsPresent = localIds.every(id => remoteIds.some(x => String(x) === String(id)));
+                    if (remote && keysPresent && idsPresent) {
+                        window.__HVAC_ORDER_VERIFIED = window.__HVAC_ORDER_VERIFIED || {};
+                        window.__HVAC_ORDER_VERIFIED[cleanId] = Date.now();
+                        cloudOutboxClear(table, cleanId);
+                        return verify;
+                    }
+                    console.error('[HVAC Sync] La RPC respondió, pero la verificación no confirmó todos los datos locales. Se conserva la cola.', cleanId);
+                    return null;
+                }
+                // Sin RPC instalada o sin red: no se usa un upsert destructivo como alternativa.
+                console.error('[HVAC Sync] Guardado merge fallido; operación conservada en la cola offline.', cleanId);
+                return null;
             });
         }
 
@@ -6997,8 +7048,13 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
             order.equipmentIds = (order.equipmentIds || []).filter(id => id !== eqId);
             if (order.executions && order.executions[eqId]) delete order.executions[eqId];
+            // Acción explícita del administrador: permite retirar un equipo de la lista remota.
+            order.__hvacReplaceEquipmentIds = true;
+            window.__HVAC_FORCE_ORDER_EQUIPMENT_IDS = cloudCleanId(order.id);
 
             await cloudSaveOrder(order);
+            delete order.__hvacReplaceEquipmentIds;
+            window.__HVAC_FORCE_ORDER_EQUIPMENT_IDS = null;
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             renderOrderHubEquipments(order);
@@ -10008,5 +10064,213 @@ async function attDelete(id) {
 </script>
 
 <script id="footer-year">document.querySelectorAll('.js-year').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
+
+<script id="hvac-order-resilience-patch">
+/* HVAC ORDER RESILIENCE PATCH — sin cambios visuales.
+   Usa RPC atómica de fusión y conserva órdenes pendientes hasta verificar lectura remota. */
+(function () {
+  'use strict';
+  const VERIFIED = window.__HVAC_ORDER_VERIFIED || (window.__HVAC_ORDER_VERIFIED = Object.create(null));
+  const deepCopy = x => JSON.parse(JSON.stringify(x));
+  const arr = x => Array.isArray(x) ? x : [];
+  const orderId = x => String((x && (x.id || x.orderId || x.order_id)) || '');
+  const isCompleted = o => !!o && /^(COMPLETED|COMPLETADA|TERMINADA|FINALIZADA|BILLED)$/i.test(String(o.status || o.estado || ''));
+  const completeness = o => {
+    if (!o || typeof o !== 'object') return 0;
+    const ids = arr(o.equipmentIds), ex = arr(o.executions);
+    return (ids.length ? 10 + ids.length : 0) + (ex.length ? 100 + ex.length : 0)
+      + (o.clientSignature ? 2 : 0) + (o.technician ? 1 : 0);
+  };
+  function localOrder(id) {
+    let best = null;
+    const consider = v => {
+      if (!v) return;
+      if (typeof v === 'string') { try { consider(JSON.parse(v)); } catch (_) { return; } return; }
+      if (Array.isArray(v)) { v.forEach(consider); return; }
+      if (typeof v !== 'object') return;
+      if (orderId(v) === id && (!best || completeness(v) > completeness(best))) best = v;
+      ['orders','workOrders','hvac_orders','payload','data','records','items','backup'].forEach(k => {
+        if (v[k] != null && v[k] !== v) consider(v[k]);
+      });
+    };
+    try {
+      for (let i=0;i<localStorage.length;i++) {
+        const k=localStorage.key(i), raw=localStorage.getItem(k);
+        if (k && /ORDER|OUTBOX|BACKUP|HVAC/i.test(k) && raw) consider(raw);
+      }
+    } catch (_) {}
+    try {
+      const box = typeof cloudOutboxRead === 'function' ? cloudOutboxRead() : [];
+      arr(box).forEach(e => { if (e && e.table === 'hvac_orders' && String(e.id) === id) consider(e.payload); });
+    } catch (_) {}
+    return best ? deepCopy(best) : null;
+  }
+  async function findInIndexedDB(id) {
+    let best = null;
+    const consider = v => {
+      if (!v) return;
+      if (typeof v === 'string') { try { consider(JSON.parse(v)); } catch (_) {} return; }
+      if (Array.isArray(v)) { v.forEach(consider); return; }
+      if (typeof v !== 'object') return;
+      if (orderId(v) === id && (!best || completeness(v) > completeness(best))) best = v;
+      ['orders','workOrders','hvac_orders','payload','data','records','items','backup','value'].forEach(k => { if (v[k] != null && v[k] !== v) consider(v[k]); });
+    };
+    if (!('indexedDB' in window)) return null;
+    let dbs=[];
+    try { dbs = indexedDB.databases ? await indexedDB.databases() : []; } catch (_) {}
+    for (const info of dbs) {
+      if (!info || !info.name) continue;
+      let db;
+      try { db=await new Promise((resolve,reject)=>{ const req=indexedDB.open(info.name); req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); req.onblocked=()=>reject(new Error('blocked')); }); } catch (_) { continue; }
+      try {
+        for (const name of Array.from(db.objectStoreNames)) {
+          try {
+            const rows=await new Promise((resolve,reject)=>{ const tx=db.transaction(name,'readonly'), req=tx.objectStore(name).getAll(); req.onsuccess=()=>resolve(req.result||[]); req.onerror=()=>reject(req.error); });
+            rows.forEach(consider);
+          } catch (_) {}
+        }
+      } finally { try { db.close(); } catch (_) {} }
+    }
+    return best ? deepCopy(best) : null;
+  }
+  async function bestLocalOrder(id) {
+    const a=localOrder(id), b=await findInIndexedDB(id);
+    return completeness(b)>completeness(a) ? b : a;
+  }
+  function hasRequiredData(o) {
+    return !!o && arr(o.equipmentIds).length > 0 && arr(o.executions).length > 0;
+  }
+  async function readRemoteOrder(id) {
+    const rows=await supabaseFetch('hvac_orders?select=id,payload&id=eq.'+encodeURIComponent(id), 'GET', null, null, {quiet:true});
+    return Array.isArray(rows) && rows[0] ? (rows[0].payload || rows[0]) : null;
+  }
+  async function verifiedRemoteSave(order) {
+    if (!order || !order.id || typeof supabaseFetch !== 'function') return false;
+    const id = String(order.id);
+    let payload = deepCopy(order);
+    // La cola duradera se escribe ANTES de intentar la red. Si falla RPC/lectura, queda pendiente.
+    let durable = cloudOutboxAdd('hvac_orders', cloudCleanId(id), 'save', payload);
+    await durable;
+    try {
+      // Mantiene el flujo existente de externalización de fotos, si está disponible.
+      if (window.HVAC && HVAC.r2 && HVAC.r2.hasInline && HVAC.r2.hasInline(payload)) {
+        const meta = await HVAC.r2.externalize(payload, 'hvac_orders');
+        if (meta && meta.size && HVAC.r2.applyLocal) HVAC.r2.applyLocal('hvac_orders', cloudCleanId(id), meta,
+          { hvac_orders: workOrders, hvac_equipments: equipmentCatalog, hvac_clients: clientsCatalog });
+        // Persistir la versión de cola tras procesar fotos/URLs.
+        await cloudOutboxAdd('hvac_orders', cloudCleanId(id), 'save', payload);
+      }
+      // RPC hace la fusión dentro de una transacción en la base de datos; no envía un reemplazo destructivo.
+      const result = await supabaseFetch('rpc/hvac_merge_order_payload', 'POST', {
+        p_order_id: id,
+        p_payload: payload,
+        p_replace_equipment_ids: false
+      }, null, { quiet: true });
+      if (!result) return false;
+      const remote = await readRemoteOrder(id);
+      const remoteExec = remote && remote.executions && typeof remote.executions === 'object' ? remote.executions : {};
+      const localExec = payload.executions && typeof payload.executions === 'object' ? payload.executions : {};
+      const remoteIds = arr(remote && remote.equipmentIds).map(String);
+      const localIds = arr(payload.equipmentIds).map(String);
+      const idsPresent = localIds.every(x => remoteIds.includes(x));
+      const execPresent = Object.entries(localExec).every(([key, val]) => {
+        const got = remoteExec[key];
+        if (!got) return false;
+        const a = Date.parse(got.timestamp || '');
+        const b = Date.parse(val && val.timestamp || '');
+        return Number.isFinite(a) && Number.isFinite(b) ? a >= b : true;
+      });
+      if (!remote || !idsPresent || !execPresent) return false;
+      VERIFIED[id] = true;
+      try { cloudOutboxClear('hvac_orders', cloudCleanId(id)); } catch (_) {}
+      return true;
+    } catch (err) {
+      console.warn('[HVAC resilience] La orden sigue pendiente de sincronización:', id, err);
+      return false;
+    }
+  }
+
+  // Evita que la limpieza interna de cloudUpsert purgue una orden terminada antes de verificarla.
+  const originalClear = window.cloudOutboxClear;
+  if (typeof originalClear === 'function') {
+    window.cloudOutboxClear = function(table, id) {
+      if (table === 'hvac_orders' && !VERIFIED[String(id)]) {
+        const pending = (typeof cloudOutboxRead === 'function' ? cloudOutboxRead() : []).find(e => e.table === table && String(e.id) === String(id));
+        const p = pending && pending.payload;
+        const local = localOrder(String(id));
+        const candidate = p && completeness(p) >= completeness(local || {}) ? p : local;
+        if (isCompleted(candidate)) return;
+      }
+      return originalClear.apply(this, arguments);
+    };
+  }
+
+  // Guardado reforzado: para órdenes terminadas exige verificación de lectura tras escritura.
+  const originalCloudSaveOrder = window.cloudSaveOrder;
+  window.cloudSaveOrder = async function(order) {
+    if (!order || !order.id) return null;
+    const local = await bestLocalOrder(String(order.id));
+    if (local && completeness(local) > completeness(order)) {
+      order = Object.assign({}, order, local, {
+        id: order.id,
+        status: isCompleted(order) ? order.status : (local.status || order.status),
+        equipmentIds: arr(local.equipmentIds).length ? local.equipmentIds : arr(order.equipmentIds),
+        executions: arr(local.executions).length ? local.executions : arr(order.executions)
+      });
+    }
+    try {
+      localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(
+        (Array.isArray(workOrders) ? workOrders : []).map(o => String(o.id) === String(order.id) ? order : o)
+      ));
+    } catch (_) {}
+    // Todas las órdenes usan la RPC de fusión; no dejar una ruta alternativa de full overwrite.
+    const ok = await verifiedRemoteSave(order);
+    return ok ? order : null;
+  };
+
+  // Repara al abrir una orden, en segundo plano y sin tocar el DOM salvo el render normal del hub.
+  const originalOpenOrderHub = window.openOrderHub;
+  window.openOrderHub = async function(orderIdArg) {
+    const id=String(orderIdArg || '');
+    let local=await bestLocalOrder(id);
+    let remote=null;
+    try { remote=await readRemoteOrder(id); } catch (_) {}
+    const localIsBetter = local && completeness(local) > completeness(remote);
+    let order=(Array.isArray(workOrders) ? workOrders.find(o=>String(o.id)===id) : null);
+    if (localIsBetter) {
+      order=Object.assign({}, remote || {}, local);
+      if (Array.isArray(workOrders)) {
+        const i=workOrders.findIndex(o=>String(o.id)===id);
+        if (i>=0) workOrders[i]=order; else workOrders.push(order);
+      }
+      try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (_) {}
+      if (isCompleted(order) && hasRequiredData(order)) verifiedRemoteSave(order).catch(()=>{});
+    } else if (remote && order && completeness(remote)>completeness(order)) {
+      order=Object.assign({}, order, remote);
+      const i=workOrders.findIndex(o=>String(o.id)===id); if(i>=0) workOrders[i]=order;
+    }
+    if (originalOpenOrderHub) return originalOpenOrderHub.call(this, id);
+  };
+
+  // Evita que el reconciliador borre de forma local una orden terminada por una entrada delete.
+  const originalReconcile = window.cloudReconcileOutbox;
+  window.cloudReconcileOutbox = function() {
+    try {
+      const box=cloudOutboxRead();
+      const safe=box.filter(e=>{
+        if(e && e.table==='hvac_orders' && e.op==='delete') {
+          const o=localOrder(String(e.id));
+          if(isCompleted(o)) return false;
+        }
+        return true;
+      });
+      if(safe.length!==box.length) cloudOutboxWrite(safe);
+    } catch (_) {}
+    return originalReconcile && originalReconcile.apply(this, arguments);
+  };
+  console.info('[HVAC resilience] Protección de órdenes cargada.');
+})();
+</script>
+
 </body>
 </html>
