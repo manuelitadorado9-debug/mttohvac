@@ -1443,7 +1443,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     <select id="att-f-state" class="input-box text-xs"><option value="">Todos</option><option value="in">Dentro de rango</option><option value="out">Fuera de rango</option><option value="none">Sede sin coordenadas</option></select></div>
                 <div class="grid grid-cols-[1fr_auto] gap-2 col-span-2 lg:col-span-1">
                     <button type="button" onclick="attLoad()" class="btn-teal text-xs flex-1 justify-center"><i class="fa-solid fa-magnifying-glass"></i> Consultar</button>
-                    <button type="button" onclick="attExportCsv()" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl" title="Exportar CSV"><i class="fa-solid fa-file-csv"></i></button>
+                    <button type="button" onclick="attExportXlsx()" class="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl" title="Exportar a Excel"><i class="fa-solid fa-file-excel"></i></button>
                 </div>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -5481,7 +5481,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 const imageX = x + 6;
                 const imageY = y + 6;
                 const maxImageW = cellW - 12;
-                const maxImageH = 86;
+                const maxImageH = 80;
                 if (item.receiptImg) {
                     try {
                         const props = doc.getImageProperties(item.receiptImg);
@@ -5507,7 +5507,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     doc.text('Sin foto de factura / comprobante', x + cellW / 2, imageY + maxImageH / 2, { align: 'center' });
                 }
 
-                const textY = y + 98;
+                const textY = y + 92;
                 const centerName = item.clientName || item.client || 'Cliente no asignado';
                 const centerNumber = item.costCenterNumber || 'Sin número registrado';
                 doc.setTextColor(15, 23, 42);
@@ -5525,7 +5525,12 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(8);
                 doc.setTextColor(100, 116, 139);
-                doc.text(`Fecha: ${item.date || '-'}`, x + 6, numberY + centerNumberLines.length * 4.5 + 2);
+                const fechaY = numberY + centerNumberLines.length * 4.5 + 2;
+                doc.text(`Fecha: ${item.date || '-'}`, x + 6, fechaY);
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10);
+                doc.setTextColor(15, 23, 42);
+                doc.text(`Valor de la factura: $ ${Number(item.amount || 0).toLocaleString('es-CO')}`, x + 6, fechaY + 6);
             }
 
             const stamp = new Date().toISOString().slice(0, 10);
@@ -6381,6 +6386,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             };
 
             const idx = clientsCatalog.findIndex(c => c.id === id);
+            const prevClient = idx >= 0 ? Object.assign({}, clientsCatalog[idx]) : null;   // para detectar si cambió la ubicación
             if (idx >= 0) clientsCatalog[idx] = clientObj;
             else clientsCatalog.push(clientObj);
 
@@ -6392,6 +6398,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     if (typeof attLoad === 'function' && document.getElementById('view-admin-attendance') && !document.getElementById('view-admin-attendance').classList.contains('hidden')) attLoad();
                 }
             } catch (e) { console.warn('recalculo marcaciones', e); }
+            try { attAfterClientSaved(clientObj, prevClient); } catch (e) { console.warn(e); }   // reevalúa y guarda el rango GPS de TODAS las marcaciones del cliente
             localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(clientsCatalog));
             populateClientDropdowns();
             renderClientCatalog();
@@ -7328,6 +7335,30 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (st && st.failed) showToast(`${st.failed} de ${st.total} foto(s) no se pudieron descargar y no aparecerán en el PDF. Revisa la conexión o el CORS del bucket.`, 'error');
         }
 
+        // ===== Mes y fecha de ejecución para la cabecera del informe PDF =====
+        const AFC_MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const AFC_DIAS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        function afcExecInfo(order, execs) {
+            const p2 = n => String(n).padStart(2, '0'), m = String(order.date || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+            const info = { month: 'No registrado', date: 'No registrada', short: '', time: 'No registrada' };
+            if (m) {                                             // la fecha "YYYY-MM-DD" se lee tal cual: sin desfases de zona horaria
+                const y = +m[1], mo = +m[2], d = +m[3], wd = AFC_DIAS[new Date(y, mo - 1, d).getDay()];
+                info.month = `${AFC_MESES[mo - 1]} ${y}`;
+                info.short = `${p2(d)}/${p2(mo)}/${y}`;
+                info.date = `${wd.charAt(0).toUpperCase() + wd.slice(1)}, ${d} de ${AFC_MESES[mo - 1].toLowerCase()} de ${y}`;
+            }
+            // Hora real de la intervención: marcas de tiempo con que el técnico guardó cada equipo
+            const ts = (execs || []).map(e => e && e.timestamp ? new Date(e.timestamp) : null).filter(t => t && !isNaN(t)).sort((a, b) => a - b);
+            if (ts.length) {
+                const day = t => `${p2(t.getDate())}/${p2(t.getMonth() + 1)}/${t.getFullYear()}`, hm = t => `${p2(t.getHours())}:${p2(t.getMinutes())}`, a = ts[0], z = ts[ts.length - 1];
+                info.time = day(a) === day(z) ? `${day(a)} · ${hm(a)}${hm(a) === hm(z) ? '' : ' – ' + hm(z)}` : `${day(a)} ${hm(a)} → ${day(z)} ${hm(z)}`;
+            }
+            return info;
+        }
+        function afcSetMeta(doc, order, info) {                  // metadatos del archivo PDF
+            try { doc.setProperties({ title: `Informe de mantenimiento ${order.id} - ${order.client || ''}`, subject: `Mes de ejecución: ${info.month} · Fecha: ${info.short || info.date}`, author: 'Alejandro Faccini y Compañía S.A.S.', keywords: `${order.id}, ${info.month}` }); } catch (e) { console.warn('[PDF] metadatos', e); }
+        }
+
         function afcPdfCreate(orderId) {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('portrait', 'mm', 'letter');
@@ -7632,8 +7663,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             ctx.paragraph("A través del presente informe oficial, se detallan las actividades técnicas y mediciones llevadas a cabo en las instalaciones del cliente.");
             ctx.gap(3);
             ctx.sectionTitle("Datos Generales de la Orden", 24);
+            const execInfo = afcExecInfo(order, eqIds.map(id => { const q = equipmentCatalog.find(e => e.id === id || e.code === id); return order.executions && (order.executions[id] || (q && (order.executions[q.id] || order.executions[q.code]))); }));
+            afcSetMeta(doc, order, execInfo);
             ctx.infoGrid([
-                ["Cliente / Sede", order.client || '-'], ["Fecha de ejecución", order.date || '-'],
+                ["Cliente / Sede", order.client || '-'], ["Mes de ejecución", execInfo.month],
+                ["Fecha de ejecución", execInfo.date], ["Intervención del técnico", execInfo.time],
                 ["Técnico encargado", order.technician || 'N/A'], ["Equipos reportados", String(eqIds.length)]
             ]);
 
@@ -7779,6 +7813,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             afcReportPhotoStats(await afcPreloadPhotos(exec.photos || []));
 
             const ctx = afcPdfCreate(order.id);
+            const execInfo = afcExecInfo(order, [exec]);
+            afcSetMeta(ctx.doc, order, execInfo);
+            ctx.sectionTitle('Datos de la Orden', 22);
+            ctx.infoGrid([
+                ['Orden', order.id], ['Cliente / Sede', order.client || '-'],
+                ['Mes de ejecución', execInfo.month], ['Fecha de ejecución', execInfo.date],
+                ['Técnico encargado', order.technician || 'N/A'], ['Intervención del técnico', execInfo.time]
+            ]);
             afcRenderEquipment(ctx, order, eq, exec, typeKey, formCfg);
 
             ctx.doc.save(`Informe_Equipo_${eq.code}_${order.id}.pdf`);
@@ -8489,7 +8531,7 @@ async function attLoad() {
     const rows = await supabaseFetch(q, 'GET');
     if (!Array.isArray(rows)) { empty.textContent = 'No se pudo consultar. ¿Ejecutaste el SQL de la tabla "asistencia" en Supabase?'; body.innerHTML = ''; return; }
     const st = v('att-f-state');
-    attRows = rows.filter(r => !st || (st === 'in' && r.dentro_rango === true) || (st === 'out' && r.dentro_rango === false) || (st === 'none' && r.dentro_rango == null));
+    attRows = rows.map(attFix).filter(r => !st || (st === 'in' && r.dentro_rango === true) || (st === 'out' && r.dentro_rango === false) || (st === 'none' && r.dentro_rango == null));
     attRender();
 }
 function attRender() {
@@ -8500,9 +8542,10 @@ function attRender() {
     document.getElementById('att-k-in').textContent = k.in; document.getElementById('att-k-out').textContent = k.out; document.getElementById('att-k-none').textContent = k.none;
     empty.style.display = attRows.length ? 'none' : 'block'; empty.textContent = 'Sin marcaciones para los filtros seleccionados.';
     body.innerHTML = attRows.map(r => {
-        const badge = r.dentro_rango === true ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2 py-1 rounded-full">Dentro de rango</span>'
+        let badge = r.dentro_rango === true ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 font-black px-2 py-1 rounded-full">Dentro de rango</span>'
             : r.dentro_rango === false ? '<span class="bg-rose-50 text-rose-700 border border-rose-200 font-black px-2 py-1 rounded-full">Fuera de rango</span>'
             : '<span class="bg-amber-50 text-amber-700 border border-amber-200 font-black px-2 py-1 rounded-full">Sede sin coordenadas</span>';
+        if (r._recalc) badge += ' <i class="fa-solid fa-rotate text-slate-400" title="Reevaluada con la ubicación actual del cliente"></i>';
         const tipo = r.tipo === 'CHECK-IN' ? '<span class="text-emerald-700 font-black">ENTRADA</span>' : '<span class="text-amber-700 font-black">SALIDA</span>';
         const dist = r.distancia_m == null ? '—' : `${esc(r.distancia_m)} m / ${esc(r.radio_permitido_m)} m`;
         const map = r.lat != null ? `<a class="text-blue-600 font-bold" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${encodeURIComponent(r.lat + ',' + r.lng)}"><i class="fa-solid fa-map-location-dot"></i> Ver</a>` : '—';
@@ -8516,6 +8559,129 @@ function attExportCsv() {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
     a.download = 'asistencia_' + new Date().toISOString().slice(0, 10) + '.csv'; a.click();
+}
+/* ===== Reevaluación del rango GPS con la ubicación ACTUAL del cliente =====
+   El estado "dentro/fuera de rango" se calcula siempre contra las coordenadas y el radio vigentes del cliente:
+   al corregir la ubicación, todas las marcaciones (pasadas y futuras) se reevalúan solas. */
+const ATT_RADIO_DEFAULT_M = 150;                                   // mismo radio por defecto que la app del técnico
+function attNum(v) { const n = parseFloat(v); return isFinite(n) ? n : null; }
+function attDistance(lat1, lng1, lat2, lng2) {                     // Haversine, idéntico al de la app del técnico
+    const R = 6371000, k = Math.PI / 180, dLat = (lat2 - lat1) * k, dLng = (lng2 - lng1) * k;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * k) * Math.cos(lat2 * k) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+}
+function attClientOf(r) {
+    const id = r.cliente_id != null ? String(r.cliente_id) : '';
+    return (id && clientsCatalog.find(c => String(c.id) === id)) || clientsCatalog.find(c => normText(c.name) === normText(r.cliente_nombre)) || null;
+}
+function attGeoOf(c) {
+    const lat = attNum(c.lat) ?? attNum(c.latitud), lng = attNum(c.lng) ?? attNum(c.longitud);
+    return { lat, lng, radius: parseInt(c.geoRadius, 10) || ATT_RADIO_DEFAULT_M };
+}
+function attFix(r) {                                               // devuelve una copia con el estado recalculado (o la misma fila si no aplica)
+    const c = attClientOf(r);
+    if (!c || attNum(r.lat) == null || attNum(r.lng) == null) return r;
+    const g = attGeoOf(c), o = Object.assign({}, r);
+    o.radio_permitido_m = g.radius;
+    if (g.lat == null || g.lng == null) { o.sede_lat = null; o.sede_lng = null; o.distancia_m = null; o.dentro_rango = null; }
+    else { o.sede_lat = g.lat; o.sede_lng = g.lng; o.distancia_m = Math.round(attDistance(+r.lat, +r.lng, g.lat, g.lng)); o.dentro_rango = o.distancia_m <= g.radius; }
+    o._recalc = o.dentro_rango !== r.dentro_rango;                  // true = el estado cambió respecto a lo guardado
+    return o;
+}
+const attGeoSig = c => { if (!c) return ''; const g = attGeoOf(c); return [g.lat, g.lng, g.radius, String(c.address || '').trim().toLowerCase()].join('|'); };
+const attSameGeo = (a, b) => (a == null && b == null) || (a != null && b != null && Math.abs(+a - +b) < 1e-7);
+// Guarda en la base de datos el estado corregido (si el servidor lo permite). Sin permisos, la vista sigue reevaluándose dinámicamente.
+async function attPersistClientRecalc(client) {
+    const enc = encodeURIComponent, qo = { quiet: true };
+    const [a, b] = await Promise.all([
+        supabaseFetch('asistencia?select=*&cliente_id=eq.' + enc(String(client.id)) + '&order=hora.asc&limit=5000', 'GET', null, null, qo),
+        supabaseFetch('asistencia?select=*&cliente_id=is.null&cliente_nombre=eq.' + enc(client.name) + '&order=hora.asc&limit=5000', 'GET', null, null, qo)]);
+    const rows = [].concat(Array.isArray(a) ? a : [], Array.isArray(b) ? b : []);
+    const todo = [];
+    rows.forEach(r => { const f = attFix(r); if (f !== r && (f.dentro_rango !== r.dentro_rango || f.distancia_m !== r.distancia_m || f.radio_permitido_m !== r.radio_permitido_m || !attSameGeo(f.sede_lat, r.sede_lat) || !attSameGeo(f.sede_lng, r.sede_lng))) todo.push([r, f]); });
+    const out = { total: rows.length, changed: todo.length, flipped: todo.filter(([r, f]) => f.dentro_rango !== r.dentro_rango).length, saved: 0 };
+    if (!todo.length || !attIsAdmin()) return out;
+    const me = attMe(), motivo = 'Recálculo automático por cambio de ubicación del cliente ' + client.name;
+    const send = async ([r, f]) => {
+        const patch = {};
+        ['tipo', 'fecha', 'hora', 'tecnico_id', 'tecnico_nombre', 'cliente_id', 'cliente_nombre'].forEach(k => { if (r[k] != null) patch[k] = r[k]; });
+        Object.assign(patch, { sede_lat: f.sede_lat, sede_lng: f.sede_lng, radio_permitido_m: f.radio_permitido_m, distancia_m: f.distancia_m, dentro_rango: f.dentro_rango });
+        return attRpc('admin_asistencia_update', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_id: r.id, p_patch: patch, p_motivo: motivo });
+    };
+    const first = await send(todo[0]);                              // prueba: ¿el servidor acepta y guarda estos campos?
+    if (!first.ok) return out;
+    const chk = await supabaseFetch('asistencia?select=id,dentro_rango,distancia_m&id=eq.' + enc(todo[0][0].id), 'GET', null, null, qo);
+    if (!(Array.isArray(chk) && chk[0] && chk[0].dentro_rango === todo[0][1].dentro_rango && chk[0].distancia_m === todo[0][1].distancia_m)) return out;   // el servidor ignora estos campos
+    out.saved = 1;
+    let i = 1;
+    await Promise.all(Array.from({ length: 4 }, async () => { while (i < todo.length) { const it = todo[i++]; if ((await send(it)).ok) out.saved++; } }));
+    return out;
+}
+async function attAfterClientSaved(client, prev) {
+    if (prev && attGeoSig(prev) === attGeoSig(client)) return;     // ubicación, dirección y radio sin cambios
+    const v = document.getElementById('view-admin-attendance');
+    if (v && !v.classList.contains('hidden')) attLoad();           // la vista ya se reevalúa con la ubicación nueva
+    try {
+        const r = await attPersistClientRecalc(client);
+        if (r.changed) showToast(r.changed + ' marcación(es) reevaluada(s) con la nueva ubicación' + (r.flipped ? ' (' + r.flipped + ' cambiaron de estado)' : '') + (r.saved ? ' y actualizadas.' : '.'));
+        if (r.saved && v && !v.classList.contains('hidden')) attLoad();
+    } catch (e) { console.warn('recálculo de marcaciones', e); }
+}
+
+/* ===== Exportar a Excel (Asistencia y GPS): tabla limpia, cronológica y con formato ===== */
+let attXlsxStyleP = null;
+function attLoadStyledXlsx() {            // SheetJS gratuito no escribe estilos; xlsx-js-style es compatible y los añade. Si no carga, se exporta sin colores.
+    if (window.__xlsxStyled) return Promise.resolve(true);
+    if (!attXlsxStyleP) attXlsxStyleP = new Promise(res => {
+        const t = setTimeout(() => res(false), 8000), sc = document.createElement('script');
+        sc.src = 'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+        sc.onload = () => { clearTimeout(t); window.__xlsxStyled = true; res(true); };
+        sc.onerror = () => { clearTimeout(t); res(false); };
+        document.head.appendChild(sc);
+    });
+    return attXlsxStyleP;
+}
+async function attExportXlsx() {
+    if (!attRows.length) return showToast('No hay datos para exportar.', 'error');
+    if (!window.XLSX) return showToast('No se pudo cargar el generador de Excel. Verifica tu conexión.', 'error');
+    const styled = await attLoadStyledXlsx(), X = window.XLSX;
+    const rows = [...attRows].sort((a, b) => (new Date(a.hora) - new Date(b.hora)) || String(a.fecha).localeCompare(String(b.fecha)));   // cronológico ascendente
+    const HEAD = ['Fecha', 'Hora', 'Técnico', 'Cliente', 'Tipo de Marcación', 'Coordenadas / Ubicación GPS', 'Distancia a la sede (m)', 'Radio permitido (m)', 'Estado de rango', 'Precisión GPS (m)'];
+    const thin = c => ({ style: 'thin', color: { rgb: c } }), box = c => ({ top: thin(c), bottom: thin(c), left: thin(c), right: thin(c) });
+    const sHead = { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { patternType: 'solid', fgColor: { rgb: '0F766E' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: box('0B5C56') };
+    const body = (zebra, h, extra) => Object.assign({ font: { sz: 10, color: { rgb: '0F172A' } }, alignment: { horizontal: h, vertical: 'center' }, border: box('E2E8F0') }, zebra ? { fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } } } : {}, extra || {});
+    const ws = {}, put = (r, c, cell) => { ws[X.utils.encode_cell({ r, c })] = cell; };
+    const text = (v, s) => ({ t: 's', v: String(v == null ? '' : v), s });
+    HEAD.forEach((h, c) => put(0, c, text(h, sHead)));
+    const widths = HEAD.map(h => Math.min(30, Math.max(10, h.length * 0.9)));
+    const grow = (c, str) => { widths[c] = Math.min(46, Math.max(widths[c], String(str).length + 2)); };
+    rows.forEach((r, i) => {
+        const R = i + 1, z = i % 2 === 1, d = new Date(r.hora), m = String(r.fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        put(R, 0, m ? { t: 'n', v: Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(1899, 11, 30)) / 864e5), z: 'dd/mm/yyyy', s: body(z, 'center') } : text(r.fecha, body(z, 'center')));
+        put(R, 1, isNaN(d) ? text('', body(z, 'center')) : { t: 'n', v: (d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds()) / 86400, z: 'hh:mm', s: body(z, 'center') });
+        put(R, 2, text(r.tecnico_nombre, body(z, 'left'))); grow(2, r.tecnico_nombre || '');
+        put(R, 3, text(r.cliente_nombre, body(z, 'left'))); grow(3, r.cliente_nombre || '');
+        put(R, 4, text(r.tipo === 'CHECK-IN' ? 'ENTRADA' : 'SALIDA', body(z, 'center', { font: { sz: 10, bold: true, color: { rgb: r.tipo === 'CHECK-IN' ? '047857' : 'B45309' } } })));
+        const lat = attNum(r.lat), lng = attNum(r.lng);
+        if (lat != null && lng != null) {
+            const g = lat.toFixed(6) + ', ' + lng.toFixed(6);
+            put(R, 5, { t: 's', v: g, l: { Target: 'https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng), Tooltip: 'Abrir en Google Maps' }, s: body(z, 'left', { font: { sz: 10, color: { rgb: '2563EB' }, underline: true } }) }); grow(5, g);
+        } else put(R, 5, text('Sin GPS', body(z, 'left', { font: { sz: 10, italic: true, color: { rgb: '94A3B8' } } })));
+        const num = (c, v) => put(R, c, attNum(v) == null ? text('', body(z, 'center')) : { t: 'n', v: attNum(v), z: '#,##0', s: body(z, 'center') });
+        num(6, r.distancia_m); num(7, r.radio_permitido_m);
+        const st = r.dentro_rango === true ? ['Dentro de rango', '047857'] : r.dentro_rango === false ? ['Fuera de rango', 'BE123C'] : ['Sede sin coordenadas', 'B45309'];
+        put(R, 8, text(st[0], body(z, 'center', { font: { sz: 10, bold: true, color: { rgb: st[1] } } }))); grow(8, st[0]);
+        num(9, r.precision_m);
+    });
+    ws['!ref'] = X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: HEAD.length - 1 } });
+    ws['!cols'] = widths.map(w => ({ wch: Math.round(w) }));
+    ws['!rows'] = [{ hpt: 30 }];
+    ws['!autofilter'] = { ref: ws['!ref'] };
+    ws['!freeze'] = { xSplit: '0', ySplit: '1', topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+    const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'Asistencia y GPS');
+    const f = document.getElementById('att-f-from').value, t = document.getElementById('att-f-to').value;
+    X.writeFile(wb, 'Asistencia_GPS_' + (f || 'inicio') + (t ? '_a_' + t : '') + '.xlsx', { cellStyles: true });
+    showToast('Excel descargado: ' + rows.length + ' marcación(es)' + (styled ? '.' : ' (formato básico).'));
 }
 /* Geolocalización de la sede (formulario de cliente) */
 function cliUseMyLocation() {
@@ -8866,7 +9032,7 @@ async function planDayOpen(day) {
     }).join('');
     const progList = Array.isArray(prog) ? prog : [];
     const progHtml = progList.map(i => { const t = (PROG_T[i.tipo] || PROG_T.VISITA_LIBRE); return `<div class="dm-row"><div style="min-width:0"><b>${esc(progTechName(i.tecnico_id))}</b> · ${esc(progClientName(i.cliente_id) || i.lugar || 'Sin lugar')}${i.descripcion_labor ? `<div class="dm-sub">${esc(i.descripcion_labor)}</div>` : ''}</div><span class="dm-badge" style="color:${t[0]};border-color:${t[0]}55;background:${t[1]}">${esc(t[2])}</span></div>`; }).join('');
-    const marks = Array.isArray(asis) ? asis : [];
+    const marks = (Array.isArray(asis) ? asis : []).map(attFix);
     const markHtml = marks.map(m => { const ok = m.dentro_rango === true, bad = m.dentro_rango === false, c = ok ? '#16a34a' : bad ? '#e11d48' : '#d97706';
         return `<div class="dm-row"><div style="min-width:0"><b>${esc(m.tecnico_nombre)}</b> · ${m.tipo === 'CHECK-IN' ? 'Entrada' : 'Salida'} ${esc(dmTime(m.hora))}<div class="dm-sub">${esc(m.cliente_nombre)}${m.distancia_m != null ? ' · ' + esc(m.distancia_m) + ' m' : ''}</div></div>
           <span style="display:flex;align-items:center;gap:8px">${m.foto_url ? `<a href="${esc(m.foto_url)}" target="_blank" rel="noopener"><img src="${esc(m.foto_url)}" loading="lazy" alt="Foto" style="width:38px;height:38px;border-radius:9px;object-fit:cover"></a>` : ''}<span class="dm-badge" style="color:${c};border-color:${c}55;background:${c}14">${ok ? 'En rango' : bad ? 'Fuera de rango' : 'Sin coordenadas'}</span></span></div>`; }).join('');
@@ -9655,6 +9821,53 @@ async function attDelete(id) {
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   window.addEventListener('load', init);
+})();
+</script>
+
+<style id="row-dblclick-css">
+/* Filas con acción de edición: cursor de mano y doble toque sin zoom */
+#app-main tbody tr{touch-action:manipulation}
+#app-main tbody tr:not([onclick]):has(button .fa-pen,button .fa-pen-to-square,button .fa-receipt){cursor:pointer}
+</style>
+<script id="row-dblclick-js">
+/* Doble clic (o doble toque) en una fila = pulsar su botón "Editar" (en Facturación: "Facturar"/"Editar").
+   Se ejecuta el MISMO onclick del botón, así que abre exactamente el mismo modal/formulario. */
+(function () {
+  'use strict';
+  if (window.__rowDbl) return; window.__rowDbl = true;
+  var SKIP = 'button, a, input, select, textarea, label, img, video, summary, [contenteditable="true"]';
+  var MODAL = '.modal-backdrop, .mx-modal, [role="dialog"]';
+  function isDanger(b) { return !!b.querySelector('.fa-trash, .fa-trash-can, .fa-xmark') || /elimin|borrar|revert|quitar/i.test(b.title || '') || b.matches('.text-rose-600, .text-red-600'); }
+  function isEdit(b) { return !!b.querySelector('.fa-pen, .fa-pen-to-square, .fa-pencil, .fa-edit, .fa-receipt') || /^\s*editar/i.test(b.title || '') || /^\s*(editar|facturar)\b/i.test(b.textContent || ''); }
+  function editButton(tr) { var bs = tr.querySelectorAll('button'); for (var i = 0; i < bs.length; i++) { if (!bs[i].disabled && !isDanger(bs[i]) && isEdit(bs[i])) return bs[i]; } return null; }
+  function rowOf(t) {                                     // solo filas del panel principal (no modales) y que no tengan ya un clic propio
+    var tr = t && t.closest ? t.closest('tbody > tr') : null;
+    return (tr && tr.closest('#app-main') && !tr.closest(MODAL) && !tr.hasAttribute('onclick')) ? tr : null;
+  }
+  var lastFire = 0;
+  function fire(tr) {
+    var b = editButton(tr); if (!b) return false;
+    if (Date.now() - lastFire < 700) return true;         // evita doble disparo (dblclick + doble toque)
+    lastFire = Date.now();
+    var sel = window.getSelection && window.getSelection(); if (sel && sel.removeAllRanges) sel.removeAllRanges();
+    b.click();
+    return true;
+  }
+  document.addEventListener('mousedown', function (e) {   // evita que el doble clic seleccione texto
+    if (e.detail > 1 && !e.target.closest(SKIP)) { var tr = rowOf(e.target); if (tr && editButton(tr)) e.preventDefault(); }
+  });
+  document.addEventListener('dblclick', function (e) {
+    if (e.target.closest(SKIP)) return;
+    var tr = rowOf(e.target); if (tr) fire(tr);
+  });
+  var tap = { tr: null, t: 0, x: 0, y: 0 };               // doble toque en pantallas táctiles (iOS no emite dblclick)
+  document.addEventListener('pointerup', function (e) {
+    if (e.pointerType !== 'touch' || e.target.closest(SKIP)) return;
+    var tr = rowOf(e.target); if (!tr) { tap.tr = null; return; }
+    var now = Date.now();
+    if (tap.tr === tr && now - tap.t < 350 && Math.abs(e.clientX - tap.x) < 24 && Math.abs(e.clientY - tap.y) < 24) { tap.tr = null; fire(tr); }
+    else tap = { tr: tr, t: now, x: e.clientX, y: e.clientY };
+  });
 })();
 </script>
 </body>
