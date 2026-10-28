@@ -928,6 +928,114 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
 /* Admin: velo de "procesando" con entrada suave */
 #app-processing-overlay.is-visible{animation:fadeIn .18s ease both}
 </style>
+
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<script id="hvac-security">
+/* HVAC · Blindaje básico del cliente
+   1) Sanitización anti-XSS de textos (formularios y cuerpos enviados a Supabase)
+   2) Validación de peticiones REST (endpoint, método, filtros obligatorios, tamaños)
+   3) Límite de ritmo (rate limit) + enfriamiento ante 429 para evitar ráfagas automatizadas
+   Nota: son defensas del lado del cliente; la protección real contra abuso debe reforzarse en Supabase (RLS / límites). */
+(function (w) {
+  'use strict';
+  if (w.HVACSec) return;
+
+  /* ---------- 1) Sanitización ---------- */
+  var CTRL  = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u2028\u2029\u202A-\u202E\uFEFF]/g;               // control / invisibles / bidi
+  var TAGS  = /<\s*\/?\s*(?:script|iframe|frame|frameset|object|embed|applet|style|link|meta|base|form|svg|math|template|noscript)\b[^>]*>?/gi;
+  var EVTAG = /<[^>]*\bon[a-z]{3,20}\s*=[^>]*>?/gi;                                                          // <img onerror=...>
+  var BLOCK = /<\s*(script|style|iframe|object|embed|noscript|template)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi;     // bloque completo con su contenido
+  var JSTAG = /<[^>]*\b(?:javascript|vbscript)\s*:[^>]*>?/gi;                                                 // <a href="javascript:...">
+  var PROTO = /\b(?:javascript|vbscript)\s*:|data\s*:\s*text\/html/gi;
+  function scrub(s) {                                                                                         // quita solo lo peligroso, no recorta ni altera el resto
+    if (s.indexOf('<') > -1 || /(?:javascript|vbscript|data)\s*:/i.test(s)) s = s.replace(BLOCK, '').replace(TAGS, '').replace(EVTAG, '').replace(JSTAG, '').replace(PROTO, '');
+    return s.replace(CTRL, '');
+  }
+  function clean(v, max) {
+    if (typeof v !== 'string' || !v) return v;
+    var s = scrub(v).trim();
+    return (max && s.length > max) ? s.slice(0, max) : s;
+  }
+  var SKIP_KEY = /^(?:password|passwordhash|pass|hash|token|apikey)$/i, BAD_KEY = /^(?:__proto__|constructor|prototype)$/;
+  var BINARY = /^(?:data:(?:image|application\/pdf)\/|blob:|https?:\/\/)/i;
+  function deep(v, d) {
+    if (typeof v === 'string') return (v.length > 20000 || BINARY.test(v)) ? v : scrub(v);
+    if (!v || typeof v !== 'object' || d > 10) return v;
+    if (Array.isArray(v)) return v.map(function (x) { return deep(x, d + 1); });
+    if (Object.prototype.toString.call(v) !== '[object Object]') return v;
+    var o = {};
+    for (var k in v) if (Object.prototype.hasOwnProperty.call(v, k) && !BAD_KEY.test(k)) o[k] = SKIP_KEY.test(k) ? v[k] : deep(v[k], d + 1);
+    return o;
+  }
+
+  /* ---------- Campos de formulario ---------- */
+  var FIELD = 'input:not([type]),input[type=text],input[type=search],input[type=email],input[type=tel],input[type=url],textarea';
+  var warnT = 0;
+  function notify() {
+    if (Date.now() - warnT < 2500) return; warnT = Date.now();
+    if (typeof w.showToast === 'function') w.showToast('Se eliminó contenido no permitido del texto ingresado.', 'error');
+  }
+  function cleanField(el) {
+    if (!el || !el.matches || !el.matches(FIELD) || el.readOnly || el.disabled) return;
+    var v = el.value; if (!v) return;
+    var max = el.maxLength > 0 ? el.maxLength : (el.tagName === 'TEXTAREA' ? 5000 : 500);
+    var c = clean(v, max);
+    if (c !== v) { el.value = c; if (scrub(v) !== v) notify(); }
+  }
+  document.addEventListener('submit', function (e) { var f = e.target; if (f && f.querySelectorAll) f.querySelectorAll(FIELD).forEach(cleanField); }, true);
+  document.addEventListener('focusout', function (e) { cleanField(e.target); }, true);
+
+  /* ---------- 2) Validación de peticiones ---------- */
+  var CFG = { winMs: 10000, reads: 150, writes: 60, maxQueue: 400, maxUrl: 4000, maxBody: 15 * 1024 * 1024, maxRows: 1000, maxLimit: 10000 };
+  var METHODS = { GET: 1, HEAD: 1, POST: 1, PATCH: 1, PUT: 1, DELETE: 1 };
+  var EP = /^(?:rpc\/)?[a-z_][a-z0-9_-]{0,62}(?:\?[^\s#]*)?$/i;
+  var FILTER = /[?&][a-z_][a-z0-9_.]*=(?:eq|in)\./i;
+  function deny(reason) { console.warn('[Seguridad] Petición bloqueada:', reason); return { ok: false, reason: reason }; }
+  function guard(endpoint, method, body) {
+    method = String(method || 'GET').toUpperCase();
+    var ep = String(endpoint == null ? '' : endpoint);
+    if (!METHODS[method]) return deny('método HTTP no permitido');
+    if (ep.length > CFG.maxUrl) return deny('URL demasiado larga');
+    if (!EP.test(ep)) return deny('endpoint inválido');
+    if ((method === 'DELETE' || method === 'PATCH' || method === 'PUT') && ep.indexOf('rpc/') !== 0 && !FILTER.test(ep)) return deny('operación masiva sin filtro');
+    var m = ep.match(/[?&]limit=(\d+)/i);
+    if (m && +m[1] > CFG.maxLimit) return deny('límite de filas excesivo');
+    var b = body;
+    if (b != null && typeof b === 'object') {
+      if (Array.isArray(b) && b.length > CFG.maxRows) return deny('lote demasiado grande');
+      b = deep(b, 0);
+    }
+    return { ok: true, body: b };
+  }
+  function sizeOk(payload) { return !payload || String(payload).length <= CFG.maxBody; }
+
+  /* ---------- 3) Límite de ritmo ---------- */
+  var hist = { r: [], w: [] }, waiting = 0, coolUntil = 0;
+  var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+  function cool(ms) { coolUntil = Math.max(coolUntil, Date.now() + (ms || 8000)); }
+  async function throttle(method) {                                         // retrasa (no rechaza) las ráfagas; rechaza solo si la cola se desborda
+    var k = (method === 'GET' || method === 'HEAD') ? 'r' : 'w', h = hist[k], lim = k === 'r' ? CFG.reads : CFG.writes, queued = false;
+    for (;;) {
+      var now = Date.now();
+      while (h.length && now - h[0] > CFG.winMs) h.shift();
+      if (now >= coolUntil && h.length < lim) { if (queued) waiting--; h.push(now); return true; }
+      if (!queued) { if (waiting >= CFG.maxQueue) return false; waiting++; queued = true; }
+      var wait = Math.max(coolUntil - now, h.length >= lim ? CFG.winMs - (now - h[0]) : 0, 25);
+      await sleep(Math.min(wait + 5, 2000));
+    }
+  }
+
+  w.HVACSec = { clean: clean, cleanDeep: function (v) { return deep(v, 0); }, guard: guard, sizeOk: sizeOk, throttle: throttle, cool: cool, cfg: CFG };
+})(window);
+</script>
+
+<style id="app-footer-css">
+.app-footer{margin-top:28px;padding:16px 12px 4px;text-align:center;font-size:11.5px;line-height:1.55;letter-spacing:.01em;color:inherit;border-top:1px solid rgba(148,163,184,.28)}
+.app-footer p{margin:0;opacity:.62}
+.app-footer strong{font-weight:800;opacity:1}
+@media print{.app-footer{display:none}}
+</style>
 </head>
 <body class="min-h-screen flex flex-col antialiased">
 
@@ -1575,6 +1683,10 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             </div>
         </section>
 
+    
+        <footer class="app-footer" role="contentinfo">
+            <p>© <span class="js-year">2026</span> <strong>HVAC Management System</strong>. Todos los derechos reservados.</p>
+        </footer>
     </main>
 
     <!-- MODAL: ORDER HUB -->
@@ -3180,6 +3292,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         // Sube un archivo y devuelve su URL pública.
         async function storageSubir(path, blob, contentType) {
             if (navigator.onLine === false) throw new Error('Sin conexión a internet.');
+            if (window.HVACSec) await HVACSec.throttle('POST');
             const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
             const timer = ctrl ? setTimeout(() => ctrl.abort(), 60000) : null;
             try {
@@ -3625,6 +3738,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 return null;
             };
             if (navigator.onLine === false) return fail('offline', 'navigator.onLine=false');
+            if (window.HVACSec) {                                            // validación + sanitización del cuerpo
+                const g = HVACSec.guard(endpoint, method, body);
+                if (!g.ok) return fail('blocked', g.reason);
+                body = g.body;
+            }
             const headers = {
                 'apikey': SUPABASE_KEY,
                 'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -3633,6 +3751,10 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (method === 'POST') headers['Prefer'] = 'return=representation';
             if (extraHeaders) Object.assign(headers, extraHeaders);
             const payload = body ? JSON.stringify(body) : undefined;
+            if (window.HVACSec) {
+                if (!HVACSec.sizeOk(payload)) return fail('blocked', 'cuerpo demasiado grande');
+                if (!(await HVACSec.throttle(method))) return fail('rate-limit', 'demasiadas solicitudes en cola');   // límite de ritmo
+            }
             const MAX_TRIES = 2;
             cloudCtl.inflight++;
             cloudBadgeSchedule();
@@ -3651,7 +3773,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                             try { return JSON.parse(txt); } catch (e) { return true; }
                         }
                         const detail = await res.text().catch(() => '');
-                        if ((res.status === 429 || res.status >= 500) && attempt < MAX_TRIES) { await cloudSleep(700); continue; }
+                        if ((res.status === 429 || res.status >= 500) && attempt < MAX_TRIES) { if (res.status === 429 && window.HVACSec) HVACSec.cool(8000); await cloudSleep(700); continue; }
                         return fail(res.status, detail);
                     } catch (err) {
                         if (timer) clearTimeout(timer);
@@ -5443,7 +5565,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             document.getElementById('print-legalization-modal-backdrop').classList.add('hidden');
         }
 
-        function generateCajaLegalizationPDF() {
+        async function generateCajaLegalizationPDF() {
             const selectedIds = Array.from(document.querySelectorAll('.legalization-print-checkbox:checked')).map(el => el.value);
             if (!selectedIds.length || selectedIds.length > 4) return showToast("Selecciona entre 1 y 4 gastos.", "error");
             if (!window.jspdf || !window.jspdf.jsPDF) return showToast("No se pudo cargar el generador PDF. Verifica tu conexión e inténtalo de nuevo.", "error");
@@ -5451,15 +5573,19 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const selectedItems = selectedIds.map(id => cajaMenorItems.find(item => String(item.id) === String(id))).filter(Boolean);
             if (!selectedItems.length) return showToast("No se encontraron los gastos seleccionados.", "error");
             ensureCajaConsecutiveIds();
+            try { await afcPreloadPhotos(selectedItems.map(i => i.receiptImg).filter(Boolean)); } catch (e) { console.warn('[PDF] fotos de caja', e); }   // fotos en R2 -> base64
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('portrait', 'mm', 'letter');
             const pageW = doc.internal.pageSize.getWidth();
             const pageH = doc.internal.pageSize.getHeight();
-            const margin = 9;
-            const gap = 3;
+            const margin = 5;      // margen mínimo seguro de impresión (antes 9 mm)
+            const gap = 2.5;       // separación entre cuadros (antes 3 mm)
+            const pad = 3;         // espacio interior de cada cuadro (antes 6 mm)
+            const LH = 3.9;        // interlineado de los datos
             const cellW = (pageW - margin * 2 - gap) / 2;
             const cellH = (pageH - margin * 2 - gap) / 2;
+            const innerW = cellW - pad * 2;
 
             for (let index = 0; index < 4; index++) {
                 const col = index % 2;
@@ -5478,59 +5604,64 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     continue;
                 }
 
-                const imageX = x + 6;
-                const imageY = y + 6;
-                const maxImageW = cellW - 12;
-                const maxImageH = 80;
-                if (item.receiptImg) {
+                // 1) Se miden los datos primero: la foto recibe TODO el espacio restante del cuadro.
+                const centerName = item.clientName || item.client || 'Cliente no asignado';
+                const centerNumber = item.costCenterNumber || 'Sin número registrado';
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(8.5);
+                const centerLines = doc.splitTextToSize(`Centro de Costo: ${centerName}`, innerW);
+                const numberLines = doc.splitTextToSize(`Número: ${centerNumber}`, innerW);
+                const textH = 9.9 + (centerLines.length + numberLines.length) * LH;
+                const textTop = y + cellH - pad - textH;
+
+                // 2) Foto del recibo: caja de imagen máxima, centrada y sin deformarse.
+                const boxX = x + pad, boxY = y + pad, boxW = innerW, boxH = textTop - 2.5 - boxY;
+                const src = (typeof AFC_PHOTO_CACHE !== 'undefined' && AFC_PHOTO_CACHE.get(afcPhotoSrc(item.receiptImg))) || item.receiptImg;
+                let drawn = false;
+                if (src) {
                     try {
-                        const props = doc.getImageProperties(item.receiptImg);
-                        const scale = Math.min(maxImageW / props.width, maxImageH / props.height);
+                        const props = doc.getImageProperties(src);
+                        const scale = Math.min(boxW / props.width, boxH / props.height);
                         const imageW = props.width * scale;
                         const imageH = props.height * scale;
-                        doc.addImage(item.receiptImg, 'JPEG', x + (cellW - imageW) / 2, imageY, imageW, imageH);
-                    } catch (e) {
-                        console.warn('No se pudo colocar la foto del comprobante en el PDF.', e);
-                        doc.setDrawColor(203, 213, 225);
-                        doc.rect(imageX, imageY, maxImageW, maxImageH);
-                        doc.setFont('helvetica', 'normal');
-                        doc.setFontSize(8);
-                        doc.setTextColor(100, 116, 139);
-                        doc.text('No se pudo cargar la foto', x + cellW / 2, imageY + maxImageH / 2, { align: 'center' });
-                    }
-                } else {
+                        doc.addImage(src, props.fileType || 'JPEG', boxX + (boxW - imageW) / 2, boxY + (boxH - imageH) / 2, imageW, imageH);
+                        drawn = true;
+                    } catch (e) { console.warn('No se pudo colocar la foto del comprobante en el PDF.', e); }
+                }
+                if (!drawn) {
                     doc.setDrawColor(203, 213, 225);
-                    doc.rect(imageX, imageY, maxImageW, maxImageH);
+                    doc.rect(boxX, boxY, boxW, boxH);
                     doc.setFont('helvetica', 'normal');
                     doc.setFontSize(8);
                     doc.setTextColor(100, 116, 139);
-                    doc.text('Sin foto de factura / comprobante', x + cellW / 2, imageY + maxImageH / 2, { align: 'center' });
+                    doc.text(src ? 'No se pudo cargar la foto' : 'Sin foto de factura / comprobante', x + cellW / 2, boxY + boxH / 2, { align: 'center' });
                 }
 
-                const textY = y + 92;
-                const centerName = item.clientName || item.client || 'Cliente no asignado';
-                const centerNumber = item.costCenterNumber || 'Sin número registrado';
-                doc.setTextColor(15, 23, 42);
+                // 3) Datos: consecutivo (9 pt, ya no 11 pt) + fecha en la misma línea, luego centro de costo, número y valor.
+                doc.setDrawColor(226, 232, 240);
+                doc.setLineWidth(0.2);
+                doc.line(x + pad, textTop - 1.2, x + cellW - pad, textTop - 1.2);
+                let ty = textTop + 3;
                 doc.setFont('helvetica', 'bold');
-                doc.setFontSize(11);
-                doc.text(`Gasto ${item.consecutiveId || ''}`, x + 6, textY);
                 doc.setFontSize(9);
-                doc.setFont('helvetica', 'normal');
-                doc.setFont('helvetica', 'bold');
-                const centerNameLines = doc.splitTextToSize(`Centro de Costo: ${centerName}`, cellW - 12);
-                doc.text(centerNameLines, x + 6, textY + 8);
-                const numberY = textY + 8 + centerNameLines.length * 4.5;
-                const centerNumberLines = doc.splitTextToSize(`Número: ${centerNumber}`, cellW - 12);
-                doc.text(centerNumberLines, x + 6, numberY);
+                doc.setTextColor(15, 23, 42);
+                doc.text(`Gasto ${item.consecutiveId || ''}`, x + pad, ty);
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(8);
                 doc.setTextColor(100, 116, 139);
-                const fechaY = numberY + centerNumberLines.length * 4.5 + 2;
-                doc.text(`Fecha: ${item.date || '-'}`, x + 6, fechaY);
+                doc.text(`Fecha: ${item.date || '-'}`, x + cellW - pad, ty, { align: 'right' });
+                ty += 4.2;
                 doc.setFont('helvetica', 'bold');
-                doc.setFontSize(10);
+                doc.setFontSize(8.5);
                 doc.setTextColor(15, 23, 42);
-                doc.text(`Valor de la factura: $ ${Number(item.amount || 0).toLocaleString('es-CO')}`, x + 6, fechaY + 6);
+                doc.text(centerLines, x + pad, ty);
+                ty += centerLines.length * LH;
+                doc.setFont('helvetica', 'normal');
+                doc.text(numberLines, x + pad, ty);
+                ty += numberLines.length * LH + 1.2;
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(9.5);
+                doc.text(`Valor de la factura: $ ${Number(item.amount || 0).toLocaleString('es-CO')}`, x + pad, ty);
             }
 
             const stamp = new Date().toISOString().slice(0, 10);
@@ -9251,6 +9382,11 @@ const attMe = () => systemUsers.find(u => String(u.id) === String(activeUser));
 const attIsAdmin = () => { const u = attMe(); return !!(u && u.role === 'ADMIN'); };
 async function attRpc(fn, body) {
     try {
+        if (window.HVACSec) {
+            if (!/^[a-z_][a-z0-9_]{0,62}$/i.test(String(fn))) return { ok: false, msg: 'Función no permitida.' };
+            body = HVACSec.cleanDeep(body);
+            if (!(await HVACSec.throttle('POST'))) return { ok: false, msg: 'Demasiadas solicitudes. Intenta de nuevo en unos segundos.' };
+        }
         const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (r.ok) return { ok: true };
         let m = ''; try { m = (await r.json()).message || ''; } catch (_) {}
@@ -9870,5 +10006,7 @@ async function attDelete(id) {
   });
 })();
 </script>
+
+<script id="footer-year">document.querySelectorAll('.js-year').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
 </body>
 </html>
