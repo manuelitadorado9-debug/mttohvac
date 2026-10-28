@@ -2733,14 +2733,21 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         if (navigator.onLine !== false) {
             const r = await Promise.race([supabaseFetch('rpc/generar_consecutivo', 'POST', { p_tipo: tipo }, null, { quiet: true }), new Promise(res => setTimeout(() => res(null), 5000))]);
             const id = Array.isArray(r) ? r[0] : r;
-            if (typeof id === 'string' && id.indexOf(pref) === 0 && !(workOrders || []).some(o => o && String(o.id) === id)) {
-                try { localStorage.setItem('HVAC_CONSEC_' + pref, String(consecParse(id, pref))); } catch (e) {}
+            // Nunca aceptar un consecutivo que retroceda: el RPC debe avanzar por encima
+            // del mayor número existente o reservado localmente, incluso si hubo borrados.
+            const cloudN = typeof id === 'string' && id.indexOf(pref) === 0 ? consecParse(id, pref) : 0;
+            const localMax = consecLocalMax(pref);
+            const idTaken = (workOrders || []).some(o => o && String(o.id) === id);
+            if (cloudN > localMax && !idTaken) {
+                try { localStorage.setItem('HVAC_CONSEC_' + pref, String(cloudN)); } catch (e) {}
+                deletedOrderIdClear(id); // si el último consecutivo borrado se reutiliza, vuelve a estar habilitado
                 return id;
             }
         }
         let n = consecLocalMax(pref), id;
         do { n++; id = prevFormat(n, pref); } while ((workOrders || []).some(o => o && String(o.id) === id));
         try { localStorage.setItem('HVAC_CONSEC_' + pref, String(n)); } catch (e) {}
+        deletedOrderIdClear(id);
         return id;
     };
     const p = prevReserveChain.then(run, run);
@@ -3146,6 +3153,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 const check = await supabaseFetch(`${tabla}?id=eq.${enc}&select=id,payload,version`, 'GET', null, null, { quiet: true });
                 if (!Array.isArray(check)) { todoOk = false; continue; }
                 if (!check.length) { delete snap[id]; continue; }
+                if (estadoHashObj(check[0].payload) === snap[id].h) {      // mismo contenido: solo cambió el contador de versión → se reintenta
+                    const del2 = await supabaseFetch(`${tabla}?id=eq.${enc}&version=eq.${check[0].version}`, 'DELETE', null, null, { quiet: true });
+                    const chk2 = del2 ? await supabaseFetch(`${tabla}?id=eq.${enc}&select=id`, 'GET', null, null, { quiet: true }) : null;
+                    if (Array.isArray(chk2) && !chk2.length) { delete snap[id]; continue; }
+                    console.error(`[Borrado] ${tabla}/${id} sigue existiendo tras el DELETE. Revisa la política DELETE (RLS) de Supabase.`);
+                    snap[id] = { v: check[0].version, h: snap[id].h };       // sigue como borrado pendiente: no se resucita
+                    todoOk = false; continue;
+                }
                 estadoReemplazarLocal(key, check[0]);         // otra persona la había modificado: no se borra
                 snap[id] = { v: check[0].version, h: estadoHashObj(check[0].payload) };
                 huboConflicto = true;
@@ -3767,7 +3782,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                         if (timer) clearTimeout(timer);
                         if (res.ok) {
                             cloudNoteResult(true, 0, quiet, endpoint);
-                            if (method === 'DELETE') return true;
+                            if (method === 'DELETE') {
+                                if (!(extraHeaders && /return=representation/i.test(String(extraHeaders.Prefer || '')))) return true;
+                                const dt = await res.text().catch(() => '');           // filas que el servidor eliminó de verdad
+                                try { return dt ? JSON.parse(dt) : []; } catch (e) { return []; }
+                            }
                             const txt = await res.text().catch(() => '');
                             if (!txt) return true;
                             try { return JSON.parse(txt); } catch (e) { return true; }
@@ -3797,10 +3816,18 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (payload !== undefined) e.payload = payload; // copia exacta de lo que se quiso guardar
             a.push(e);
             cloudOutboxWrite(a);
-            return hvacIDBSet('HVAC_OUTBOX::' + table + '::' + id, JSON.stringify(e)).catch(err => {
-                console.error('[Offline] No se pudo guardar una operación en IndexedDB:', err);
-                return false;
-            });
+            // IndexedDB es una copia durable adicional, pero nunca debe bloquear indefinidamente
+            // el guardado principal: el outbox ya quedó escrito en localStorage arriba.
+            const idbWrite = Promise.resolve().then(() => hvacIDBSet('HVAC_OUTBOX::' + table + '::' + id, JSON.stringify(e)))
+                .catch(err => {
+                    console.error('[Offline] No se pudo guardar una operación en IndexedDB; se conserva el outbox local:', err);
+                    return false;
+                });
+            const idbTimeout = new Promise(resolve => setTimeout(() => {
+                console.warn('[Offline] IndexedDB tardó demasiado; se continúa con el outbox local.');
+                resolve(false);
+            }, 2500));
+            return Promise.race([idbWrite, idbTimeout]);
         }
         function cloudOutboxClear(table, id) {
             const a = cloudOutboxRead();
@@ -3834,6 +3861,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
         function cloudUpsert(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
+            tombClearIfOld(table, cleanId);
             const payload = JSON.parse(JSON.stringify(obj));
             cloudGuardSize(table, cleanId, payload);
             const durable = cloudOutboxAdd(table, cleanId, 'save', table === 'hvac_app_state' ? undefined : payload); // pendiente hasta confirmar
@@ -3857,14 +3885,38 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             });
         }
 
+        const cloudDeleteWarned = {};
+        // Borrado verificado: el servidor puede responder "204 OK" sin eliminar nada (política RLS, ID distinto…).
+        // La operación solo sale de la bandeja cuando se CONFIRMA que la fila ya no existe en la nube.
         function cloudDeleteGeneric(table, rawId) {
             const cleanId = cloudCleanId(rawId);
+            tombMark(table, cleanId);                                   // desde ya, ninguna carga lo vuelve a mostrar
             const durable = cloudOutboxAdd(table, cleanId, 'delete');
             return cloudEnqueue(table + ':' + cleanId, async () => {
                 await durable;
-                const r = await supabaseFetch(`${table}?id=eq.${encodeURIComponent(cleanId)}`, 'DELETE');
-                if (r) cloudOutboxClear(table, cleanId);
-                return r || null;
+                const enc = encodeURIComponent(cleanId), q = { quiet: true };
+                const del = await supabaseFetch(`${table}?id=eq.${enc}`, 'DELETE', null, { 'Prefer': 'return=representation' }, q);
+                if (!del) return null;                                  // sin red / error HTTP: queda pendiente y se reintenta
+                const still = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'GET', null, null, q);
+                if (!Array.isArray(still)) return null;                 // no se pudo verificar: sigue pendiente
+                if (still.length) {                                     // el servidor "aceptó" pero no borró
+                    console.error(`[Borrado] ${table}/${cleanId} sigue existiendo en la nube tras el DELETE. Revisa la política DELETE (RLS) de Supabase.`);
+                    if (!cloudDeleteWarned[table + cleanId]) {
+                        cloudDeleteWarned[table + cleanId] = true;
+                        try { showToast('El servidor no permitió eliminar el registro ' + cleanId + ' (permisos de Supabase). Permanecerá oculto en este equipo.', 'error'); } catch (_) {}
+                    }
+                    return null;
+                }
+                if (table === 'hvac_equipments') {                      // el mismo equipo pudo guardarse antes con otra clave (código vs id)
+                    const dups = await supabaseFetch(`hvac_equipments?select=id&payload->>id=eq.${enc}`, 'GET', null, null, q);
+                    if (Array.isArray(dups)) for (const d of dups) {
+                        if (!d || d.id == null || String(d.id) === cleanId) continue;
+                        await supabaseFetch(`hvac_equipments?id=eq.${encodeURIComponent(d.id)}`, 'DELETE', null, null, q);
+                        tombMark(table, d.id);
+                    }
+                }
+                cloudOutboxClear(table, cleanId);                       // confirmado: ya no existe en la nube
+                return true;
             });
         }
 
@@ -3894,6 +3946,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 if (!c) { cloudOutboxClear(entry.table, entry.id); return; }
                 const same = rec => rec && cloudCleanId(c.key(rec)) === entry.id;
                 if (entry.op === 'delete') {
+                    tombMark(entry.table, entry.id);
                     c.set(c.get().filter(r => !same(r)));
                     if (c.del) c.del(entry.id);
                     return;
@@ -4095,14 +4148,54 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
         function mergeEquipmentsIntoCatalog(list) {
             list.forEach(eq => {
-                if (!eq) return;
+                if (!eq || tombHas('hvac_equipments', eq.id || eq.code)) return;
                 const idx = equipmentCatalog.findIndex(e => (eq.id && String(e.id) === String(eq.id)));
                 if (idx >= 0) equipmentCatalog[idx] = eq; else equipmentCatalog.push(eq);
             });
         }
+        // ---------------------------------------------------------------------
+        //  LÁPIDAS: un registro borrado NO vuelve a mostrarse ni a guardarse por una respuesta atrasada,
+        //  una copia vieja o un servidor que ignoró el borrado. Se conservan 14 días.
+        //  Aplican a rutinas, equipos, clientes y usuarios.
+        // ---------------------------------------------------------------------
+        const HVAC_TOMB_KEY = 'HVAC_TOMBSTONES_V2', HVAC_TOMB_TTL = 14 * 24 * 3600 * 1000;
+        const HVAC_DELETED_ORDER_IDS_KEY = 'HVAC_DELETED_ORDER_IDS_V1';        // formato anterior (solo rutinas): se migra solo
+        const tombKeyOf = { hvac_orders: o => o && o.id, hvac_equipments: e => e && (e.id || e.code), hvac_clients: c => c && c.id, hvac_users: u => u && u.id };
+        function tombRead() {
+            let all = {}, dirty = false;
+            try { const raw = JSON.parse(localStorage.getItem(HVAC_TOMB_KEY) || '{}'); if (raw && typeof raw === 'object' && !Array.isArray(raw)) all = raw; } catch (_) {}
+            try {
+                const old = JSON.parse(localStorage.getItem(HVAC_DELETED_ORDER_IDS_KEY) || 'null');
+                if (old && typeof old === 'object' && !Array.isArray(old)) { all.hvac_orders = Object.assign({}, old, all.hvac_orders || {}); localStorage.removeItem(HVAC_DELETED_ORDER_IDS_KEY); dirty = true; }
+            } catch (_) {}
+            const now = Date.now();
+            Object.keys(all).forEach(t => {
+                const m = all[t];
+                if (!m || typeof m !== 'object') { delete all[t]; dirty = true; return; }
+                Object.keys(m).forEach(id => { if (now - Number(m[id]) > HVAC_TOMB_TTL) { delete m[id]; dirty = true; } });
+            });
+            if (dirty) { try { localStorage.setItem(HVAC_TOMB_KEY, JSON.stringify(all)); } catch (_) {} }
+            return all;
+        }
+        function tombWrite(all) { try { localStorage.setItem(HVAC_TOMB_KEY, JSON.stringify(all)); } catch (_) {} }
+        function tombHas(table, id) { const t = tombRead()[table]; return !!(t && Object.prototype.hasOwnProperty.call(t, cloudCleanId(id))); }
+        function tombMark(table, id) { const all = tombRead(); (all[table] = all[table] || {})[cloudCleanId(id)] = Date.now(); tombWrite(all); }
+        function tombClear(table, id) { const all = tombRead(); if (all[table]) { delete all[table][cloudCleanId(id)]; tombWrite(all); } }
+        // Un guardado de ese mismo ID, 60 s o más después del borrado, es una re-creación intencional: levanta la lápida.
+        function tombClearIfOld(table, id) { const t = tombRead()[table], k = t && t[cloudCleanId(id)]; if (k && Date.now() - Number(k) > 60000) tombClear(table, id); }
+        function tombFilter(table, list) {
+            const t = tombRead()[table], key = tombKeyOf[table];
+            if (!t || !key || !Array.isArray(list) || !Object.keys(t).length) return list;
+            return list.filter(x => { const id = key(x); return id == null || !Object.prototype.hasOwnProperty.call(t, cloudCleanId(id)); });
+        }
+        // Compatibilidad con el código existente (rutinas)
+        function deletedOrderIdsRead() { return tombRead().hvac_orders || {}; }
+        function deletedOrderIdHas(id) { return tombHas('hvac_orders', id); }
+        function deletedOrderIdMark(id) { tombMark('hvac_orders', id); }
+        function deletedOrderIdClear(id) { tombClear('hvac_orders', id); }
         function mergeOrdersIntoList(list) {
             list.forEach(o => {
-                if (!o || !o.id) return;
+                if (!o || !o.id || deletedOrderIdHas(o.id)) return;
                 const idx = workOrders.findIndex(x => String(x.id) === String(o.id));
                 if (idx >= 0) workOrders[idx] = o; else workOrders.push(o);
             });
@@ -4157,7 +4250,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const page = () => supabaseFetch(`hvac_equipments?select=payload&order=id&limit=${EQ_FETCH_PAGE}&offset=${offset}`, 'GET', null, null, { quiet: true });
             const first = await page();
             if (!Array.isArray(first)) return false;
-            equipmentCatalog = first.map(r => r && r.payload).filter(Boolean);
+            equipmentCatalog = tombFilter('hvac_equipments', first.map(r => r && r.payload).filter(Boolean));
             cloudReconcileOutbox(); // reaplica cambios que la nube aún no confirmó
             cloudTableFetchedAt.hvac_equipments = Date.now();
             persistEquipmentBackup();
@@ -4176,14 +4269,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     rows = await page();
                     if (!Array.isArray(rows)) { failed = true; break; }
                     const have = new Set(equipmentCatalog.map(e => String(e.id)));
-                    rows.forEach(r => { const e = r && r.payload; if (e && !have.has(String(e.id))) { equipmentCatalog.push(e); have.add(String(e.id)); } });
+                    rows.forEach(r => { const e = r && r.payload; if (e && !have.has(String(e.id)) && !tombHas('hvac_equipments', e.id || e.code)) { equipmentCatalog.push(e); have.add(String(e.id)); } });
                     sectionLoadingUI(tabId, 'loading', `Cargando equipos… ${equipmentCatalog.length}`);
                     refreshView();
                 }
                 if (token !== eqProgressiveToken) return;
                 if (failed) { // conserva lo que ya había en el dispositivo
                     const have = new Set(equipmentCatalog.map(e => String(e.id)));
-                    previous.forEach(e => { if (e && !have.has(String(e.id))) equipmentCatalog.push(e); });
+                    previous.forEach(e => { if (e && !have.has(String(e.id)) && !tombHas('hvac_equipments', e.id || e.code)) equipmentCatalog.push(e); });
                 }
                 cloudReconcileOutbox();
                 persistEquipmentBackup();
@@ -4308,7 +4401,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (!navigator.onLine) return false;
             const records = await cloudFetchTable('hvac_users');
             if (!records || !records.length) return false;
-            systemUsers = records;
+            systemUsers = tombFilter('hvac_users', records);
             cloudReconcileOutbox();
             localStorage.setItem('HVAC_USERS_BACKUP', JSON.stringify(systemUsers));
             return true;
@@ -4336,6 +4429,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                             if (!records) { failed.push(table); return; }
                             cloudTableFetchedAt[table] = Date.now();
                             if (table === 'hvac_users' && !records.length) return;
+                            records = tombFilter(table, records);        // lo borrado no se re-inserta (rutinas, equipos, clientes y usuarios)
                             CLOUD_TABLE_TARGETS[table].set(records);
                         });
                         cloudReconcileOutbox(); // reaplica lo que aún no confirmó la nube
@@ -6401,7 +6495,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             });
         }
 
+        let nrSaving = false;
         async function saveNewRoutineManual() {
+            if (nrSaving) return; // evita crear duplicados por doble clic
             if (nrEditingId !== null) return saveEditedRoutine();
             const client = document.getElementById('nr-client').value;
             const periodicity = document.getElementById('nr-periodicity').value;
@@ -6414,28 +6510,61 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (!client || !periodicity || !date || !technician) return showToast("Completa todos los campos obligatorios.", "error");
             if (equipmentIds.length === 0) return showToast("Selecciona al menos un equipo.", "error");
 
-            const dObj = new Date(date);
-            const month = dObj.getMonth() + 1;
-            const year = dObj.getFullYear();
-            const projId = `PROJ-${year}-${month}-${client.replace(/[\/\\]/g, '-')}-${Date.now().toString().slice(-5)}`;
-            const orderId = await reservePrevId(); // PRE-0001, PRE-0002...
+            nrSaving = true;
+            const submitBtn = document.getElementById('nr-submit-btn');
+            const submitLabel = document.getElementById('nr-submit-label');
+            const originalLabel = submitLabel ? submitLabel.textContent : '';
+            if (submitBtn) submitBtn.disabled = true;
+            if (submitLabel) submitLabel.textContent = 'Guardando…';
+            try {
+                const dObj = new Date(date + 'T00:00:00');
+                const month = dObj.getMonth() + 1;
+                const year = dObj.getFullYear();
+                const projId = `PROJ-${year}-${month}-${client.replace(/[\/\\]/g, '-')}-${Date.now().toString().slice(-5)}`;
+                const orderId = await reservePrevId(); // PRE-0001, PRE-0002...
 
-            const orderObj = { id: orderId, client, date, technician, technicians, equipmentIds, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
-            linkClientFields(orderObj, client);
-            const projObj = { id: projId, client, periodicity, month, year, budget, equipmentIds, status: 'SCHEDULED', orderId };
+                const orderObj = { id: orderId, client, date, technician, technicians, equipmentIds, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
+                linkClientFields(orderObj, client);
+                const projObj = { id: projId, client, periodicity, month, year, budget, equipmentIds, status: 'SCHEDULED', orderId };
 
-            monthlyProjections.push(projObj);
-            workOrders.push(orderObj);
+                monthlyProjections.push(projObj);
+                workOrders.push(orderObj);
+                // Persistencia local inmediata; no depende de la latencia de Supabase.
+                localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+                localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
+                try { renderAdminDashboard(); } catch (e) { console.warn('[Rutinas] No se pudo refrescar el panel:', e); }
+                try { renderPlanningModule(); } catch (e) { console.warn('[Rutinas] No se pudo refrescar planificación:', e); }
 
-            await cloudSaveOrder(orderObj);
-            registrarAuditoria('CREAR', 'hvac_orders', orderObj.id);
-            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-            localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
+                // Cerrar el formulario tras crear la rutina localmente, sin esperar a la nube.
+                closeNewRoutineModal();
+                showToast(`Rutina ${orderId} creada. Sincronizando con la nube…`);
 
-            renderAdminDashboard();
-            renderPlanningModule();
-            closeNewRoutineModal();
-            showToast(`Rutina manual ${orderId} creada y programada correctamente.`);
+                let cloudSaved = false;
+                try {
+                    const saveResult = await Promise.race([
+                        cloudSaveOrder(orderObj),
+                        new Promise(resolve => setTimeout(() => resolve('__HVAC_SAVE_TIMEOUT__'), 20000))
+                    ]);
+                    cloudSaved = saveResult !== '__HVAC_SAVE_TIMEOUT__' && !!saveResult;
+                    if (saveResult === '__HVAC_SAVE_TIMEOUT__') {
+                        console.warn('[Rutinas] La escritura en la nube excedió 20 segundos; se conserva la rutina local y el reintento pendiente.');
+                    }
+                } catch (err) {
+                    console.error('[Rutinas] Error al guardar la rutina:', err);
+                }
+                try { registrarAuditoria('CREAR', 'hvac_orders', orderObj.id); } catch (e) { console.warn('[Rutinas] No se pudo registrar auditoría:', e); }
+                localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+                localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
+                if (cloudSaved) showToast(`Rutina ${orderId} creada y sincronizada correctamente.`);
+                else showToast(`Rutina ${orderId} quedó guardada en este dispositivo; la sincronización con la nube está pendiente.`, 'error');
+            } catch (err) {
+                console.error('[Rutinas] No se pudo crear la rutina:', err);
+                showToast('No se pudo completar la creación de la rutina. Revisa la conexión e inténtalo de nuevo.', 'error');
+            } finally {
+                nrSaving = false;
+                if (submitBtn) submitBtn.disabled = false;
+                if (submitLabel) submitLabel.textContent = originalLabel || 'Registrar y Programar Rutina';
+            }
         }
 
         function renderClientCatalog() {
@@ -6547,11 +6676,12 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
         async function deleteClientRecord(id) {
             clientsCatalog = clientsCatalog.filter(c => c.id !== id);
-            await cloudDeleteClient(id);
+            const okDel = await cloudDeleteClient(id);
             localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(clientsCatalog));
             populateClientDropdowns();
             renderClientCatalog();
-            showToast("Cliente eliminado.");
+            if (okDel) showToast("Cliente eliminado.");
+            else showToast("Cliente quitado de este equipo; la eliminación en la nube queda pendiente y se reintentará.", "error");
         }
 
         function renderUsersModule() {
@@ -6645,11 +6775,12 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         async function deleteUserRecord(id) {
             if (id === activeUser) return showToast("No puedes eliminar el usuario en sesión activa.", "error");
             systemUsers = systemUsers.filter(u => u.id !== id);
-            await cloudDeleteUser(id);
+            const okDel = await cloudDeleteUser(id);
             localStorage.setItem('HVAC_USERS_BACKUP', JSON.stringify(systemUsers));
             populateTechDropdown();
             renderUsersModule();
-            showToast("Usuario eliminado.");
+            if (okDel) showToast("Usuario eliminado.");
+            else showToast("Usuario quitado de este equipo; la eliminación en la nube queda pendiente y se reintentará.", "error");
         }
 
         function getChecklistProgressMetrics(eq, exec) {
@@ -6831,10 +6962,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
         async function deleteEquipmentRecord(id) {
             equipmentCatalog = equipmentCatalog.filter(e => e.id !== id);
-            await cloudDeleteEquipment(id);
+            const okDel = await cloudDeleteEquipment(id);
             localStorage.setItem('HVAC_EQUIPMENTS_BACKUP', JSON.stringify(equipmentCatalog));
             renderEquipmentCatalog();
-            showToast("Equipo eliminado.");
+            if (okDel) showToast("Equipo eliminado.");
+            else showToast("Equipo quitado de este equipo; la eliminación en la nube queda pendiente y se reintentará.", "error");
         }
 
         async function openEquipmentHistoryModal(eqId) {
@@ -8256,7 +8388,12 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const order = workOrders.find(o => String(o.id) === String(orderId));
             if (!order) return showToast('No se encontró la rutina seleccionada.', 'error');
             if (!window.confirm(`¿Eliminar la rutina ${order.id} de ${order.client || 'este cliente'} y sus intervenciones? Esta acción no se puede deshacer.`)) return;
+            // Registrar primero la intención de borrado: una carga remota que ya esté en
+            // vuelo no debe volver a añadir esta rutina al arreglo local.
+            deletedOrderIdMark(orderId);
             workOrders = workOrders.filter(o => String(o.id) !== String(orderId));
+            // El borrado prevalece sobre cualquier guardado pendiente de esa misma orden.
+            cloudOutboxAdd('hvac_orders', cloudCleanId(orderId), 'delete');
             registrarAuditoria('BORRAR', 'hvac_orders', orderId);
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             renderHistoryModule();
