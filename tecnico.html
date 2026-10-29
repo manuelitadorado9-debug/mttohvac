@@ -2794,7 +2794,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             if (!order) return;
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
-            document.getElementById('hub-order-title').innerText = `Orden ${order.id} - ${order.client}`;
+            document.getElementById('hub-order-title').innerText = `Orden ${order.id}${order.zoneName ? ' · ' + order.zoneName : ''} - ${order.client}`;
             document.getElementById('hub-order-subtitle').innerText = `Técnico: ${order.technician} | Fecha: ${order.date}`;
 
             currentHubTab = 'equipos';

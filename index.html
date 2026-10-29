@@ -2501,6 +2501,11 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     <label class="block text-xs font-bold text-slate-700 mb-1">Capacidad</label>
                     <input type="text" id="eq-f-capacity" class="input-box text-xs" placeholder="24000 BTU, 5 TR">
                 </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Zona / Piso</label>
+                    <select id="eq-f-zone" class="input-box text-xs"><option value="">Sin zona asignada</option></select>
+                    <p class="text-[10px] text-slate-500 mt-1">Las zonas se administran por cliente en “Zonas y pisos”.</p>
+                </div>
                 <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
                     <button type="button" onclick="closeEquipmentModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
                     <button type="submit" class="btn-teal text-xs flex-1 sm:flex-none justify-center"><i class="fa-solid fa-floppy-disk"></i> Guardar Equipo</button>
@@ -6281,35 +6286,19 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         async function saveScheduleRoutine() {
-            const projId = document.getElementById('sch-projection-id').value;
-            const proj = monthlyProjections.find(p => p.id === projId);
-            if (!proj) return;
-
-            const date = document.getElementById('sch-date').value;
-            const technicians = techPickerValues('sch-tech'); const technician = technicians.join(', ');
-            const checkboxes = document.querySelectorAll('.sch-eq-checkbox:checked');
-            const equipmentIds = Array.from(checkboxes).map(c => c.value);
-
-            if (!date || !technician) return showToast("Fecha y al menos un técnico son obligatorios.", "error");
-            if (equipmentIds.length === 0) return showToast("Selecciona al menos un equipo.", "error");
-
-            const orderId = await reservePrevId(); // PRE-0001, PRE-0002...
-            const orderObj = { id: orderId, client: proj.client, date, technician, technicians, equipmentIds, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
-            linkClientFields(orderObj, proj.client);
-
-            workOrders.push(orderObj);
-            proj.status = 'SCHEDULED';
-            proj.orderId = orderId;
-
-            await cloudSaveOrder(orderObj);
-            registrarAuditoria('CREAR', 'hvac_orders', orderObj.id);
-            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-            localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
-
-            renderAdminDashboard();
-            renderPlanningModule();
-            closeScheduleModal();
-            showToast(`Orden ${orderId} programada correctamente.`);
+            const projId=document.getElementById('sch-projection-id').value, proj=monthlyProjections.find(p=>p.id===projId);if(!proj)return;
+            const date=document.getElementById('sch-date').value,technicians=techPickerValues('sch-tech'),technician=technicians.join(', ');
+            const equipmentIds=Array.from(document.querySelectorAll('.sch-eq-checkbox:checked')).map(c=>c.value);
+            if(!date||!technician)return showToast('Fecha y al menos un técnico son obligatorios.','error');if(!equipmentIds.length)return showToast('Selecciona al menos un equipo.','error');
+            try{
+              const baseId=await reservePrevId(),groups=hvacGroupEquipmentByZone(equipmentIds);
+              const orders=groups.map((g,i)=>{const o={id:groups.length>1?`${baseId}-P${i+1}`:baseId,client:proj.client,date,technician,technicians,equipmentIds:g.ids,zoneId:g.zoneId,zoneName:g.zoneName,zonePart:groups.length>1?i+1:null,zoneParts:groups.length>1?groups.length:1,zoneBaseId:baseId,executions:{},status:'PENDING',clientSignature:null,invoice:null,createdAt:new Date().toISOString(),maintenanceType:'PREVENTIVO'};linkClientFields(o,proj.client);return o;});
+              workOrders.push(...orders);proj.status='SCHEDULED';proj.orderId=orders[0].id;proj.orderIds=orders.map(o=>o.id);proj.equipmentIds=equipmentIds.slice();
+              localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));localStorage.setItem('HVAC_PROJECTIONS_BACKUP',JSON.stringify(monthlyProjections));
+              let allSaved=true;for(const o of orders){try{if(!await cloudSaveOrder(o))allSaved=false;else registrarAuditoria('CREAR','hvac_orders',o.id);}catch(e){allSaved=false;}}
+              localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));renderAdminDashboard();renderPlanningModule();closeScheduleModal();
+              showToast(allSaved?`Órdenes programadas: ${orders.map(o=>o.id).join(', ')}.`:'Órdenes guardadas localmente; sincronización pendiente.',allSaved?'success':'error');
+            }catch(e){console.error('[Rutinas] Programación por zona',e);showToast('No se pudo programar la rutina.','error');}
         }
 
         // ===== Rutina: modo CREAR / modo EDITAR (el cliente queda bloqueado al editar) =====
@@ -6496,75 +6485,44 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         let nrSaving = false;
+        function hvacGroupEquipmentByZone(ids) {
+            const map=new Map();
+            (ids||[]).forEach(id=>{const e=(equipmentCatalog||[]).find(x=>String(x.id)===String(id)||String(x.code)===String(id))||{};const zid=String(e.zoneId||'');const zname=String(e.zoneName||'').trim()||(zid?'Zona asignada':'Sin zona');const key=zid||'__NO_ZONE__';if(!map.has(key))map.set(key,{zoneId:zid,zoneName:zname,ids:[]});map.get(key).ids.push(id);});
+            return Array.from(map.values()).sort((a,b)=>a.zoneName.localeCompare(b.zoneName,'es'));
+        }
+
         async function saveNewRoutineManual() {
-            if (nrSaving) return; // evita crear duplicados por doble clic
+            if (nrSaving) return;
             if (nrEditingId !== null) return saveEditedRoutine();
             const client = document.getElementById('nr-client').value;
             const periodicity = document.getElementById('nr-periodicity').value;
             const budget = parseFloat(document.getElementById('nr-budget').value) || 0;
             const date = document.getElementById('nr-date').value;
             const technicians = techPickerValues('nr-tech'); const technician = technicians.join(', ');
-            const checkboxes = document.querySelectorAll('.nr-eq-checkbox:checked');
-            const equipmentIds = Array.from(checkboxes).map(c => c.value);
-
+            const equipmentIds = Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(c => c.value);
             if (!client || !periodicity || !date || !technician) return showToast("Completa todos los campos obligatorios.", "error");
-            if (equipmentIds.length === 0) return showToast("Selecciona al menos un equipo.", "error");
-
+            if (!equipmentIds.length) return showToast("Selecciona al menos un equipo.", "error");
             nrSaving = true;
-            const submitBtn = document.getElementById('nr-submit-btn');
-            const submitLabel = document.getElementById('nr-submit-label');
-            const originalLabel = submitLabel ? submitLabel.textContent : '';
-            if (submitBtn) submitBtn.disabled = true;
-            if (submitLabel) submitLabel.textContent = 'Guardando…';
+            const submitBtn=document.getElementById('nr-submit-btn'), submitLabel=document.getElementById('nr-submit-label');
+            const originalLabel=submitLabel?submitLabel.textContent:''; if(submitBtn)submitBtn.disabled=true;if(submitLabel)submitLabel.textContent='Guardando…';
             try {
-                const dObj = new Date(date + 'T00:00:00');
-                const month = dObj.getMonth() + 1;
-                const year = dObj.getFullYear();
-                const projId = `PROJ-${year}-${month}-${client.replace(/[\/\\]/g, '-')}-${Date.now().toString().slice(-5)}`;
-                const orderId = await reservePrevId(); // PRE-0001, PRE-0002...
-
-                const orderObj = { id: orderId, client, date, technician, technicians, equipmentIds, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
-                linkClientFields(orderObj, client);
-                const projObj = { id: projId, client, periodicity, month, year, budget, equipmentIds, status: 'SCHEDULED', orderId };
-
-                monthlyProjections.push(projObj);
-                workOrders.push(orderObj);
-                // Persistencia local inmediata; no depende de la latencia de Supabase.
-                localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-                localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
-                try { renderAdminDashboard(); } catch (e) { console.warn('[Rutinas] No se pudo refrescar el panel:', e); }
-                try { renderPlanningModule(); } catch (e) { console.warn('[Rutinas] No se pudo refrescar planificación:', e); }
-
-                // Cerrar el formulario tras crear la rutina localmente, sin esperar a la nube.
-                closeNewRoutineModal();
-                showToast(`Rutina ${orderId} creada. Sincronizando con la nube…`);
-
-                let cloudSaved = false;
-                try {
-                    const saveResult = await Promise.race([
-                        cloudSaveOrder(orderObj),
-                        new Promise(resolve => setTimeout(() => resolve('__HVAC_SAVE_TIMEOUT__'), 20000))
-                    ]);
-                    cloudSaved = saveResult !== '__HVAC_SAVE_TIMEOUT__' && !!saveResult;
-                    if (saveResult === '__HVAC_SAVE_TIMEOUT__') {
-                        console.warn('[Rutinas] La escritura en la nube excedió 20 segundos; se conserva la rutina local y el reintento pendiente.');
-                    }
-                } catch (err) {
-                    console.error('[Rutinas] Error al guardar la rutina:', err);
-                }
-                try { registrarAuditoria('CREAR', 'hvac_orders', orderObj.id); } catch (e) { console.warn('[Rutinas] No se pudo registrar auditoría:', e); }
-                localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-                localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
-                if (cloudSaved) showToast(`Rutina ${orderId} creada y sincronizada correctamente.`);
-                else showToast(`Rutina ${orderId} quedó guardada en este dispositivo; la sincronización con la nube está pendiente.`, 'error');
-            } catch (err) {
-                console.error('[Rutinas] No se pudo crear la rutina:', err);
-                showToast('No se pudo completar la creación de la rutina. Revisa la conexión e inténtalo de nuevo.', 'error');
-            } finally {
-                nrSaving = false;
-                if (submitBtn) submitBtn.disabled = false;
-                if (submitLabel) submitLabel.textContent = originalLabel || 'Registrar y Programar Rutina';
-            }
+                const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
+                const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
+                const baseId=await reservePrevId();
+                const groups=hvacGroupEquipmentByZone(equipmentIds);
+                const orderObjs=groups.map((g,i)=>{const id=groups.length>1?`${baseId}-P${i+1}`:baseId;const o={id,client,date,technician,technicians,equipmentIds:g.ids,zoneId:g.zoneId,zoneName:g.zoneName,zonePart:groups.length>1?i+1:null,zoneParts:groups.length>1?groups.length:1,zoneBaseId:baseId,executions:{},status:'PENDING',clientSignature:null,invoice:null,createdAt:new Date().toISOString(),maintenanceType:'PREVENTIVO'};linkClientFields(o,client);return o;});
+                const orderObj=orderObjs[0];
+                const projObj={id:projId,client,periodicity,month,year,budget,equipmentIds,status:'SCHEDULED',orderId:orderObj.id,orderIds:orderObjs.map(o=>o.id)};
+                monthlyProjections.push(projObj); workOrders.push(...orderObjs);
+                localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));localStorage.setItem('HVAC_PROJECTIONS_BACKUP',JSON.stringify(monthlyProjections));
+                try{renderAdminDashboard();}catch(e){} try{renderPlanningModule();}catch(e){}
+                closeNewRoutineModal();showToast(`Rutina creada en ${orderObjs.length} orden(es). Sincronizando…`);
+                let cloudSaved=true;
+                for(const o of orderObjs){try{const result=await Promise.race([cloudSaveOrder(o),new Promise(resolve=>setTimeout(()=>resolve('__HVAC_SAVE_TIMEOUT__'),20000))]);if(result==='__HVAC_SAVE_TIMEOUT__'||!result)cloudSaved=false;else try{registrarAuditoria('CREAR','hvac_orders',o.id);}catch(e){}}catch(e){cloudSaved=false;console.error('[Rutinas]',o.id,e);}}
+                localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));localStorage.setItem('HVAC_PROJECTIONS_BACKUP',JSON.stringify(monthlyProjections));
+                showToast(cloudSaved?`Rutina sincronizada: ${orderObjs.map(o=>o.id).join(', ')}.`:'Órdenes guardadas localmente; sincronización pendiente.',cloudSaved?'success':'error');
+            }catch(err){console.error('[Rutinas] No se pudo crear:',err);showToast('No se pudo completar la creación. Revisa la conexión e inténtalo de nuevo.','error');}
+            finally{nrSaving=false;if(submitBtn)submitBtn.disabled=false;if(submitLabel)submitLabel.textContent=originalLabel||'Registrar y Programar Rutina';}
         }
 
         function renderClientCatalog() {
@@ -6894,6 +6852,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     clientsCatalog.slice().sort((a,b) => String(a.name).localeCompare(String(b.name), 'es'))
                     .map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
             }
+            await window.hvacLoadZonesForClient?.(document.getElementById('eq-f-client')?.value || '');
             document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
             if (id) {
                 const e = equipmentCatalog.find(x => x.id === id);
@@ -6904,6 +6863,8 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                     if (cn && !Array.from(cs.options).some(o => o.value === cn)) cs.insertAdjacentHTML('beforeend', `<option value="${corrEsc(cn)}">${corrEsc(cn)} (no registrado en Gestión de Clientes)</option>`);
                     cs.value = cn;
                 }
+                await window.hvacLoadZonesForClient?.(eqClientName(e));
+                document.getElementById('eq-f-zone').value = e.zoneId || '';
                 document.getElementById('eq-f-code').value = e.code || '';
                 document.getElementById('eq-f-name').value = e.name || '';
                 document.getElementById('eq-f-serial').value = e.serial || '';
@@ -6921,6 +6882,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 document.getElementById('eq-f-brand').value = '';
                 document.getElementById('eq-f-model').value = '';
                 document.getElementById('eq-f-capacity').value = '';
+                document.getElementById('eq-f-zone').value = '';
             }
         }
 
@@ -6944,7 +6906,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 type: document.getElementById('eq-f-type').value.trim(),
                 brand: document.getElementById('eq-f-brand').value.trim(),
                 model: document.getElementById('eq-f-model').value.trim(),
-                capacity: document.getElementById('eq-f-capacity').value.trim()
+                capacity: document.getElementById('eq-f-capacity').value.trim(),
+                zoneId: document.getElementById('eq-f-zone')?.value || '',
+                zoneName: (window.HVAC_ZONES_CACHE || []).find(z => String(z.id) === String(document.getElementById('eq-f-zone')?.value || ''))?.name || ''
             };
             linkClientFields(eqObj, client); // nombre oficial + clientId
 
@@ -7040,7 +7004,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (!order) return;
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
-            document.getElementById('hub-order-title').innerText = `Orden ${order.id} - ${order.client}`;
+            document.getElementById('hub-order-title').innerText = `Orden ${order.id}${order.zoneName ? ' · ' + order.zoneName : ''} - ${order.client}`;
             document.getElementById('hub-order-subtitle').innerText = `Técnico: ${order.technician} | Fecha: ${order.date}`;
 
             currentHubTab = 'equipos';
@@ -7969,9 +7933,10 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const execInfo = afcExecInfo(order, eqIds.map(id => { const q = equipmentCatalog.find(e => e.id === id || e.code === id); return order.executions && (order.executions[id] || (q && (order.executions[q.id] || order.executions[q.code]))); }));
             afcSetMeta(doc, order, execInfo);
             ctx.infoGrid([
-                ["Cliente / Sede", order.client || '-'], ["Mes de ejecución", execInfo.month],
-                ["Fecha de ejecución", execInfo.date], ["Intervención del técnico", execInfo.time],
-                ["Técnico encargado", order.technician || 'N/A'], ["Equipos reportados", String(eqIds.length)]
+                ["Cliente / Sede", order.client || '-'], ["Zona / Piso", order.zoneName || 'Sin zona asignada'],
+                ["Mes de ejecución", execInfo.month], ["Fecha de ejecución", execInfo.date],
+                ["Intervención del técnico", execInfo.time], ["Técnico encargado", order.technician || 'N/A'],
+                ["Equipos reportados", String(eqIds.length)]
             ]);
 
             // Una hoja (o más, si hay muchas fotos/ítems) por cada equipo
@@ -10228,5 +10193,73 @@ async function attDelete(id) {
 </script>
 
 <script id="footer-year">document.querySelectorAll('.js-year').forEach(function (el) { el.textContent = new Date().getFullYear(); });</script>
+
+<!-- GMAO ZONES MODULE: zones per official client, persisted in hvac_zones.payload -->
+<div id="hvac-zones-fab" style="position:fixed;right:18px;bottom:86px;z-index:9998">
+ <button type="button" onclick="hvacOpenZonesManager()" class="btn-teal text-xs" style="box-shadow:0 8px 24px #0f766e30"><i class="fa-solid fa-layer-group"></i> Zonas y pisos</button>
+</div>
+<div id="hvac-zones-modal" class="hidden" style="position:fixed;inset:0;z-index:10020;background:rgba(15,23,42,.65);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:16px">
+ <div style="background:var(--surface,#fff);color:var(--text,#0f172a);width:min(620px,100%);max-height:88vh;overflow:auto;border:1px solid var(--line,#e2e8f0);border-radius:18px;padding:20px;box-shadow:0 24px 70px #0003">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px"><div><h3 style="font-weight:900;font-size:16px">Zonas y pisos por cliente</h3><p style="font-size:12px;color:var(--muted,#64748b)">Las zonas organizan la ejecución; no modifican contratos ni facturación.</p></div><button onclick="hvacCloseZonesManager()" aria-label="Cerrar" style="padding:8px">✕</button></div>
+  <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Cliente oficial</label><select id="hvac-zone-client" class="input-box" style="width:100%;margin-bottom:12px" onchange="hvacRenderZones()"></select>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><input id="hvac-zone-name" class="input-box" style="flex:1;min-width:180px" placeholder="Ej. Piso 1, Torre A, Sótano"><button class="btn-teal text-xs" onclick="hvacAddZone()"><i class="fa-solid fa-plus"></i> Agregar zona</button></div>
+  <div id="hvac-zone-list" style="display:grid;gap:8px"></div>
+  <div style="margin-top:16px;font-size:11px;color:var(--muted,#64748b)">Asigna cada equipo a una zona desde el formulario del catálogo. Al programar una rutina, los equipos asignados a distintas zonas se separarán en órdenes independientes.</div>
+ </div>
+</div>
+<script>
+(function(){
+ 'use strict';
+ const escH=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ window.HVAC_ZONES_CACHE=[];
+ const zClient=()=>document.getElementById('hvac-zone-client')?.value||'';
+ async function fetchZones(){
+   if(!navigator.onLine) throw new Error('Se requiere conexión para administrar zonas.');
+   const rows=await supabaseFetch('hvac_zones?select=id,payload&order=created_at.asc','GET',null,null,{quiet:true});
+   if(!Array.isArray(rows)) throw new Error('No se pudo leer hvac_zones. Ejecuta primero el SQL de instalación.');
+   window.HVAC_ZONES_CACHE=rows.filter(r=>r&&r.payload).map(r=>({...r.payload,id:r.payload.id||r.id}));
+   return window.HVAC_ZONES_CACHE;
+ }
+ window.hvacLoadZonesForClient=async function(client){
+   const sel=document.getElementById('eq-f-zone'); if(!sel)return;
+   const previous=sel.value;
+   try{await fetchZones();}catch(e){console.warn('[Zonas]',e);}
+   const rows=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(client||''));
+   sel.innerHTML='<option value="">Sin zona asignada</option>'+rows.map(z=>`<option value="${escH(z.id)}">${escH(z.name)}</option>`).join('');
+   if(rows.some(z=>String(z.id)===String(previous)))sel.value=previous;
+ };
+ window.hvacOpenZonesManager=async function(){
+   const modal=document.getElementById('hvac-zones-modal');modal.style.display='flex';modal.classList.remove('hidden');
+   const sel=document.getElementById('hvac-zone-client');
+   try{
+    if(!Array.isArray(clientsCatalog)||!clientsCatalog.length){const rows=await supabaseFetch('hvac_clients?select=id,payload','GET',null,null,{quiet:true});if(Array.isArray(rows))clientsCatalog=rows.filter(r=>r.payload).map(r=>({...r.payload,id:r.payload.id||r.id}));}
+    sel.innerHTML='<option value="">Selecciona un cliente</option>'+clientsCatalog.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'es')).map(c=>`<option value="${escH(c.name)}">${escH(c.name)}</option>`).join('');
+    await fetchZones(); hvacRenderZones();
+   }catch(e){showToast(e.message||'No fue posible cargar las zonas.','error');}
+ };
+ window.hvacCloseZonesManager=()=>{const m=document.getElementById('hvac-zones-modal');m.style.display='none';m.classList.add('hidden');};
+ window.hvacRenderZones=function(){
+  const host=document.getElementById('hvac-zone-list');if(!host)return;
+  const rows=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(zClient()));
+  host.innerHTML=rows.length?rows.map(z=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:10px 12px"><div><div style="font-weight:800;font-size:13px">${escH(z.name)}</div><div style="font-size:10px;color:var(--muted,#64748b)">${equipmentCatalog.filter(e=>String(e.zoneId||'')===String(z.id)).length} equipo(s) asignado(s)</div></div><button onclick="hvacDeleteZone('${escH(z.id)}')" style="color:#dc2626;font-size:12px;font-weight:700">Eliminar</button></div>`).join(''):'<div style="font-size:12px;color:var(--muted,#64748b);padding:16px;text-align:center;border:1px dashed var(--line,#cbd5e1);border-radius:12px">No hay zonas creadas para este cliente.</div>';
+ };
+ window.hvacAddZone=async function(){
+  const clientName=zClient(), name=document.getElementById('hvac-zone-name').value.trim();
+  if(!clientName)return showToast('Selecciona primero un cliente.','error');if(!name)return showToast('Escribe el nombre de la zona.','error');
+  if(window.HVAC_ZONES_CACHE.some(z=>String(z.clientName)===clientName&&String(z.name).toLocaleLowerCase('es')===name.toLocaleLowerCase('es')))return showToast('Esa zona ya existe para el cliente.','error');
+  const id='ZON-'+Date.now().toString(36).toUpperCase();const payload={id,clientName,name,createdAt:new Date().toISOString()};
+  const r=await cloudUpsert('hvac_zones',id,payload);if(!r)return showToast('No se pudo guardar la zona en Supabase.','error');
+  window.HVAC_ZONES_CACHE.push(payload);document.getElementById('hvac-zone-name').value='';hvacRenderZones();showToast('Zona guardada.');
+ };
+ window.hvacDeleteZone=async function(id){
+  if(equipmentCatalog.some(e=>String(e.zoneId||'')===String(id)))return showToast('No se puede eliminar: hay equipos asignados. Reasígnalos primero.','error');
+  if(!confirm('¿Eliminar esta zona?'))return;
+  const ok=await cloudDeleteGeneric('hvac_zones',id);if(!ok)return showToast('No se pudo eliminar la zona de Supabase.','error');
+  window.HVAC_ZONES_CACHE=window.HVAC_ZONES_CACHE.filter(z=>String(z.id)!==String(id));hvacRenderZones();showToast('Zona eliminada.');
+ };
+ document.addEventListener('change',e=>{if(e.target?.id==='eq-f-client')window.hvacLoadZonesForClient(e.target.value);});
+})();
+</script>
+
 </body>
 </html>
