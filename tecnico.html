@@ -112,6 +112,8 @@ html[data-theme="light"] .offline-banner{background:#fef3c7;color:#78350f;border
 .r-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .r-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.8px;font-weight:800;padding:5px 10px;border-radius:10px;background:var(--surface-2);color:#8bb6ff}
 .r-client{font-size:17.1px;font-weight:900;letter-spacing:-.01em;line-height:1.2}
+.zone-chip{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:900;letter-spacing:.01em;background:rgba(16,185,129,.16);color:#34d399;border:1px solid rgba(16,185,129,.45)}
+html[data-theme="light"] .zone-chip{color:#047857}
 .r-meta{display:flex;flex-wrap:wrap;gap:14px;font-size:10.8px;font-weight:700;color:var(--muted)}
 .r-meta i{margin-right:6px;color:var(--primary)}
 .r-progress{display:flex;align-items:center;gap:10px;font-size:10.8px;font-weight:800;color:var(--muted)}
@@ -2457,6 +2459,12 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             return techOrderNeedsWork(order) ? 'PENDING' : 'COMPLETED';
         }
 
+        // Zona / piso de una orden (con respaldo en la zona de sus equipos para órdenes antiguas)
+        function techOrderZone(o) {
+            const own = String((o && o.zoneName) || '').trim(); if (own) return own;
+            return [...new Set(((o && o.equipmentIds) || []).map(id => String((techFindEq(id) || {}).zoneName || '').trim()).filter(Boolean))].join(' · ');
+        }
+
         function renderTechAgenda() {
             const container = document.getElementById('tech-orders-container');
             if (!container) return;
@@ -2466,7 +2474,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 const effective = techEffectiveStatus(o);
                 // Si hay equipos pendientes, la rutina siempre debe poder abrirse aunque status diga COMPLETED.
                 return effective === 'PENDING' || (effective === 'COMPLETED' && !o.technicianFinished);
-            }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+            }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.id).localeCompare(String(b.id), 'es', { numeric: true }));
 
             const nPend = myOrders.filter(o => techEffectiveStatus(o) === 'PENDING').length;
             const nDone = myOrders.filter(o => techEffectiveStatus(o) === 'COMPLETED').length;
@@ -2503,6 +2511,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Todos los equipos finalizados' : 'Pendiente · continuar rutina'}</span>
                     </div>
                     <h3 class="r-client">${esc(o.client)}</h3>
+                    ${techOrderZone(o) ? `<span class="zone-chip"><i class="fa-solid fa-layer-group"></i>${esc(techOrderZone(o))}</span>` : ''}
                     <div class="r-meta">
                         <span><i class="fa-regular fa-calendar"></i>${esc(o.date)}</span>
                         <span><i class="fa-solid fa-snowflake"></i>${progress.done} de ${progress.total} equipos finalizados</span>
@@ -2794,8 +2803,8 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             if (!order) return;
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
-            document.getElementById('hub-order-title').innerText = `Orden ${order.id}${order.zoneName ? ' · ' + order.zoneName : ''} - ${order.client}`;
-            document.getElementById('hub-order-subtitle').innerText = `Técnico: ${order.technician} | Fecha: ${order.date}`;
+            document.getElementById('hub-order-title').innerText = `Orden ${order.id} - ${order.client}`;
+            document.getElementById('hub-order-subtitle').innerText = `${techOrderZone(order) ? 'Zona / Piso: ' + techOrderZone(order) + ' | ' : ''}Técnico: ${order.technician} | Fecha: ${order.date}`;
 
             currentHubTab = 'equipos';
             const searchInput = document.getElementById('hub-equipment-search');

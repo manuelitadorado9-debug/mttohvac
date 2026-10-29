@@ -1450,6 +1450,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     <p class="text-xs text-slate-500 mt-0.5">Inventario general de aires acondicionados, chillers y extractores.</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="hvacOpenZonesManager()" class="bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-sm" title="Crear y listar zonas o pisos por cliente"><i class="fa-solid fa-layer-group"></i> Zonas y pisos</button>
                     <button onclick="openQrModal()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-sm" title="Generar y descargar códigos QR de los equipos">
                         <i class="fa-solid fa-qrcode"></i> Códigos QR
                     </button>
@@ -2726,11 +2727,11 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         // ----- Consecutivos: PRE-0001 (preventivo) y COR-0001 (correctivo). Los PREV0001 heredados siguen ordenándose. -----
 const CONSEC_PREF = { PREVENTIVO: 'PRE-', CORRECTIVO: 'COR-' }, PREV_DIGITS = 4;
 function prevFormat(n, pref = 'PRE-') { return pref + String(n).padStart(PREV_DIGITS, '0'); }
-function consecParse(id, pref) { const m = new RegExp('^' + pref + '(\\d+)$', 'i').exec(String(id || '').trim()); return m ? parseInt(m[1], 10) : 0; }
+function consecParse(id, pref) { const m = new RegExp('^' + pref + '(\\d+)(?:-P\\d+)?$', 'i').exec(String(id || '').trim()); return m ? parseInt(m[1], 10) : 0; }
 // Número ordenable: PREV#### (heredado) < PRE-#### / COR-####
 function prevParse(id) {
     const s = String(id || '').trim(); let m = /^PREV(\d+)$/i.exec(s); if (m) return parseInt(m[1], 10);
-    m = /^(?:PRE|COR)-(\d+)$/i.exec(s); return m ? 100000 + parseInt(m[1], 10) : 0;
+    m = /^(?:PRE|COR)-(\d+)(?:-P(\d+))?$/i.exec(s); return m ? 100000 + parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 1000 : 0) : 0;
 }
 function consecLocalMax(pref) {
     let max = 0;
@@ -6306,10 +6307,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const alreadyScheduled=new Set((proj.scheduledEquipmentIds||[]).map(String));
             if(equipmentIds.some(id=>alreadyScheduled.has(String(id))))return showToast('Uno o más equipos ya están programados en esta proyección. Actualiza la lista y vuelve a seleccionar.','error');
             try{
-              const baseId=await reservePrevId(),groups=hvacGroupEquipmentByZone(equipmentIds);
-              const orders=groups.map((g,i)=>{const o={id:groups.length>1?`${baseId}-P${i+1}`:baseId,client:proj.client,date,technician,technicians,equipmentIds:g.ids,zoneId:g.zoneId,zoneName:g.zoneName,zonePart:groups.length>1?i+1:null,zoneParts:groups.length>1?groups.length:1,zoneBaseId:baseId,executions:{},status:'PENDING',clientSignature:null,invoice:null,createdAt:new Date().toISOString(),maintenanceType:'PREVENTIVO'};linkClientFields(o,proj.client);return o;});
+              const baseId=await hvacBaseIdForProjection(proj),groups=hvacGroupEquipmentByZone(equipmentIds);
+              const orders=hvacBuildZoneOrders({client:proj.client,date,technician,technicians,groups,base:baseId});
               workOrders.push(...orders);
-              proj.orderId=orders[0].id;proj.orderIds=[...new Set([...(proj.orderIds||[]),...orders.map(o=>o.id)])];
+              proj.zoneBaseId=baseId;
+              proj.orderId=proj.orderId||orders[0].id;proj.orderIds=[...new Set([...(proj.orderIds||[]),...orders.map(o=>o.id)])];
               proj.scheduledEquipmentIds=[...new Set([...(proj.scheduledEquipmentIds||[]).map(String),...equipmentIds.map(String)])];
               const allProjectionEquipment=(proj.equipmentIds&&proj.equipmentIds.length?proj.equipmentIds:equipmentCatalog.filter(e=>eqBelongsToClient(e,proj.client)).map(e=>e.id)).map(String);
               if(!proj.equipmentIds||!proj.equipmentIds.length)proj.equipmentIds=allProjectionEquipment.slice();
@@ -6326,7 +6328,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
         function nrApplyMode(order) {
             const editing = !!order;
-            const proj = editing ? monthlyProjections.find(p => p.orderId === order.id) : null;
+            const proj = editing ? hvacProjForOrder(order.id) : null;
             const sel = document.getElementById('nr-client');
             if (sel) sel.disabled = editing;                                   // integridad: no se cambia el cliente
             document.getElementById('nr-client-lock').classList.toggle('hidden', !editing);
@@ -6385,7 +6387,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             sel.value = client;
             nrApplyMode(order);
 
-            const proj = monthlyProjections.find(p => p.orderId === order.id);
+            const proj = hvacProjForOrder(order.id);
             if (proj) {
                 document.getElementById('nr-periodicity').value = proj.periodicity || 'Trimestral';
                 document.getElementById('nr-budget').value = proj.budget || '';
@@ -6456,7 +6458,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 order.clientSignature = null;
             }
 
-            const proj = monthlyProjections.find(p => p.orderId === order.id);
+            const proj = hvacProjForOrder(order.id);
             if (proj) {
                 const d = new Date(date + 'T00:00:00');
                 proj.month = d.getMonth() + 1; proj.year = d.getFullYear();
@@ -6508,6 +6510,43 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         }
 
         let nrSaving = false;
+        // ===== Zonas: etiqueta, proyección del periodo y códigos PRE-0007-P1 =====
+        function hvacOrderZoneLabel(order) {
+            if (!order) return '';
+            const own = String(order.zoneName || '').trim(); if (own) return own;
+            const names = [...new Set((order.equipmentIds || []).map(id => { const e = (equipmentCatalog || []).find(x => String(x.id) === String(id) || String(x.code) === String(id)); return String((e && e.zoneName) || '').trim(); }).filter(Boolean))];
+            return names.join(' · ');
+        }
+        function hvacProjForOrder(orderId) {
+            return (monthlyProjections || []).find(p => p && (String(p.orderId) === String(orderId) || (p.orderIds || []).map(String).includes(String(orderId))));
+        }
+        function hvacStripZoneSuffix(id) { return String(id || '').replace(/-P\d+$/i, ''); }
+        // Consecutivo base de un cliente+periodo: el de la proyección si ya tiene órdenes; si no, uno nuevo.
+        async function hvacBaseIdForProjection(proj) {
+            if (proj && proj.zoneBaseId) return proj.zoneBaseId;
+            const first = proj && (proj.orderIds && proj.orderIds[0] || proj.orderId);
+            if (first) { const o = (workOrders || []).find(x => String(x.id) === String(first)); return (o && o.zoneBaseId) || hvacStripZoneSuffix(first); }
+            return reservePrevId();
+        }
+        // Asigna ids: cada zona → BASE-P{n} (n continúa tras las partes ya existentes); sin zona → BASE si está libre.
+        function hvacZoneOrderIds(base, groups) {
+            const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-P(\\d+)$', 'i');
+            const taken = new Set((workOrders || []).map(o => String(o && o.id)));
+            let n = 0; (workOrders || []).forEach(o => { const m = re.exec(String(o && o.id || '')); if (m) n = Math.max(n, +m[1]); });
+            return groups.map(g => {
+                if (!g.zoneId && !taken.has(base)) { taken.add(base); return { id: base, part: null }; }
+                let id; do { n++; id = `${base}-P${n}`; } while (taken.has(id));
+                taken.add(id); return { id, part: n };
+            });
+        }
+        function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base }) {
+            const ids = hvacZoneOrderIds(base, groups);
+            return groups.map((g, i) => {
+                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
+                linkClientFields(o, client); return o;
+            });
+        }
+
         function hvacGroupEquipmentByZone(ids) {
             const map=new Map();
             (ids||[]).forEach(id=>{const e=(equipmentCatalog||[]).find(x=>String(x.id)===String(id)||String(x.code)===String(id))||{};const zid=String(e.zoneId||'');const zname=String(e.zoneName||'').trim()||(zid?'Zona asignada':'Sin zona');const key=zid||'__NO_ZONE__';if(!map.has(key))map.set(key,{zoneId:zid,zoneName:zname,ids:[]});map.get(key).ids.push(id);});
@@ -6531,12 +6570,23 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             try {
                 const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
                 const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
-                const baseId=await reservePrevId();
+                // Mismo cliente y mismo periodo (mes/año) con órdenes por zona: se conserva el consecutivo y se agrega la parte -P#.
+                const sameProj=monthlyProjections.find(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId);
+                if(sameProj&&equipmentIds.some(id=>(sameProj.scheduledEquipmentIds||sameProj.equipmentIds||[]).map(String).includes(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
+                const baseId=sameProj?await hvacBaseIdForProjection(sameProj):await reservePrevId();
                 const groups=hvacGroupEquipmentByZone(equipmentIds);
-                const orderObjs=groups.map((g,i)=>{const id=groups.length>1?`${baseId}-P${i+1}`:baseId;const o={id,client,date,technician,technicians,equipmentIds:g.ids,zoneId:g.zoneId,zoneName:g.zoneName,zonePart:groups.length>1?i+1:null,zoneParts:groups.length>1?groups.length:1,zoneBaseId:baseId,executions:{},status:'PENDING',clientSignature:null,invoice:null,createdAt:new Date().toISOString(),maintenanceType:'PREVENTIVO'};linkClientFields(o,client);return o;});
-                const orderObj=orderObjs[0];
-                const projObj={id:projId,client,periodicity,month,year,budget,equipmentIds,status:'SCHEDULED',orderId:orderObj.id,orderIds:orderObjs.map(o=>o.id)};
-                monthlyProjections.push(projObj); workOrders.push(...orderObjs);
+                const orderObjs=hvacBuildZoneOrders({client,date,technician,technicians,groups,base:baseId});
+                let projObj;
+                if(sameProj){
+                    projObj=sameProj;
+                    projObj.orderIds=[...new Set([...(projObj.orderIds||[projObj.orderId]).filter(Boolean),...orderObjs.map(o=>o.id)])];
+                    projObj.equipmentIds=[...new Set([...(projObj.equipmentIds||[]).map(String),...equipmentIds.map(String)])];
+                    projObj.scheduledEquipmentIds=[...new Set([...(projObj.scheduledEquipmentIds||[]).map(String),...equipmentIds.map(String)])];
+                }else{
+                    projObj={id:projId,client,periodicity,month,year,budget,equipmentIds,status:'SCHEDULED',orderId:orderObjs[0].id,orderIds:orderObjs.map(o=>o.id),zoneBaseId:baseId};
+                    monthlyProjections.push(projObj);
+                }
+                workOrders.push(...orderObjs);
                 localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));localStorage.setItem('HVAC_PROJECTIONS_BACKUP',JSON.stringify(monthlyProjections));
                 try{renderAdminDashboard();}catch(e){} try{renderPlanningModule();}catch(e){}
                 closeNewRoutineModal();showToast(`Rutina creada en ${orderObjs.length} orden(es). Sincronizando…`);
@@ -7648,7 +7698,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             return info;
         }
         function afcSetMeta(doc, order, info) {                  // metadatos del archivo PDF
-            try { doc.setProperties({ title: `Informe de mantenimiento ${order.id} - ${order.client || ''}`, subject: `Mes de ejecución: ${info.month} · Fecha: ${info.short || info.date}`, author: 'Alejandro Faccini y Compañía S.A.S.', keywords: `${order.id}, ${info.month}` }); } catch (e) { console.warn('[PDF] metadatos', e); }
+            try { doc.setProperties({ title: `Informe de mantenimiento ${order.id} - ${order.client || ''}${hvacOrderZoneLabel(order) ? ' - ' + hvacOrderZoneLabel(order) : ''}`, subject: `Mes de ejecución: ${info.month} · Fecha: ${info.short || info.date}`, author: 'Alejandro Faccini y Compañía S.A.S.', keywords: `${order.id}, ${info.month}` }); } catch (e) { console.warn('[PDF] metadatos', e); }
         }
 
         function afcPdfCreate(orderId) {
@@ -7891,7 +7941,8 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             ctx.sectionTitle('1. Información del Equipo', 22);
             ctx.infoGrid([
                 ['Código', eq.code || '-'], ['Tipo de sistema', typeKey],
-                ['Marca', eq.brand || 'No registra'], ['Modelo / Capacidad', `${eq.model || 'N/A'} / ${eq.capacity || 'N/A'}`]
+                ['Marca', eq.brand || 'No registra'], ['Modelo / Capacidad', `${eq.model || 'N/A'} / ${eq.capacity || 'N/A'}`],
+                ['Zona / Piso', hvacOrderZoneLabel(order) || String(eq.zoneName || '').trim() || 'Sin zona asignada']
             ]);
 
             // 2. Parámetros técnicos
@@ -7958,7 +8009,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const execInfo = afcExecInfo(order, eqIds.map(id => { const q = equipmentCatalog.find(e => e.id === id || e.code === id); return order.executions && (order.executions[id] || (q && (order.executions[q.id] || order.executions[q.code]))); }));
             afcSetMeta(doc, order, execInfo);
             ctx.infoGrid([
-                ["Cliente / Sede", order.client || '-'], ["Zona / Piso", order.zoneName || 'Sin zona asignada'],
+                ["Orden", order.id], ["Cliente / Sede", order.client || '-'], ["Zona / Piso", hvacOrderZoneLabel(order) || 'Sin zona asignada'],
                 ["Mes de ejecución", execInfo.month], ["Fecha de ejecución", execInfo.date],
                 ["Intervención del técnico", execInfo.time], ["Técnico encargado", order.technician || 'N/A'],
                 ["Equipos reportados", String(eqIds.length)]
@@ -8111,6 +8162,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             ctx.sectionTitle('Datos de la Orden', 22);
             ctx.infoGrid([
                 ['Orden', order.id], ['Cliente / Sede', order.client || '-'],
+                ['Zona / Piso', hvacOrderZoneLabel(order) || 'Sin zona asignada'],
                 ['Mes de ejecución', execInfo.month], ['Fecha de ejecución', execInfo.date],
                 ['Técnico encargado', order.technician || 'N/A'], ['Intervención del técnico', execInfo.time]
             ]);
@@ -9273,7 +9325,7 @@ function periodAddMonths(iso, n) { const d = new Date(String(iso).slice(0, 10) +
 function periodAlerts() {
     const today = new Date(); today.setHours(12, 0, 0, 0);
     const iso = d => d.toLocaleDateString('en-CA'), todayIso = iso(today), by = {};
-    const isolated = new Set((monthlyProjections || []).filter(p => p && p.orderId && periodIsNone(p.periodicity)).map(p => String(p.orderId)));   // órdenes sin periodicidad: no cuentan para el ciclo
+    const isolated = new Set((monthlyProjections || []).filter(p => p && p.orderId && periodIsNone(p.periodicity)).flatMap(p => [p.orderId, ...(p.orderIds || [])]).map(String));   // órdenes sin periodicidad: no cuentan para el ciclo
     (monthlyProjections || []).forEach(p => { if (p && p.client && !periodIsNone(p.periodicity)) (by[p.client] = by[p.client] || { projs: [], orders: [] }).projs.push(p); });
     (workOrders || []).forEach(o => { if (o && o.client && o.date && by[o.client] && !isolated.has(String(o.id))) by[o.client].orders.push(o); });
     const out = [];
@@ -10254,24 +10306,14 @@ async function attDelete(id) {
    if(rows.some(z=>String(z.id)===String(previous)))sel.value=previous;
  };
  window.hvacCreateZoneFromEquipment=async function(){
-   const clientName=String(document.getElementById('eq-f-client')?.value||'').trim();
-   const input=document.getElementById('eq-f-zone-new');
-   const name=String(input?.value||'').trim();
-   if(!clientName)return showToast('Selecciona primero el cliente del equipo.','error');
-   if(!name)return showToast('Escribe el nombre de la zona o piso.','error');
+   const clientName=String(document.getElementById('eq-f-client')?.value||'').trim(),input=document.getElementById('eq-f-zone-new');
    try{
-     await fetchZones();
-     if(window.HVAC_ZONES_CACHE.some(z=>String(z.clientName)===clientName&&String(z.name).toLocaleLowerCase('es')===name.toLocaleLowerCase('es')))return showToast('Esa zona ya existe para este cliente.','error');
-     const id='ZON-'+Date.now().toString(36).toUpperCase();
-     const payload={id,clientName,name,createdAt:new Date().toISOString()};
-     const saved=await cloudUpsert('hvac_zones',id,payload);
-     if(!saved)return showToast('No se pudo guardar la zona en Supabase.','error');
-     window.HVAC_ZONES_CACHE.push(payload);
+     const z=await window.hvacSaveZone(clientName,input?.value);
      await window.hvacLoadZonesForClient(clientName);
-     const sel=document.getElementById('eq-f-zone');if(sel)sel.value=id;
+     const sel=document.getElementById('eq-f-zone');if(sel)sel.value=z.id;
      if(input)input.value='';
      showToast('Zona creada y asignada al equipo.','success');
-   }catch(e){console.error('[Zonas equipo]',e);showToast(e.message||'No fue posible crear la zona.','error');}
+   }catch(e){showToast(e.message||'No fue posible crear la zona.','error');}
  };
  window.hvacPopulateRoutineZoneFilter=async function(client,mode){
    const sel=document.getElementById(mode+'-zone-filter');if(!sel)return;
@@ -10309,13 +10351,24 @@ async function attDelete(id) {
   const rows=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(zClient()));
   host.innerHTML=rows.length?rows.map(z=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:10px 12px"><div><div style="font-weight:800;font-size:13px">${escH(z.name)}</div><div style="font-size:10px;color:var(--muted,#64748b)">${equipmentCatalog.filter(e=>String(e.zoneId||'')===String(z.id)).length} equipo(s) asignado(s)</div></div><button onclick="hvacDeleteZone('${escH(z.id)}')" style="color:#dc2626;font-size:12px;font-weight:700">Eliminar</button></div>`).join(''):'<div style="font-size:12px;color:var(--muted,#64748b);padding:16px;text-align:center;border:1px dashed var(--line,#cbd5e1);border-radius:12px">No hay zonas creadas para este cliente.</div>';
  };
+ // API: listar y guardar zonas de un cliente (única vía de escritura; la usan el gestor y el formulario de equipos)
+ window.hvacListZones=async function(clientName){
+   await fetchZones();
+   return window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(clientName||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es',{numeric:true}));
+ };
+ window.hvacSaveZone=async function(clientName,name){
+   clientName=String(clientName||'').trim();name=String(name||'').trim().replace(/\s+/g,' ');
+   if(!clientName)throw new Error('Selecciona primero un cliente.');
+   if(!name)throw new Error('Escribe el nombre de la zona o piso.');
+   if((await window.hvacListZones(clientName)).some(z=>String(z.name).toLocaleLowerCase('es')===name.toLocaleLowerCase('es')))throw new Error('Esa zona ya existe para este cliente.');
+   const id='ZON-'+Date.now().toString(36).toUpperCase(),payload={id,clientName,name,createdAt:new Date().toISOString()};
+   if(!await cloudUpsert('hvac_zones',id,payload))throw new Error('No se pudo guardar la zona en Supabase.');
+   window.HVAC_ZONES_CACHE.push(payload);
+   return payload;
+ };
  window.hvacAddZone=async function(){
-  const clientName=zClient(), name=document.getElementById('hvac-zone-name').value.trim();
-  if(!clientName)return showToast('Selecciona primero un cliente.','error');if(!name)return showToast('Escribe el nombre de la zona.','error');
-  if(window.HVAC_ZONES_CACHE.some(z=>String(z.clientName)===clientName&&String(z.name).toLocaleLowerCase('es')===name.toLocaleLowerCase('es')))return showToast('Esa zona ya existe para el cliente.','error');
-  const id='ZON-'+Date.now().toString(36).toUpperCase();const payload={id,clientName,name,createdAt:new Date().toISOString()};
-  const r=await cloudUpsert('hvac_zones',id,payload);if(!r)return showToast('No se pudo guardar la zona en Supabase.','error');
-  window.HVAC_ZONES_CACHE.push(payload);document.getElementById('hvac-zone-name').value='';hvacRenderZones();showToast('Zona guardada.');
+  try{await window.hvacSaveZone(zClient(),document.getElementById('hvac-zone-name').value);document.getElementById('hvac-zone-name').value='';hvacRenderZones();showToast('Zona guardada.');}
+  catch(e){showToast(e.message||'No se pudo guardar la zona.','error');}
  };
  window.hvacDeleteZone=async function(id){
   if(equipmentCatalog.some(e=>String(e.zoneId||'')===String(id)))return showToast('No se puede eliminar: hay equipos asignados. Reasígnalos primero.','error');
