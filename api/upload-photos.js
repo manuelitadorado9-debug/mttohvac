@@ -3,7 +3,7 @@
    Recibe hasta 8 imágenes en base64, las sube a Cloudflare R2 y devuelve las URLs públicas definitivas.
 
    Body (JSON):
-     { "orden": "PRE0001",
+     { "orden": "PRE-0007-P1",              // id de la orden en hvac_orders (admite sufijo de zona -P#)
        "antes":   ["data:image/jpeg;base64,...", ...],      // → fotos_antes
        "despues": ["data:image/jpeg;base64,...", ...],      // → fotos_despues
        "fotos":   ["data:image/png;base64,...", {"data": "...", "etapa": "antes"}] }   // opcional, lista libre
@@ -13,7 +13,7 @@
    Las claves se calculan con el hash del contenido: reintentar la misma foto NO crea duplicados en R2.
 
    Variables de entorno (las mismas de /api/r2-sign): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE
-   Opcionales: UPLOAD_REQUIRE_ORDER=1 (exige que la orden exista en Supabase y respeta el tope de 8 fotos por orden),
+   Opcionales: UPLOAD_REQUIRE_ORDER=1 (exige que la orden exista en hvac_orders de Supabase),
                SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY (necesarias solo con la opción anterior), ALLOWED_ORIGINS.
 
    OJO · Vercel limita el cuerpo de una función a 4,5 MB: comprime en el cliente (≈1280 px, JPEG calidad 0,7 → 150-350 KB por foto). */
@@ -79,12 +79,11 @@ function collect(body) {
   return items;
 }
 
-/* Con UPLOAD_REQUIRE_ORDER=1: la orden debe existir y (fotos ya guardadas + nuevas) ≤ 8. */
-async function checkOrder(orden, nuevas) {
-  const rows = await supabaseSelect(`ordenes_mantenimiento?numero_orden=eq.${encodeURIComponent(orden)}&select=id,fotos_antes,fotos_despues&limit=1`);
+/* Con UPLOAD_REQUIRE_ORDER=1: la orden debe existir en hvac_orders (id = código, p. ej. PRE-0007-P1).
+   Las fotos de la app viven por equipo dentro del payload, así que el tope de 8 se aplica solo por petición. */
+async function checkOrder(orden) {
+  const rows = await supabaseSelect(`hvac_orders?id=eq.${encodeURIComponent(orden)}&select=id&limit=1`);
   if (!Array.isArray(rows) || !rows.length) throw new HttpError(404, `La orden ${orden} no existe.`);
-  const previas = (rows[0].fotos_antes || []).length + (rows[0].fotos_despues || []).length;
-  if (previas + nuevas > MAX_PHOTOS) throw new HttpError(409, `La orden ya tiene ${previas} foto(s); con ${nuevas} más superaría el máximo de ${MAX_PHOTOS}.`, { fotos_actuales: previas, maximo: MAX_PHOTOS });
 }
 
 module.exports = async function handler(req, res) {
@@ -95,7 +94,7 @@ module.exports = async function handler(req, res) {
 
     const body = await readJson(req, MAX_BODY_BYTES);
     const orden = String(body.orden || '').trim().toUpperCase();
-    if (!ORDEN_RE.test(orden)) return send(res, 400, { ok: false, error: 'orden inválida (letras, números y guion; 3 a 40 caracteres).' });
+    if (!ORDEN_RE.test(orden)) return send(res, 400, { ok: false, error: 'orden inválida (ej. PRE-0007 o PRE-0007-P1; letras, números y guion, 3 a 40 caracteres).' });
 
     const items = collect(body);
     if (!items.length) return send(res, 400, { ok: false, error: 'No se recibió ninguna imagen.' });
@@ -110,7 +109,7 @@ module.exports = async function handler(req, res) {
       return { ...f, etapa: it.etapa, key: `ordenes/${orden}/${it.etapa}/${hash}.${f.ext}` };
     });
 
-    if (process.env.UPLOAD_REQUIRE_ORDER === '1') await checkOrder(orden, files.length);
+    if (process.env.UPLOAD_REQUIRE_ORDER === '1') await checkOrder(orden);
 
     const base = process.env.R2_PUBLIC_BASE.replace(/\/+$/, '');
     const results = await Promise.allSettled(files.map(f => r2Client().send(new PutObjectCommand({
