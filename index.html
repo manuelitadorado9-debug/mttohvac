@@ -3448,6 +3448,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const order = workOrders.find(o => o.id === orderId);
             if (!order) return;
 
+            // Regla estricta: no se factura la matriz si alguna parte -P# no está Completada
+            const chk = await hvacAssertMatrixBillable(order);
+            if (!chk.ok) return showToast(chk.reason, 'error');
+            const holder = hvacMatrixHolder(order);
+
             const number = document.getElementById('inv-f-number').value.trim();
             const amount = parseFloat(document.getElementById('inv-f-amount').value) || 0;
             const expenses = parseFloat(document.getElementById('inv-f-expenses').value) || 0;
@@ -3463,28 +3468,33 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 }
             }
 
-            const previa = order.invoice || {};
+            const previa = holder.invoice || {};
             const urlAnterior = previa.pdfUrl || null;
-            const yaFacturada = order.status === 'BILLED';
+            const yaFacturada = holder.status === 'BILLED';
             let pdfUrl = urlAnterior;
 
             try {
                 if (archivo) {
-                    pdfUrl = await storageSubirFacturaPdf(order.id, archivo);                       // PDF nuevo
+                    pdfUrl = await storageSubirFacturaPdf(holder.id, archivo);                       // PDF nuevo
                 } else if (!pdfUrl && previa.pdfData) {
-                    pdfUrl = await storageSubirFacturaPdf(order.id, dataUrlToBlob(previa.pdfData)); // factura antigua: se migra al guardar
+                    pdfUrl = await storageSubirFacturaPdf(holder.id, dataUrlToBlob(previa.pdfData)); // factura antigua: se migra al guardar
                 }
             } catch (err) {
                 console.error('[Factura] Falló la subida del PDF:', err);
                 return showToast('No se pudo subir el PDF de la factura: ' + (err && err.message ? err.message : err), 'error');
             }
 
-            order.invoice = { number, amount, expenses, pdfUrl: pdfUrl || null, date: (yaFacturada && previa.date) ? previa.date : new Date().toISOString() }; // ya sin pdfData (base64)
-            order.status = 'BILLED';
-
-            await cloudSaveOrder(order);
+            const invoice = { number, amount, expenses, pdfUrl: pdfUrl || null, date: (yaFacturada && previa.date) ? previa.date : new Date().toISOString() }; // ya sin pdfData (base64)
+            // La factura vive en la parte titular; las demás partes -P# la referencian (sin duplicar valores)
+            for (const p of (chk.parts.length ? chk.parts : [order])) {
+                p.invoice = (p === holder) ? invoice
+                    : { matrixRef: chk.base, number, pdfUrl: invoice.pdfUrl, amount: 0, expenses: 0, date: invoice.date };
+                p.status = 'BILLED';
+                p.updatedAt = new Date().toISOString();
+                await cloudSaveOrder(p);
+            }
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-            registrarAuditoria(yaFacturada ? 'EDITAR_FACTURA' : 'FACTURAR', 'hvac_orders', order.id);
+            registrarAuditoria(yaFacturada ? 'EDITAR_FACTURA' : 'FACTURAR', 'hvac_orders', chk.base);
             if (archivo && urlAnterior && urlAnterior !== pdfUrl) storageBorrarPorUrl(urlAnterior);  // limpia el PDF reemplazado
 
             closeInvoiceModal();
@@ -4954,9 +4964,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const filteredOrders = workOrders.filter(o => !String(o.id || '').startsWith('HIST-') && matchesClientFilter(o.client, filterClient));
 
             document.getElementById('kpi-dash-total').innerText = filteredOrders.length;
-            document.getElementById('kpi-dash-prog').innerText = filteredOrders.filter(o => o.status === 'PENDING').length;
-            document.getElementById('kpi-dash-done').innerText = filteredOrders.filter(o => o.status === 'COMPLETED').length;
-            document.getElementById('kpi-dash-bill').innerText = filteredOrders.filter(o => o.status === 'BILLED').length;
+            document.getElementById('kpi-dash-prog').innerText = filteredOrders.filter(o => ['PENDING', 'IN_PROGRESS'].includes(hvacOrderState(o))).length;
+            document.getElementById('kpi-dash-done').innerText = filteredOrders.filter(o => hvacOrderState(o) === 'COMPLETED').length;
+            document.getElementById('kpi-dash-bill').innerText = filteredOrders.filter(o => hvacOrderState(o) === 'BILLED').length;
 
             const tbody = document.getElementById('dash-orders-table-body');
             tbody.innerHTML = '';
@@ -4964,9 +4974,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const dashKey = o => String(o.createdAt || o.date || '');
             const dashSorted = [...filteredOrders].sort((x, y) => dashKey(y).localeCompare(dashKey(x)) || String(y.date || '').localeCompare(String(x.date || '')) || (prevParse(y.id) - prevParse(x.id)) || String(y.id).localeCompare(String(x.id)));
             dashSorted.forEach(o => {
-                let statusBadge = `<span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">${doneCount > 0 ? 'En curso' : 'Pendiente'}</span>`;
-                if (progress.complete && String(o.status || '').toUpperCase() === 'COMPLETED') statusBadge = '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Completado</span>';
-                if (o.status === 'BILLED') statusBadge = '<span class="bg-indigo-50 text-indigo-700 border border-indigo-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Facturado</span>';
+                const statusBadge = hvacStateBadge(hvacOrderState(o));
 
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(o.id)}</td>
@@ -8370,13 +8378,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         function openInvoiceModal(orderId) {
             const order = workOrders.find(o => o.id === orderId);
             if (!order) return;
-            const inv = order.invoice || {};
+            const inv = hvacMatrixHolder(order).invoice || {};
+            const projInv = hvacProjForOrder(order.id);
 
             document.getElementById('invoice-modal-backdrop').classList.remove('hidden');
             document.getElementById('inv-f-order-id').value = order.id;
             document.getElementById('inv-modal-title').innerText = inv.number ? `Editar Factura (${order.id})` : `Facturar Orden (${order.id})`;
             document.getElementById('inv-f-number').value = inv.number || '';
-            document.getElementById('inv-f-amount').value = inv.amount || '';
+            document.getElementById('inv-f-amount').value = inv.amount || (projInv && projInv.budget) || '';
             document.getElementById('inv-f-expenses').value = inv.expenses || '';
 
             const notice = document.getElementById('inv-pdf-current-notice');
@@ -8513,6 +8522,77 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             return { total: ids.length, done, pending: Math.max(0, ids.length - done), complete: ids.length > 0 && done === ids.length };
         }
 
+        // ===== 3 estados + matriz de facturación =====
+        var HVAC_ST_LABEL = { PENDING: 'Pendiente', IN_PROGRESS: 'En proceso', COMPLETED: 'Completado', BILLED: 'Facturado' };
+        var HVAC_ST_CLASS = {
+            PENDING: 'bg-amber-50 text-amber-700 border border-amber-200/60',
+            IN_PROGRESS: 'bg-sky-50 text-sky-700 border border-sky-200/60',
+            COMPLETED: 'bg-emerald-50 text-emerald-700 border border-emerald-200/60',
+            BILLED: 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+        };
+        function hvacStateBadge(state, extra) {
+            return '<span class="' + HVAC_ST_CLASS[state] + ' text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">' + HVAC_ST_LABEL[state] + (extra ? ' · ' + esc(extra) : '') + '</span>';
+        }
+        function hvacOrderHasExecution(o) {
+            return Object.values((o && o.executions) || {}).some(x => x && typeof x === 'object' && (x.timestamp || x.status));
+        }
+        // Estado derivado de UNA orden (no se persiste: tecnico.html sigue viendo 'PENDING')
+        function hvacOrderState(o) {
+            const s = String(o && o.status || '').toUpperCase();
+            if (s === 'BILLED') return 'BILLED';
+            const p = hvacOrderProgress(o);
+            if (s === 'COMPLETED' && p.complete) return 'COMPLETED';
+            return (p.done > 0 || hvacOrderHasExecution(o)) ? 'IN_PROGRESS' : 'PENDING';
+        }
+        // Matriz = orden base (PREV0005) y sus partes PREV0005-P1, -P2…
+        function hvacMatrixBase(o) { return (o && (o.zoneBaseId || hvacStripZoneSuffix(o.id))) || ''; }
+        function hvacMatrixParts(o) {
+            const base = hvacMatrixBase(o);
+            return (workOrders || []).filter(x => x && !String(x.id).startsWith('HIST-') &&
+                (x.zoneBaseId === base || hvacStripZoneSuffix(x.id) === base));
+        }
+        function hvacMatrixState(o) {
+            const st = hvacMatrixParts(o).map(hvacOrderState);
+            if (!st.length) return hvacOrderState(o);
+            if (st.every(x => x === 'BILLED')) return 'BILLED';
+            if (st.every(x => x === 'COMPLETED' || x === 'BILLED')) return 'COMPLETED';
+            return st.some(x => x !== 'PENDING') ? 'IN_PROGRESS' : 'PENDING';
+        }
+        // Trae de Supabase las hermanas que el histórico paginado aún no cargó
+        async function hvacLoadMatrixParts(o) {
+            const base = encodeURIComponent(hvacMatrixBase(o));
+            try {
+                const rows = await supabaseFetch('hvac_orders?select=payload&or=(id.eq.' + base + ',id.like.' + base + '-P*)&limit=100', 'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return false;
+                rows.forEach(r => {
+                    const p = r && r.payload; if (!p || !p.id) return;
+                    if (!workOrders.some(x => String(x.id) === String(p.id))) workOrders.push(p);
+                });
+                return true;
+            } catch (e) { console.warn('[Matriz] No se pudieron verificar las partes:', e); return false; }
+        }
+        // Regla estricta: no se factura la matriz si alguna parte no está Completada/Facturada
+        async function hvacAssertMatrixBillable(order) {
+            const base = hvacMatrixBase(order);
+            const verified = await hvacLoadMatrixParts(order);
+            const parts = hvacMatrixParts(order);
+            const expected = Math.max(order.zoneParts || 1, parts.length);
+            if (!verified && parts.length < expected) {
+                return { ok: false, base, parts, blocking: [], reason: 'No se pudieron verificar las partes de ' + base + '. Revisa la conexión e inténtalo de nuevo.' };
+            }
+            const blocking = parts.filter(p => !['COMPLETED', 'BILLED'].includes(String(p.status || '').toUpperCase())).map(p => p.id);
+            return {
+                ok: blocking.length === 0, base, parts, blocking,
+                reason: blocking.length ? 'No se puede facturar ' + base + ': faltan por completar ' + blocking.join(', ') + '.' : ''
+            };
+        }
+        // La factura vive en una sola parte (titular) para no duplicar valores en Finanzas
+        function hvacMatrixHolder(o) {
+            const parts = hvacMatrixParts(o);
+            return parts.find(p => p.invoice && !p.invoice.matrixRef && (p.invoice.number || p.invoice.amount))
+                || [...parts].sort((a, b) => (a.zonePart || 0) - (b.zonePart || 0))[0] || o;
+        }
+
         function hvacReactivateOrderIfNeeded(order, previousIds) {
             if (!order) return false;
             const before = new Set((previousIds || []).map(String));
@@ -8585,9 +8665,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 const doneCount = progress.done;
                 const percent = progress.total > 0 ? Math.round((doneCount / progress.total) * 100) : 0;
                 const progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
-                let statusBadge = '<span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Pendiente</span>';
-                if (o.status === 'COMPLETED') statusBadge = '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Completado</span>';
-                if (o.status === 'BILLED') statusBadge = '<span class="bg-indigo-50 text-indigo-700 border border-indigo-200/60 text-[10px] font-bold px-2.5 py-1 rounded-full">Facturado</span>';
+                const ownState = hvacOrderState(o);
+                const mParts = hvacMatrixParts(o);
+                let statusBadge = hvacStateBadge(ownState);
+                if (mParts.length > 1) {
+                    const ms = hvacMatrixState(o);
+                    const okParts = mParts.filter(p => ['COMPLETED', 'BILLED'].includes(hvacOrderState(p))).length;
+                    statusBadge += `<div class="text-[10px] text-slate-500 mt-1">Matriz ${esc(hvacMatrixBase(o))}: <b>${HVAC_ST_LABEL[ms]}</b> (${okParts}/${mParts.length} partes)</div>`;
+                }
 
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(o.id)}</td>
