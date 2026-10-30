@@ -1,7 +1,7 @@
 'use strict';
-/* POST /api/consecutivo   { "tipo": "PREVENTIVO" | "CORRECTIVO", "base"?: "PRE-0007" }
-   → 200 { ok: true, tipo: "PREVENTIVO", consecutivo: "PRE-0007" }
-   Mismo formato y misma función SQL que usa la app (index.html): PRE-0001…, COR-0001… vía RPC generar_consecutivo,
+/* POST /api/consecutivo   { "tipo": "PREVENTIVO" | "CORRECTIVO" | "REVISION", "base"?: "PRE-0007" }
+   → 200 { ok: true, tipo: "REVISION", consecutivo: "REV-0001" }
+   Mismo formato y misma función SQL que usa la app (index.html): PRE-0001…, COR-0001…, REV-0001… vía RPC generar_consecutivo,
    que asigna el número de forma atómica y nunca repite aunque lleguen peticiones simultáneas.
 
    Zonas / pisos: con "base" (un consecutivo ya emitido, p. ej. "PRE-0007") NO se consume un número nuevo; se devuelve
@@ -10,7 +10,7 @@
    enseguida (la app ya calcula las partes localmente con la misma regla). */
 const { send, guard, readJson, supabaseRpc, supabaseSelect } = require('./_lib/common');
 
-const PREFIJOS = { PREVENTIVO: 'PRE-', CORRECTIVO: 'COR-' };
+const PREFIJOS = { PREVENTIVO: 'PRE-', CORRECTIVO: 'COR-', REVISION: 'REV-' };
 
 module.exports = async function handler(req, res) {
   if (!guard(req, res, { methods: ['POST'], name: 'consecutivo', max: 30, windowMs: 60000 })) return;
@@ -19,12 +19,14 @@ module.exports = async function handler(req, res) {
     const base = String(body.base || '').trim().toUpperCase();
 
     if (base) {
-      const m = /^(PRE|COR)-(\d{4,})$/.exec(base);
-      if (!m) return send(res, 400, { ok: false, error: 'base inválida (formato esperado: PRE-0007 o COR-0007).' });
+      const m = /^(PRE|COR|REV)-(\d{4,})$/.exec(base);
+      if (!m) return send(res, 400, { ok: false, error: 'base inválida (formato esperado: PRE-0007, COR-0007 o REV-0007).' });
       const rows = await supabaseSelect(`hvac_orders?id=like.${encodeURIComponent(base + '-P*')}&select=id&limit=1000`);
       const re = new RegExp('^' + base + '-P(\\d+)$');
       const parte = (Array.isArray(rows) ? rows : []).reduce((max, r) => { const k = re.exec(String(r.id || '')); return k ? Math.max(max, parseInt(k[1], 10)) : max; }, 0) + 1;
-      return send(res, 200, { ok: true, tipo: m[1] === 'PRE' ? 'PREVENTIVO' : 'CORRECTIVO', base, parte, consecutivo: `${base}-P${parte}` });
+      
+      const tipoMapeado = m[1] === 'PRE' ? 'PREVENTIVO' : (m[1] === 'COR' ? 'CORRECTIVO' : 'REVISION');
+      return send(res, 200, { ok: true, tipo: tipoMapeado, base, parte, consecutivo: `${base}-P${parte}` });
     }
 
     const tipo = String(body.tipo || body.tipo_rutina || '').trim().toUpperCase();
