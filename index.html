@@ -62,7 +62,7 @@
 /* ---------- 1 · Tokens ---------- */
 :root{
   --ink:#0a1224; --bg:#f1f4fa; --card:#fff; --card-2:#f7f9fd; --line:#e4e9f2; --line-2:#eef2f8;
-  --text:#0f172a; --text-2:#334155; --muted:#64748b; --soft:#94a3b8;
+  --text:#0f172a; --text-2:#334155; --muted:#64748b; --soft:#94a3b8; --surface:var(--card);
   --brand:#0fb5a6; --brand-2:#0ea5e9; --brand-dark:#0b8f84;
   --field:#f8fafc; --field-hover:#fff; --ctl:#fff; --ctl-hover:#f0fdfa; --row-hover:#f3f9ff;
   --glass:rgba(255,255,255,.78); --tint:#effcfa; --scroll:#cbd5e1;
@@ -465,6 +465,9 @@ html[data-theme="dark"] [class~="text-slate-700"]{color:#cdd6e8}
 html[data-theme="dark"] [class~="text-slate-600"]{color:#aebad2}
 html[data-theme="dark"] [class~="text-slate-500"]{color:#8f9cb8}
 html[data-theme="dark"] [class~="text-slate-400"]{color:#7482a0}
+/* Modo claro: textos de ayuda/secundarios en modales con contraste AA sobre fondo blanco */
+html:not([data-theme="dark"]) .modal-card .text-slate-400,html:not([data-theme="dark"]) .modal-card .text-slate-500{color:#475569}
+.modal-card h3,.modal-card h4,.modal-card label{color:var(--text)}
 html[data-theme="dark"] [class~="hover:text-slate-600"]:hover,html[data-theme="dark"] [class~="hover:text-slate-700"]:hover{color:#e2e8f5}
 html[data-theme="dark"] [class~="text-teal-600"],html[data-theme="dark"] [class~="text-teal-700"],html[data-theme="dark"] [class~="text-teal-800"],html[data-theme="dark"] [class~="text-teal-900"]{color:#4fe3d0}
 html[data-theme="dark"] [class~="hover:text-teal-900"]:hover{color:#99f6e4}
@@ -4849,7 +4852,9 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const groups = new Map();
             names.forEach(n => { const k = clientRootKey(n); if (k && !groups.has(k)) groups.set(k, clientRootLabel(n)); });
             const filterOptions = [...groups.entries()].map(([k, label]) => `<option value="${corrEsc(k)}">${corrEsc(label)}</option>`).join('');
-            const formOptions = names.map(n => `<option value="${corrEsc(n)}">${corrEsc(n)}</option>`).join('');
+            // Formularios (rutina / agenda): solo clientes oficiales de hvac_clients (sin nombres sueltos de equipos u órdenes viejas)
+            const officialNames = getOfficialClientNames();
+            const formOptions = (officialNames.length ? officialNames : names).map(n => `<option value="${corrEsc(n)}">${corrEsc(n)}</option>`).join('');
 
             const fill = (id, head, options) => {
                 const el = document.getElementById(id);
@@ -4864,6 +4869,17 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             syncEquipmentClientSelectors(true);
         }
 
+        // Vuelve a leer hvac_clients en Supabase y reemplaza clientsCatalog. Sin conexión o si falla, conserva la lista actual.
+        async function hvacRefreshOfficialClients() {
+            if (navigator.onLine === false) return false;
+            try {
+                const rows = await supabaseFetch('hvac_clients?select=id,payload', 'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return false;
+                clientsCatalog = rows.filter(r => r && r.payload && String(r.payload.name || '').trim()).map(r => ({ ...r.payload, id: r.payload.id || r.id }));
+                try { localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(clientsCatalog)); } catch (e) {}
+                return true;
+            } catch (e) { console.warn('[Clientes] No se pudo refrescar hvac_clients', e); return false; }
+        }
         // Clientes OFICIALES = únicamente los del módulo "Gestión de Clientes" (sin nombres sueltos de equipos u órdenes antiguas)
         function getOfficialClientNames() {
             const seen = new Map();
@@ -5240,14 +5256,15 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             openScheduleAgendaModal(item.id, keys);
         }
 
-        function openAgendaItemModal(id) {
+        async function openAgendaItemModal(id) {
             document.getElementById('agenda-item-modal-backdrop').classList.remove('hidden');
             populateClientDropdowns();
+            if (await hvacRefreshOfficialClients()) populateClientDropdowns();   // lista siempre actual de hvac_clients
             if (id) {
                 const item = agendaItems.find(x => x.id === id);
                 document.getElementById('ag-modal-title').innerText = "Editar Ítem de Agenda";
                 document.getElementById('ag-f-id').value = item.id;
-                document.getElementById('ag-f-client').value = item.client;
+                { const cs = document.getElementById('ag-f-client'); if (item.client && !Array.from(cs.options).some(o => o.value === item.client)) cs.insertAdjacentHTML('beforeend', `<option value="${esc(item.client)}">${esc(item.client)}</option>`); cs.value = item.client; }   // cliente ya no oficial: se conserva visible
                 document.getElementById('ag-f-status').value = item.status;
                 document.getElementById('ag-f-desc').value = item.description;
             } else {
@@ -6351,23 +6368,32 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             document.getElementById('nr-client').value = '';
             document.getElementById('nr-date').value = '';
             document.getElementById('nr-budget').value = '';
+            const per = document.getElementById('nr-periodicity'); if (per) per.selectedIndex = 0;
             document.querySelectorAll('#nr-tech input[type=checkbox]').forEach(c => { c.checked = false; });
         }
 
-        function openNewRoutineModal() {
-            const wasEditing = nrEditingId !== null;
+        async function openNewRoutineModal() {
             nrEditingId = null;
             document.getElementById('new-routine-modal-backdrop').classList.remove('hidden');
+            const keepClient = (document.getElementById('nr-client') || {}).value || '';   // útil al crear varias rutinas seguidas del mismo cliente
+            nrResetForm();                                   // fecha, presupuesto, técnicos, periodicidad
+            nrApplyMode(null);
             populateClientDropdowns();
             populateTechDropdown();
-            nrApplyMode(null);
-            if (wasEditing) nrResetForm();
+            const zf = document.getElementById('nr-zone-filter'); if (zf) zf.value = 'ALL';
             document.getElementById('nr-equipments-picker').innerHTML = '<p class="text-slate-400 p-2 text-center text-xs">Selecciona un cliente para ver sus equipos.</p>';
+            if (await hvacRefreshOfficialClients()) populateClientDropdowns();               // 1) lista oficial actualizada
+            const sel = document.getElementById('nr-client');
+            if (keepClient && Array.from(sel.options).some(o => o.value === keepClient)) sel.value = keepClient;
+            else sel.value = '';
+            await renderAvailableEquipmentForNewRoutine();                                    // 2) equipos cargados sin tener que cambiar de cliente
         }
 
         function closeNewRoutineModal() {
             document.getElementById('new-routine-modal-backdrop').classList.add('hidden');
             if (nrEditingId !== null) { nrEditingId = null; nrApplyMode(null); nrResetForm(); }
+            const pk = document.getElementById('nr-equipments-picker');
+            if (pk) pk.innerHTML = '<p class="text-slate-400 p-2 text-center text-xs">Selecciona un cliente para ver sus equipos.</p>';
         }
 
         // ¿El equipo ya tiene ejecución registrada en esa rutina? (entonces no se puede quitar)
@@ -10290,14 +10316,14 @@ async function attDelete(id) {
  <button type="button" onclick="hvacOpenZonesManager()" class="btn-teal text-xs" style="box-shadow:0 8px 24px #0f766e30"><i class="fa-solid fa-layer-group"></i> Zonas y pisos</button>
 </div>
 <div id="hvac-zones-modal" class="hidden" style="display:none !important;position:fixed;inset:0;z-index:10020;background:rgba(15,23,42,.65);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:16px">
- <div style="background:var(--surface,#fff);color:var(--text,#0f172a);width:min(620px,100%);max-height:88vh;overflow:auto;border:1px solid var(--line,#e2e8f0);border-radius:18px;padding:20px;box-shadow:0 24px 70px #0003">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px"><div><h3 style="font-weight:900;font-size:16px">Zonas y pisos por cliente</h3><p style="font-size:12px;color:var(--muted,#64748b)">Las zonas organizan la ejecución; no modifican contratos ni facturación.</p></div><button onclick="hvacCloseZonesManager()" aria-label="Cerrar" style="padding:8px">✕</button></div>
+ <div style="background:var(--card,#fff);color:var(--text,#0f172a);width:min(620px,100%);max-height:88vh;overflow:auto;border:1px solid var(--line,#e2e8f0);border-radius:18px;padding:20px;box-shadow:0 24px 70px #0003">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px"><div><h3 style="font-weight:900;font-size:16px">Zonas y pisos por cliente</h3><p style="font-size:12px;color:var(--text-2,#334155)">Las zonas organizan la ejecución; no modifican contratos ni facturación.</p></div><button onclick="hvacCloseZonesManager()" aria-label="Cerrar" style="padding:8px">✕</button></div>
   <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Cliente oficial</label><select id="hvac-zone-client" class="input-box" style="width:100%;margin-bottom:12px" onchange="hvacRenderZones()"></select>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><input id="hvac-zone-name" class="input-box" style="flex:1;min-width:180px" placeholder="Ej. Piso 1, Torre A, Sótano"><button class="btn-teal text-xs" onclick="hvacAddZone()"><i class="fa-solid fa-plus"></i> Agregar zona</button></div>
   <div id="hvac-zone-list" style="display:grid;gap:8px"></div>
   <div id="hvac-zone-batch" style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line,#e2e8f0)">
    <h4 style="font-weight:900;font-size:14px;margin-bottom:2px">Asignar equipos en lote</h4>
-   <p style="font-size:11px;color:var(--muted,#64748b);margin-bottom:10px">Elige la zona destino y marca los equipos del cliente seleccionado arriba. Las órdenes ya creadas conservan su zona.</p>
+   <p style="font-size:11px;color:var(--text-2,#334155);margin-bottom:10px">Elige la zona destino y marca los equipos del cliente seleccionado arriba. Las órdenes ya creadas conservan su zona.</p>
    <label style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Zona destino</label>
    <select id="hvac-zone-batch-zone" class="input-box" style="width:100%;margin-bottom:8px" onchange="hvacBatchRender()"></select>
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -10307,12 +10333,12 @@ async function attDelete(id) {
    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
     <button type="button" onclick="hvacBatchSelectAll(true)" style="min-height:40px;padding:0 12px;border:1px solid var(--line,#cbd5e1);border-radius:10px;font-size:12px;font-weight:800">Seleccionar resultados</button>
     <button type="button" onclick="hvacBatchSelectAll(false)" style="min-height:40px;padding:0 12px;border:1px solid var(--line,#cbd5e1);border-radius:10px;font-size:12px;font-weight:800">Limpiar</button>
-    <span id="hvac-zone-batch-count" style="font-size:11px;font-weight:700;color:var(--muted,#64748b)"></span>
+    <span id="hvac-zone-batch-count" style="font-size:11px;font-weight:700;color:var(--text-2,#334155)"></span>
    </div>
    <div id="hvac-zone-batch-list" style="max-height:320px;overflow:auto;display:grid;gap:6px;border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:8px"></div>
    <button id="hvac-zone-batch-save" type="button" class="btn-teal text-xs" style="width:100%;margin-top:10px;min-height:46px" onclick="hvacBatchAssign()"><i class="fa-solid fa-check"></i> <span id="hvac-zone-batch-save-label">Asignar equipos seleccionados</span></button>
   </div>
-  <div style="margin-top:16px;font-size:11px;color:var(--muted,#64748b)">Asigna cada equipo a una zona desde el formulario del catálogo. Al programar una rutina, los equipos asignados a distintas zonas se separarán en órdenes independientes.</div>
+  <div style="margin-top:16px;font-size:11px;color:var(--text-2,#334155)">Asigna cada equipo a una zona desde el formulario del catálogo. Al programar una rutina, los equipos asignados a distintas zonas se separarán en órdenes independientes.</div>
  </div>
 </div>
 <script>
@@ -10380,7 +10406,7 @@ async function attDelete(id) {
  window.hvacRenderZones=function(){
   const host=document.getElementById('hvac-zone-list');if(!host)return;
   const rows=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(zClient()));
-  host.innerHTML=rows.length?rows.map(z=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:10px 12px"><div><div style="font-weight:800;font-size:13px">${escH(z.name)}</div><div style="font-size:10px;color:var(--muted,#64748b)">${equipmentCatalog.filter(e=>String(e.zoneId||'')===String(z.id)).length} equipo(s) asignado(s)</div></div><button onclick="hvacDeleteZone('${escH(z.id)}')" style="color:#dc2626;font-size:12px;font-weight:700">Eliminar</button></div>`).join(''):'<div style="font-size:12px;color:var(--muted,#64748b);padding:16px;text-align:center;border:1px dashed var(--line,#cbd5e1);border-radius:12px">No hay zonas creadas para este cliente.</div>';
+  host.innerHTML=rows.length?rows.map(z=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:10px 12px"><div><div style="font-weight:800;font-size:13px">${escH(z.name)}</div><div style="font-size:10px;color:var(--text-2,#334155)">${equipmentCatalog.filter(e=>String(e.zoneId||'')===String(z.id)).length} equipo(s) asignado(s)</div></div><button onclick="hvacDeleteZone('${escH(z.id)}')" style="color:#dc2626;font-size:12px;font-weight:700">Eliminar</button></div>`).join(''):'<div style="font-size:12px;color:var(--text-2,#334155);padding:16px;text-align:center;border:1px dashed var(--line,#cbd5e1);border-radius:12px">No hay zonas creadas para este cliente.</div>';
   window.hvacBatchRefresh?.();
  };
  // API: listar y guardar zonas de un cliente (única vía de escritura; la usan el gestor y el formulario de equipos)
@@ -10434,13 +10460,13 @@ async function attDelete(id) {
  };
  window.hvacBatchRender=function(){
    const {zone,list,count}=bEls();if(!list)return;
-   if(!zClient()){list.innerHTML='<div style="font-size:12px;color:var(--muted,#64748b);padding:14px;text-align:center">Selecciona un cliente para ver sus equipos.</div>';count.textContent='';return;}
+   if(!zClient()){list.innerHTML='<div style="font-size:12px;color:var(--text-2,#334155);padding:14px;text-align:center">Selecciona un cliente para ver sus equipos.</div>';count.textContent='';return;}
    const zid=String(zone.value||''),rows=bFiltered(),LIMIT=200,shown=rows.slice(0,LIMIT);
    list.innerHTML=shown.length?shown.map(e=>{
      const ez=String(e.zoneId||''),same=!!zid&&ez===zid,id=String(e.id),checked=batchSel.has(id)&&!same;
      const chip=same?'<span style="font-size:10px;font-weight:800;color:#047857;background:#d1fae5;border-radius:999px;padding:2px 8px;white-space:nowrap">En esta zona</span>':(ez?`<span style="font-size:10px;font-weight:800;color:#92400e;background:#fef3c7;border-radius:999px;padding:2px 8px;white-space:nowrap">${escH(e.zoneName||'Otra zona')}</span>`:'<span style="font-size:10px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:999px;padding:2px 8px;white-space:nowrap">Sin zona</span>');
-     return `<label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:1px solid var(--line,#e2e8f0);border-radius:10px;cursor:${same?'default':'pointer'};opacity:${same?.6:1}"><input type="checkbox" data-id="${escH(id)}" ${checked?'checked':''} ${same?'disabled':''} onchange="hvacBatchToggle(this)" style="width:18px;height:18px;flex:none"><span style="flex:1;min-width:0"><span style="display:block;font-weight:800;font-size:12.5px">${escH(e.code||'-')} <span style="font-weight:600;color:var(--muted,#64748b)">· ${escH(e.name||e.type||'Sin nombre')}</span></span><span style="display:block;font-size:10.5px;color:var(--muted,#64748b);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH([e.type,e.brand,e.serial].filter(Boolean).join(' · '))}</span></span>${chip}</label>`;
-   }).join(''):'<div style="font-size:12px;color:var(--muted,#64748b);padding:14px;text-align:center">No hay equipos que coincidan.</div>';
+     return `<label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:1px solid var(--line,#e2e8f0);border-radius:10px;cursor:${same?'default':'pointer'};opacity:${same?.6:1}"><input type="checkbox" data-id="${escH(id)}" ${checked?'checked':''} ${same?'disabled':''} onchange="hvacBatchToggle(this)" style="width:18px;height:18px;flex:none"><span style="flex:1;min-width:0"><span style="display:block;font-weight:800;font-size:12.5px">${escH(e.code||'-')} <span style="font-weight:600;color:var(--text-2,#334155)">· ${escH(e.name||e.type||'Sin nombre')}</span></span><span style="display:block;font-size:10.5px;color:var(--text-2,#334155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH([e.type,e.brand,e.serial].filter(Boolean).join(' · '))}</span></span>${chip}</label>`;
+   }).join(''):'<div style="font-size:12px;color:var(--text-2,#334155);padding:14px;text-align:center">No hay equipos que coincidan.</div>';
    count.textContent=`${batchSel.size} seleccionado(s) · ${rows.length} resultado(s)${rows.length>LIMIT?` (mostrando ${LIMIT}; usa el buscador)`:''}${typeof eqBackgroundLoading!=='undefined'&&eqBackgroundLoading?' · aún cargando equipos…':''}`;
  };
  window.hvacBatchToggle=function(cb){const id=cb.dataset.id;if(cb.checked)batchSel.add(id);else batchSel.delete(id);window.hvacBatchRender();};
