@@ -4919,10 +4919,15 @@ function reservePrevId(tipo = 'PREVENTIVO') {
         // Una rutina puede tener varios técnicos: technicians (arreglo) + technician (texto "A, B" para compatibilidad)
         const orderTechs = o => (o && Array.isArray(o.technicians) && o.technicians.length) ? o.technicians : (o && o.technician ? [o.technician] : []);
 
+        // Marca/desmarca SOLO los equipos visibles (los que pasan el filtro de zona actual).
         function toggleSelectAllCheckboxes(selector, btn) {
-            const checkboxes = document.querySelectorAll(selector);
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-            checkboxes.forEach(cb => cb.checked = !allChecked);
+            const visible = Array.from(document.querySelectorAll(selector)).filter(cb => {
+                const row = cb.closest('label');
+                return !(row && row.style.display === 'none') && !cb.disabled;
+            });
+            if (!visible.length) return;
+            const allChecked = visible.every(cb => cb.checked);
+            visible.forEach(cb => cb.checked = !allChecked);
             if (btn) {
                 btn.innerHTML = allChecked ? '<i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos' : '<i class="fa-solid fa-xmark mr-1"></i> Deseleccionar todos';
             }
@@ -6528,16 +6533,25 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             if (first) { const o = (workOrders || []).find(x => String(x.id) === String(first)); return (o && o.zoneBaseId) || hvacStripZoneSuffix(first); }
             return reservePrevId();
         }
-        // Asigna ids: cada zona → BASE-P{n} (n continúa tras las partes ya existentes); sin zona → BASE si está libre.
+        // Asigna ids por zona: "Piso 7" → BASE-P7, "Piso 8" → BASE-P8 (el número del nombre de la zona).
+        // Zonas sin número ("Torre A") o con número ya usado → siguiente BASE-P{n} libre. Sin zona → BASE si está libre.
         function hvacZoneOrderIds(base, groups) {
             const re = new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-P(\\d+)$', 'i');
             const taken = new Set((workOrders || []).map(o => String(o && o.id)));
             let n = 0; (workOrders || []).forEach(o => { const m = re.exec(String(o && o.id || '')); if (m) n = Math.max(n, +m[1]); });
-            return groups.map(g => {
-                if (!g.zoneId && !taken.has(base)) { taken.add(base); return { id: base, part: null }; }
-                let id; do { n++; id = `${base}-P${n}`; } while (taken.has(id));
-                taken.add(id); return { id, part: n };
+            const out = new Array(groups.length);
+            groups.forEach((g, i) => {                       // 1.ª pasada: el número del piso manda
+                const m = g.zoneId && /(\d+)/.exec(g.zoneName || ''); if (!m) return;
+                const num = parseInt(m[1], 10), id = `${base}-P${num}`; if (!num || taken.has(id)) return;
+                taken.add(id); n = Math.max(n, num); out[i] = { id, part: num };
             });
+            groups.forEach((g, i) => {                       // 2.ª pasada: el resto toma el siguiente libre
+                if (out[i]) return;
+                if (!g.zoneId && !taken.has(base)) { taken.add(base); out[i] = { id: base, part: null }; return; }
+                let id; do { n++; id = `${base}-P${n}`; } while (taken.has(id));
+                taken.add(id); out[i] = { id, part: n };
+            });
+            return out;
         }
         function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base }) {
             const ids = hvacZoneOrderIds(base, groups);
