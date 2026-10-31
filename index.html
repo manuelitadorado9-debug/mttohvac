@@ -1624,6 +1624,27 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         </section>
 
         <!-- VIEW: FINANCES -->
+        <section id="view-admin-tools" class="hidden space-y-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h2 class="text-base font-black text-slate-900 tracking-tight">Recogida de Herramientas</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Rutinas finalizadas con herramientas por recoger. Se cierran cuando el encargado administrativo las marca como recogidas.</p>
+                </div>
+                <div class="flex items-end gap-2 flex-wrap">
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                        <select id="tools-filter" onchange="renderToolsModule()" class="input-box font-bold text-xs w-44">
+                            <option value="PENDING" selected>Pendientes</option>
+                            <option value="DONE">Recogidas</option>
+                            <option value="ALL">Todas</option>
+                        </select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Buscar</label>
+                        <input type="text" id="tools-search" oninput="renderToolsModule()" class="input-box text-xs w-48" placeholder="Cliente, orden o zona"></div>
+                </div>
+            </div>
+            <div id="tools-kpis" class="grid grid-cols-3 gap-2"></div>
+            <div id="tools-list" class="space-y-3"></div>
+        </section>
+
         <section id="view-admin-financial" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
@@ -1999,13 +2020,11 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Zona / Piso que deseas programar</label>
-                    <div class="flex flex-col sm:flex-row gap-2 mb-2">
-                        <select id="nr-zone-filter" class="input-box text-xs flex-1" onchange="hvacApplyRoutineZoneFilter('nr')"><option value="ALL">Todas las zonas</option></select>
-                        <button type="button" id="nr-all-zones-btn" onclick="hvacNrSelectAllZones()" class="text-[11px] font-black text-white bg-teal-600 hover:bg-teal-700 px-3 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-0 whitespace-nowrap"><i class="fa-solid fa-layer-group"></i> Todas las zonas (rutinas separadas)</button>
-                    </div>
-                    <div class="flex items-center justify-between mb-1">
-                        <label class="block text-xs font-bold text-slate-700">Equipos a Intervenir</label>
-                        <button type="button" onclick="toggleSelectAllCheckboxes('.nr-eq-checkbox', this)" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos</button>
+                    <select id="nr-zone-filter" class="input-box text-xs mb-2" onchange="hvacApplyRoutineZoneFilter('nr')"><option value="ALL">Todas las zonas</option></select>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Equipos a Intervenir</label>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        <button type="button" id="nr-all-zones-btn" onclick="hvacNrSelectAllZones()" title="Selecciona los equipos de todas las zonas y arma la facturación por zona" style="height:34px;flex:none" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-3 rounded-lg transition inline-flex items-center gap-1.5"><i class="fa-solid fa-layer-group"></i> Todas las zonas</button>
+                        <button type="button" onclick="toggleSelectAllCheckboxes('.nr-eq-checkbox', this)" style="height:34px;flex:none" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-3 rounded-lg transition inline-flex items-center gap-1.5"><i class="fa-solid fa-check-double"></i> Seleccionar todos</button>
                     </div>
                     <div id="nr-equipments-picker" class="border border-slate-200 rounded-2xl p-3 max-h-48 overflow-y-auto space-y-1.5 bg-slate-50 text-xs"></div>
                     <div id="nr-zone-preview" class="hidden mt-2 border border-teal-200 bg-teal-50/60 rounded-2xl p-3 text-xs"></div>
@@ -4112,6 +4131,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             'admin-history': { tables: ['hvac_clients'], state: [], historyPage: true },      // órdenes: solo las más recientes, por páginas
             'admin-equipment': { tables: ['hvac_clients'], state: ['HVAC_FORMS_CONFIG_BACKUP'], equipmentsProgressive: true }, // equipos: por páginas
             'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: [] },        // los equipos se piden por orden al abrirla
+            'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
             'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] }
         };
         const CLOUD_TABLE_TARGETS = {
@@ -4131,13 +4151,14 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             'admin-attendance': () => attInit(),
             'admin-equipment': () => renderEquipmentCatalog(),
             'admin-billing': () => renderBillingModule(),
+            'admin-tools': () => renderToolsModule(),
             'admin-financial': () => renderFinancialModule()
         };
         // Renderiza únicamente el módulo visible (nunca los ocultos).
         function renderSection(tabId) {
             const render = SECTION_RENDERERS[tabId];
             if (!render) return;
-            try { populateClientDropdowns(); populateTechDropdown(); render(); }
+            try { populateClientDropdowns(); populateTechDropdown(); render(); if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge(); }
             catch (e) { console.warn('[UI] No se pudo renderizar ' + tabId + ':', e); }
         }
 
@@ -4724,7 +4745,11 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 list.appendChild(makeLink('fa-clock-rotate-left', 'Histórico & Avance Global', 'admin-history'));
                 list.appendChild(makeLink('fa-location-crosshairs', 'Asistencia & GPS', 'admin-attendance'));
                 list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
+                const toolsLink = makeLink('fa-toolbox', 'Recogida de Herramientas', 'admin-tools');
+                toolsLink.insertAdjacentHTML('beforeend', '<span id="nav-tools-badge" class="ml-auto hidden bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>');
+                list.appendChild(toolsLink);
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
+                if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
             }
         }
 
@@ -4978,7 +5003,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             const dashKey = o => String(o.createdAt || o.date || '');
             const dashSorted = [...filteredOrders].sort((x, y) => dashKey(y).localeCompare(dashKey(x)) || String(y.date || '').localeCompare(String(x.date || '')) || (prevParse(y.id) - prevParse(x.id)) || String(y.id).localeCompare(String(x.id)));
             dashSorted.forEach(o => {
-                const statusBadge = hvacStateBadge(hvacOrderState(o));
+                const statusBadge = hvacStateBadge(hvacOrderState(o)) + hvacToolChip(o);
 
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(o.id)}</td>
@@ -6622,21 +6647,28 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             try {
                 const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
                 const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
-                // Mismo cliente y mismo periodo (mes/año) con órdenes por zona: se conserva el consecutivo y se agrega la parte -P#.
-                const sameProj=monthlyProjections.find(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId);
-                if(sameProj&&equipmentIds.some(id=>(sameProj.scheduledEquipmentIds||sameProj.equipmentIds||[]).map(String).includes(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
-                const baseId=sameProj?await hvacBaseIdForProjection(sameProj):await reservePrevId();
-                const groups=hvacGroupEquipmentByZone(equipmentIds);
-                const orderObjs=hvacBuildZoneOrders({client,date,technician,technicians,groups,base:baseId});
-                let projObj;
-                if(sameProj){
-                    projObj=sameProj;
-                    projObj.orderIds=[...new Set([...(projObj.orderIds||[projObj.orderId]).filter(Boolean),...orderObjs.map(o=>o.id)])];
-                    projObj.equipmentIds=[...new Set([...(projObj.equipmentIds||[]).map(String),...equipmentIds.map(String)])];
-                    projObj.scheduledEquipmentIds=[...new Set([...(projObj.scheduledEquipmentIds||[]).map(String),...equipmentIds.map(String)])];
-                }else{
-                    projObj={id:projId,client,periodicity,month,year,budget,equipmentIds,status:'SCHEDULED',orderId:orderObjs[0].id,orderIds:orderObjs.map(o=>o.id),zoneBaseId:baseId};
-                    monthlyProjections.push(projObj);
+                // Equipos ya programados en este cliente y periodo (en cualquiera de sus consecutivos)
+                const periodProjs=monthlyProjections.filter(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId);
+                const already=new Set();periodProjs.forEach(p=>(p.scheduledEquipmentIds||p.equipmentIds||[]).forEach(id=>already.add(String(id))));
+                if(equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
+                // Plan de facturación: cada grupo = un consecutivo (PRE-000X) con una parte -P# por zona. Sin selección: un solo grupo.
+                const plan=(typeof hvacNrGetPlan==='function'&&hvacNrGetPlan())||[{n:1,groups:hvacGroupEquipmentByZone(equipmentIds),equipmentIds,value:budget,target:periodProjs.length?periodProjs[0].id:'NEW'}];
+                const orderObjs=[];
+                let k=0;
+                for(const pg of plan){
+                    k++;
+                    const sameProj=pg.target&&pg.target!=='NEW'?monthlyProjections.find(p=>p&&p.id===pg.target):null;
+                    const baseId=sameProj?await hvacBaseIdForProjection(sameProj):await reservePrevId();
+                    const objs=hvacBuildZoneOrders({client,date,technician,technicians,groups:pg.groups,base:baseId});
+                    if(sameProj){
+                        sameProj.orderIds=[...new Set([...(sameProj.orderIds||[sameProj.orderId]).filter(Boolean),...objs.map(o=>o.id)])];
+                        sameProj.equipmentIds=[...new Set([...(sameProj.equipmentIds||[]).map(String),...pg.equipmentIds.map(String)])];
+                        sameProj.scheduledEquipmentIds=[...new Set([...(sameProj.scheduledEquipmentIds||[]).map(String),...pg.equipmentIds.map(String)])];
+                        sameProj.budget=(Number(sameProj.budget)||0)+(Number(pg.value)||0);
+                    }else{
+                        monthlyProjections.push({id:plan.length>1?`${projId}-${k}`:projId,client,periodicity,month,year,budget:Number(pg.value)||0,equipmentIds:pg.equipmentIds,status:'SCHEDULED',orderId:objs[0].id,orderIds:objs.map(o=>o.id),zoneBaseId:baseId});
+                    }
+                    orderObjs.push(...objs);
                 }
                 workOrders.push(...orderObjs);
                 localStorage.setItem('HVAC_ORDERS_BACKUP',JSON.stringify(workOrders));localStorage.setItem('HVAC_PROJECTIONS_BACKUP',JSON.stringify(monthlyProjections));
@@ -7575,6 +7607,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
             order.clientSignature = { name: clientName || order.client, signatureImg: sigData, timestamp: new Date().toISOString() };
             order.status = 'COMPLETED';
+            hvacToolPickupRequest(order);   // camino 2: queda pendiente la recogida de herramientas
 
             await cloudSaveOrder(order);
             registrarAuditoria('COMPLETAR', 'hvac_orders', order.id);
@@ -7584,7 +7617,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             renderAdminDashboard();
             renderPlanningModule();
             renderBillingModule();
-            showToast("Rutina completada con firma. Lista para facturar.");
+            showToast("Rutina completada con firma. Lista para facturar; herramientas pendientes de recogida.");
         }
 
         async function finalizeRoutineWithoutSignature() {
@@ -7595,6 +7628,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
 
             order.clientSignature = { name: 'Completado sin firma', signatureImg: null, timestamp: new Date().toISOString() };
             order.status = 'COMPLETED';
+            hvacToolPickupRequest(order);   // camino 2: queda pendiente la recogida de herramientas
 
             await cloudSaveOrder(order);
             registrarAuditoria('COMPLETAR', 'hvac_orders', order.id);
@@ -7604,7 +7638,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             renderAdminDashboard();
             renderPlanningModule();
             renderBillingModule();
-            showToast("Rutina finalizada sin firma. Lista para facturar.");
+            showToast("Rutina finalizada sin firma. Lista para facturar; herramientas pendientes de recogida.");
         }
 
         // =========================================================================
@@ -8597,6 +8631,102 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 || [...parts].sort((a, b) => (a.zonePart || 0) - (b.zonePart || 0))[0] || o;
         }
 
+        // ===== Recogida de herramientas (personal administrativo) =====
+        // Al cerrar la rutina la orden sigue dos caminos: facturación y recogida (order.toolPickup).
+        var HVAC_TOOLPICKUP_FROM = Date.parse('2026-10-30T00:00:00');   // fecha de puesta en marcha: no marca como pendientes las órdenes anteriores
+        function hvacToolPickupRequest(order) {
+            order.toolPickup = { status: 'PENDING', requestedAt: new Date().toISOString() };
+        }
+        // null = no aplica | 'PENDING' | 'DONE'. Cubre también órdenes cerradas desde otra app (sin campo toolPickup).
+        function hvacToolPickupState(o) {
+            if (!o) return null;
+            const st = String(o.status || '').toUpperCase();
+            if (st !== 'COMPLETED' && st !== 'BILLED') return null;
+            if (o.toolPickup && o.toolPickup.status) return o.toolPickup.status === 'DONE' ? 'DONE' : 'PENDING';
+            const t = parseFlexDate(o.clientSignature && o.clientSignature.timestamp);
+            return (t && t >= HVAC_TOOLPICKUP_FROM) ? 'PENDING' : null;
+        }
+        function hvacToolDoneAt(o) {
+            return parseFlexDate((o.toolPickup && o.toolPickup.requestedAt) || (o.clientSignature && o.clientSignature.timestamp)) || 0;
+        }
+        function hvacToolChip(o) {
+            if (hvacToolPickupState(o) !== 'PENDING') return '';
+            return '<div class="mt-1"><span class="bg-amber-50 text-amber-700 border border-amber-200/60 text-[10px] font-bold px-2 py-0.5 rounded-full"><i class="fa-solid fa-toolbox mr-1"></i>Herramientas por recoger</span></div>';
+        }
+        function hvacUpdateToolsBadge() {
+            const b = document.getElementById('nav-tools-badge'); if (!b) return;
+            const n = (workOrders || []).filter(o => hvacToolPickupState(o) === 'PENDING').length;
+            b.textContent = n > 99 ? '99+' : String(n);
+            b.classList.toggle('hidden', n === 0);
+        }
+        async function hvacToolPickupSet(ids, done, note) {
+            const u = systemUsers.find(x => String(x.id) === String(activeUser));
+            const who = u ? (u.name || u.username || '') : '';
+            for (const id of ids) {
+                const o = workOrders.find(x => String(x.id) === String(id)); if (!o) continue;
+                const prev = o.toolPickup || { requestedAt: new Date(hvacToolDoneAt(o) || Date.now()).toISOString() };
+                o.toolPickup = done
+                    ? { ...prev, status: 'DONE', doneAt: new Date().toISOString(), doneBy: who, note: note || '' }
+                    : { requestedAt: prev.requestedAt, status: 'PENDING' };
+                await cloudSaveOrder(o);
+                try { registrarAuditoria(done ? 'RECOGER_HERRAMIENTAS' : 'REABRIR_RECOGIDA', 'hvac_orders', o.id); } catch (e) {}
+            }
+            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+            renderToolsModule();
+            showToast(done ? 'Recogida de herramientas registrada.' : 'Recogida reabierta.', 'success');
+        }
+        function renderToolsModule() {
+            const list = document.getElementById('tools-list'); if (!list) return;
+            const f = (document.getElementById('tools-filter') || {}).value || 'PENDING';
+            const q = normText((document.getElementById('tools-search') || {}).value || '');
+            const all = (workOrders || []).filter(o => o && !String(o.id).startsWith('HIST-') && hvacToolPickupState(o));
+            const pend = all.filter(o => hvacToolPickupState(o) === 'PENDING');
+            const days = o => Math.max(0, Math.floor((Date.now() - hvacToolDoneAt(o)) / 86400000));
+            const late = pend.filter(o => days(o) > 2).length;
+            const monthAgo = Date.now() - 30 * 86400000;
+            const doneRecent = all.filter(o => hvacToolPickupState(o) === 'DONE' && parseFlexDate(o.toolPickup && o.toolPickup.doneAt) >= monthAgo).length;
+            const kpi = (label, val, cls) => '<div class="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm"><div class="text-[10px] font-bold text-slate-500 uppercase">' + label + '</div><div class="text-xl font-black ' + cls + '">' + val + '</div></div>';
+            document.getElementById('tools-kpis').innerHTML = kpi('Pendientes', pend.length, 'text-amber-600') + kpi('Con +2 días', late, late ? 'text-rose-600' : 'text-slate-900') + kpi('Recogidas (30 d)', doneRecent, 'text-emerald-600');
+            let rows = f === 'PENDING' ? pend : f === 'DONE' ? all.filter(o => hvacToolPickupState(o) === 'DONE') : all;
+            if (q) rows = rows.filter(o => normText([o.id, o.client, o.zoneName, o.technician].join(' ')).includes(q));
+            if (!rows.length) { list.innerHTML = '<div class="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-xs text-slate-400">' + (f === 'PENDING' ? 'No hay herramientas pendientes por recoger.' : 'Sin resultados.') + '</div>'; return; }
+            const groups = new Map();
+            rows.forEach(o => { const b = hvacMatrixBase(o) || o.id; if (!groups.has(b)) groups.set(b, []); groups.get(b).push(o); });
+            const fmt = t => t ? new Date(t).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+            const arr = Array.from(groups.entries()).map(([base, os]) => ({ base, os: os.sort((a, b) => String(a.id).localeCompare(String(b.id), 'es', { numeric: true })), t: Math.min(...os.map(hvacToolDoneAt)) }));
+            arr.sort((a, b) => f === 'DONE' ? b.t - a.t : a.t - b.t);
+            list.innerHTML = arr.map(g => {
+                const pendIds = g.os.filter(o => hvacToolPickupState(o) === 'PENDING').map(o => o.id);
+                const head = g.os.length > 1
+                    ? '<div class="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(g.base) + '</span><span class="text-[11px] text-slate-500 ml-2">' + esc(g.os[0].client || '') + ' · ' + g.os.length + ' partes</span></div>' +
+                      (pendIds.length > 1 ? '<button type="button" data-act="group" data-ids="' + esc(pendIds.join('|')) + '" class="btn-teal text-[11px]"><i class="fa-solid fa-check-double"></i> Marcar toda la matriz (' + pendIds.length + ')</button>' : '') + '</div>'
+                    : '';
+                const items = g.os.map(o => {
+                    const st = hvacToolPickupState(o), d = days(o);
+                    const chip = st === 'PENDING'
+                        ? '<span class="' + (d > 2 ? 'bg-rose-50 text-rose-700 border border-rose-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60') + ' text-[10px] font-bold px-2 py-0.5 rounded-full">' + (d === 0 ? 'Hoy' : d + ' día(s) esperando') + '</span>'
+                        : '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-[10px] font-bold px-2 py-0.5 rounded-full">Recogida</span>';
+                    const tp = o.toolPickup || {};
+                    const body = st === 'PENDING'
+                        ? '<div class="flex gap-2 items-center mt-2"><input type="text" class="tp-note input-box text-xs flex-1" placeholder="Observación (opcional)"><button type="button" data-act="one" data-ids="' + esc(o.id) + '" class="btn-teal text-[11px]" style="flex:none"><i class="fa-solid fa-check"></i> Recogida</button></div>'
+                        : '<div class="flex items-center justify-between gap-2 mt-1.5 flex-wrap"><span class="text-[11px] text-slate-500">Recogida el ' + fmt(parseFlexDate(tp.doneAt)) + (tp.doneBy ? ' por ' + esc(tp.doneBy) : '') + (tp.note ? ' · ' + esc(tp.note) : '') + '</span><button type="button" data-act="reopen" data-ids="' + esc(o.id) + '" class="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline">Reabrir</button></div>';
+                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(o.id) + '</span>' +
+                        (o.zoneName ? '<span class="text-[11px] text-slate-600 ml-2">' + esc(o.zoneName) + '</span>' : '') + '</div>' + chip + '</div>' +
+                        '<div class="text-[11px] text-slate-500 mt-0.5">' + (g.os.length > 1 ? '' : esc(o.client || '') + ' · ') + 'Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
+                }).join('');
+                return '<div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">' + head + items + '</div>';
+            }).join('');
+            list.onclick = function (e) {
+                const b = e.target.closest('button[data-act]'); if (!b) return;
+                const ids = String(b.dataset.ids || '').split('|').filter(Boolean);
+                const act = b.dataset.act;
+                if (act === 'reopen') return hvacToolPickupSet(ids, false);
+                const note = act === 'one' ? ((b.closest('.pt-2') || {}).querySelector ? (b.closest('.pt-2').querySelector('.tp-note') || {}).value : '') : '';
+                b.disabled = true;
+                hvacToolPickupSet(ids, true, (note || '').trim());
+            };
+        }
+
         function hvacReactivateOrderIfNeeded(order, previousIds) {
             if (!order) return false;
             const before = new Set((previousIds || []).map(String));
@@ -8671,7 +8801,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
                 const progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
                 const ownState = hvacOrderState(o);
                 const mParts = hvacMatrixParts(o);
-                let statusBadge = hvacStateBadge(ownState);
+                let statusBadge = hvacStateBadge(ownState) + hvacToolChip(o);
                 if (mParts.length > 1) {
                     const ms = hvacMatrixState(o);
                     const okParts = mParts.filter(p => ['COMPLETED', 'BILLED'].includes(hvacOrderState(p))).length;
@@ -10591,46 +10721,139 @@ async function attDelete(id) {
 })();
 </script>
 
+
 <script>
-/* ===== Nueva rutina: seleccionar todas las zonas y ver las rutinas -P# que se generarán ===== */
+/* ===== Nueva rutina: zonas, facturación por consecutivo y vista previa ===== */
 (function(){
-  function nrChecked(){ return Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(function(c){return c.value;}); }
-  window.hvacNrUpdateZonePreview = function(){
-    var box = document.getElementById('nr-zone-preview'); if(!box) return;
-    var editing = (typeof nrEditingId !== 'undefined') && nrEditingId !== null;
-    var ids = nrChecked();
-    if(editing || !ids.length){ box.classList.add('hidden'); box.innerHTML=''; return; }
-    var groups = hvacGroupEquipmentByZone(ids);
-    var codes = hvacZoneOrderIds('PREV####', groups);
-    var rows = groups.map(function(g,i){
-      var suf = codes[i] && codes[i].part ? '-P'+codes[i].part : '';
-      return '<li class="flex items-center justify-between gap-2"><span><b class="font-mono text-teal-800">PREV####'+suf+'</b> · '+esc(g.zoneName)+'</span><span class="text-slate-500 font-semibold">'+g.ids.length+' equipo(s)</span></li>';
-    }).join('');
-    box.innerHTML = '<p class="font-black text-teal-800 mb-1.5"><i class="fa-solid fa-layer-group mr-1"></i>'+
-      (groups.length>1 ? 'Se generarán '+groups.length+' rutinas separadas (una por zona), con el mismo consecutivo base:' : 'Se generará 1 rutina:')+'</p>'+
-      '<ul class="space-y-1">'+rows+'</ul>'+
-      (groups.length>1 ? '<p class="text-[10px] text-slate-500 mt-1.5">El valor presupuestado queda registrado una sola vez para toda la matriz y se factura junto cuando todas las partes estén completadas.</p>' : '');
-    box.classList.remove('hidden');
+  var S={assign:{},values:{},targets:{},touched:false};
+  function $(id){return document.getElementById(id);}
+  function checkedIds(){return Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(function(c){return c.value;});}
+  function zoneList(){return hvacGroupEquipmentByZone(checkedIds());}
+  function zkey(g){return g.zoneId||'__NO_ZONE__';}
+  function isEditing(){return (typeof nrEditingId!=='undefined')&&nrEditingId!==null;}
+  function money(n){return '$'+Math.round(Number(n)||0).toLocaleString('es-CO');}
+  function eqCount(zs){return zs.reduce(function(a,z){return a+z.ids.length;},0);}
+  function periodMatrices(){
+    var c=($('nr-client')||{}).value, d=($('nr-date')||{}).value; if(!c||!d) return [];
+    var dt=new Date(d+'T00:00:00'), m=dt.getMonth()+1, y=dt.getFullYear();
+    return (monthlyProjections||[]).filter(function(p){return p&&p.client===c&&Number(p.month)===m&&Number(p.year)===y&&p.zoneBaseId;});
+  }
+  function normalize(zones){
+    var keys={}; zones.forEach(function(z){keys[zkey(z)]=1;});
+    Object.keys(S.assign).forEach(function(k){if(!keys[k])delete S.assign[k];});
+    zones.forEach(function(z){var k=zkey(z),v=parseInt(S.assign[k],10); if(!v||v<1)v=1; if(v>zones.length)v=zones.length; S.assign[k]=v;});
+  }
+  function usedNums(zones){var set={};zones.forEach(function(z){set[S.assign[zkey(z)]]=1;});return Object.keys(set).map(Number).sort(function(a,b){return a-b;});}
+  function zonesOf(zones,gn){return zones.filter(function(z){return S.assign[zkey(z)]===gn;});}
+  function autoSplit(zones,used){
+    var budget=parseFloat(($('nr-budget')||{}).value)||0, total=eqCount(zones)||1, left=budget;
+    used.forEach(function(gn,i){
+      var v=i===used.length-1?left:Math.round(budget*eqCount(zonesOf(zones,gn))/total);
+      S.values[gn]=v; left-=v;
+    });
+  }
+  function targetFor(gn,usedLen,mats){
+    var t=S.targets[gn];
+    if(t&&(t==='NEW'||mats.some(function(p){return p.id===t;}))) return t;
+    return (usedLen===1&&mats.length)?mats[0].id:'NEW';
+  }
+  window.hvacNrGetPlan=function(){
+    if(isEditing()) return null;
+    var zones=zoneList(); if(!zones.length) return null;
+    normalize(zones);
+    var used=usedNums(zones), mats=periodMatrices(), budget=parseFloat(($('nr-budget')||{}).value)||0;
+    if(used.length>1&&!S.touched) autoSplit(zones,used);
+    return used.map(function(gn){
+      var zs=zonesOf(zones,gn), eq=[];
+      zs.forEach(function(z){eq=eq.concat(z.ids);});
+      return {n:gn,groups:zs,equipmentIds:eq,value:used.length===1?budget:(Number(S.values[gn])||0),target:targetFor(gn,used.length,mats)};
+    });
   };
-  window.hvacNrSelectAllZones = function(){
-    var cbs = Array.from(document.querySelectorAll('.nr-eq-checkbox'));
+  function syncTotal(){
+    var zones=zoneList(), used=usedNums(zones); if(used.length<2) return;
+    var sum=0; used.forEach(function(gn){sum+=Number(S.values[gn])||0;});
+    var b=$('nr-budget'); if(b) b.value=sum||'';
+    var l=$('nr-sum-label'); if(l) l.textContent='Total del valor: '+money(sum);
+  }
+  function render(){
+    var box=$('nr-zone-preview'); if(!box) return;
+    var zones=isEditing()?[]:zoneList();
+    if(!zones.length){box.classList.add('hidden');box.innerHTML='';return;}
+    normalize(zones);
+    var used=usedNums(zones), mats=periodMatrices(), multi=used.length>1;
+    if(multi&&!S.touched) autoSplit(zones,used);
+    var n0=(typeof consecLocalMax==='function')?consecLocalMax('PRE-'):0, newCount=0, h='';
+    h+='<div class="flex items-center justify-between gap-2 flex-wrap mb-2"><p class="font-black text-teal-800 text-xs"><i class="fa-solid fa-layer-group mr-1"></i>Zonas y facturación <span class="font-semibold text-slate-500">· '+zones.length+' zona(s), '+eqCount(zones)+' equipo(s)</span></p>';
+    if(zones.length>1) h+='<div class="flex gap-1.5"><button type="button" data-chip="one" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una sola facturación</button><button type="button" data-chip="each" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una por zona</button></div>';
+    h+='</div>';
+    if(zones.length>1){
+      h+='<p class="text-[10px] text-slate-500 mb-1.5">Elige a qué facturación va cada zona. Cada facturación tiene su propio consecutivo.</p><div class="mb-3">';
+      zones.forEach(function(z){
+        var k=zkey(z), opts='';
+        for(var i=1;i<=zones.length;i++) opts+='<option value="'+i+'"'+(S.assign[k]===i?' selected':'')+'>Facturación '+i+'</option>';
+        h+='<div class="flex items-center justify-between gap-2 py-1.5 border-b border-slate-200/60"><div class="min-w-0"><div class="font-bold text-xs truncate">'+esc(z.zoneName)+'</div><div class="text-[10px] text-slate-500">'+z.ids.length+' equipo(s)</div></div><select data-zone="'+esc(k)+'" class="input-box text-xs" style="width:auto;min-width:128px;flex:none">'+opts+'</select></div>';
+      });
+      h+='</div>';
+    }
+    used.forEach(function(gn){
+      var zs=zonesOf(zones,gn), tgt=targetFor(gn,used.length,mats), base, label;
+      if(tgt==='NEW'){newCount++;base=prevFormat(n0+newCount,'PRE-');label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
+      else{var p=mats.filter(function(x){return x.id===tgt;})[0];base=p.zoneBaseId;label='<span class="text-slate-500">Se agrega a</span> <b class="font-mono text-teal-800">'+esc(base)+'</b>';}
+      var codes=hvacZoneOrderIds(base,zs);
+      h+='<div class="rounded-2xl border border-slate-200 p-3 mb-2"><div class="flex items-center justify-between gap-2 flex-wrap mb-1.5"><span class="font-black text-xs">'+(multi?'Facturación '+gn:'Consecutivo')+'</span><span class="text-[11px]">'+label+'</span></div><ul class="space-y-0.5 mb-1">';
+      zs.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
+      h+='</ul>';
+      if(mats.length) h+='<select data-target="'+gn+'" class="input-box text-xs mt-1.5"><option value="NEW"'+(tgt==='NEW'?' selected':'')+'>Consecutivo nuevo</option>'+mats.map(function(p){return '<option value="'+esc(p.id)+'"'+(tgt===p.id?' selected':'')+'>Agregar a '+esc(p.zoneBaseId)+' (mismo mes)</option>';}).join('')+'</select>';
+      if(multi) h+='<label class="block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1">Valor de esta facturación ($)</label><input type="number" data-gv="'+gn+'" value="'+(Number(S.values[gn])||'')+'" class="input-box text-xs font-bold" placeholder="0">';
+      h+='</div>';
+    });
+    if(multi) h+='<p id="nr-sum-label" class="text-[11px] font-bold text-slate-700 text-right"></p>';
+    h+='<p class="text-[10px] text-slate-500 mt-1">El número definitivo se asigna al guardar. Cada facturación se cobra cuando todas sus partes estén completadas.</p>';
+    box.innerHTML=h; box.classList.remove('hidden');
+    if(multi) syncTotal();
+  }
+  window.hvacNrUpdateZonePreview=render;
+  window.hvacNrSelectAllZones=function(){
+    var cbs=Array.from(document.querySelectorAll('.nr-eq-checkbox'));
     if(!cbs.length) return showToast('Primero selecciona un cliente para ver sus equipos por zona.','error');
-    var sel = document.getElementById('nr-zone-filter'); if(sel) sel.value='ALL';
+    var sel=$('nr-zone-filter'); if(sel) sel.value='ALL';
     hvacApplyRoutineZoneFilter('nr');
-    var n=0; document.querySelectorAll('.nr-eq-checkbox').forEach(function(cb){ if(!cb.disabled){ cb.checked=true; n++; } });
-    hvacNrUpdateZonePreview();
-    var g = hvacGroupEquipmentByZone(nrChecked()).length;
-    showToast(n+' equipo(s) seleccionados · '+g+' zona(s): se generará una rutina por zona.','success');
+    var n=0; document.querySelectorAll('.nr-eq-checkbox').forEach(function(cb){if(!cb.disabled){cb.checked=true;n++;}});
+    S.touched=false; render();
+    showToast(n+' equipo(s) de '+zoneList().length+' zona(s) seleccionados. Define abajo cómo se facturan.','success');
   };
-  document.addEventListener('change', function(e){
+  var box=$('nr-zone-preview');
+  if(box){
+    box.addEventListener('change',function(e){
+      var t=e.target; if(!t||!t.dataset) return;
+      if(t.dataset.zone!==undefined){S.assign[t.dataset.zone]=parseInt(t.value,10)||1;S.touched=false;render();}
+      else if(t.dataset.target!==undefined){S.targets[t.dataset.target]=t.value;render();}
+    });
+    box.addEventListener('input',function(e){
+      var t=e.target; if(t&&t.dataset&&t.dataset.gv!==undefined){S.values[t.dataset.gv]=parseFloat(t.value)||0;S.touched=true;syncTotal();}
+    });
+    box.addEventListener('click',function(e){
+      var b=e.target.closest&&e.target.closest('[data-chip]'); if(!b) return;
+      zoneList().forEach(function(z,i){S.assign[zkey(z)]=b.dataset.chip==='one'?1:i+1;});
+      S.touched=false; render();
+    });
+  }
+  document.addEventListener('change',function(e){
     var t=e.target; if(!t) return;
-    if((t.classList && t.classList.contains('nr-eq-checkbox')) || t.id==='nr-zone-filter') hvacNrUpdateZonePreview();
+    if((t.classList&&t.classList.contains('nr-eq-checkbox'))||t.id==='nr-zone-filter'||t.id==='nr-client'||t.id==='nr-date') render();
   });
-  document.addEventListener('click', function(e){
-    if(e.target.closest && e.target.closest('#new-routine-modal-backdrop button[onclick*="toggleSelectAllCheckboxes"]')) setTimeout(hvacNrUpdateZonePreview,0);
+  document.addEventListener('input',function(e){
+    if(e.target&&e.target.id==='nr-budget'){S.touched=false;render();}
   });
-  var picker = document.getElementById('nr-equipments-picker');
-  if(picker) new MutationObserver(function(){ hvacNrUpdateZonePreview(); }).observe(picker,{childList:true});
+  document.addEventListener('click',function(e){
+    if(e.target.closest&&e.target.closest('#new-routine-modal-backdrop button[onclick*="toggleSelectAllCheckboxes"]')) setTimeout(render,0);
+  });
+  var picker=$('nr-equipments-picker');
+  if(picker) new MutationObserver(function(){render();}).observe(picker,{childList:true});
+  var modal=$('new-routine-modal-backdrop');
+  if(modal) new MutationObserver(function(){
+    if(modal.classList.contains('hidden')){S={assign:{},values:{},targets:{},touched:false};var b=$('nr-zone-preview');if(b){b.classList.add('hidden');b.innerHTML='';}}
+  }).observe(modal,{attributes:true,attributeFilter:['class']});
 })();
 </script>
 
