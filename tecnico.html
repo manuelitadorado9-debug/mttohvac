@@ -1,4 +1,138 @@
-7)}
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0a1122">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="shortcut icon" href="/favicon.ico">
+    <meta name="application-name" content="HVAC Campo">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="HVAC Campo">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Técnicos HVAC">
+    <meta name="format-detection" content="telephone=no">
+    <title>HVAC Mantenimiento · App de Campo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+    (function () {
+        var t = 'dark';
+        try { var s = localStorage.getItem('TECH_THEME'); if (s === 'light' || s === 'dark') t = s; } catch (e) {}
+        document.documentElement.setAttribute('data-theme', t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', t === 'dark' ? '#0a1122' : '#eef2fa');
+    })();
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+/* =====================================================================
+   SMART MAINTENANCE · APP DE CAMPO (TÉCNICOS)
+   Mobile-first · azul industrial oscuro (por defecto) + modo día de alto contraste
+   ===================================================================== */
+:root{
+  --bg:#0a1122; --bg-2:#0f1a33; --surface:#131f3c; --surface-2:#1a2a4f; --line:#26385f;
+  --text:#eaf0ff; --muted:#93a5cf; --soft:#6a7fae; --bar:rgba(10,17,34,.86);
+  --primary:#3b82f6; --primary-2:#1d5fd6; --accent:#fbbf24; --ok:#22c55e; --ok-2:#15a34a; --danger:#f43f5e;
+  --shadow:0 10px 30px -12px rgba(0,0,0,.65);
+  --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#eef2fa; --bg-2:#e5ebf7; --surface:#ffffff; --surface-2:#f2f5fb; --line:#d8e0f0;
+  --text:#0b1530; --muted:#53648c; --soft:#8493b3; --bar:rgba(238,242,250,.9);
+  --shadow:0 10px 26px -14px rgba(15,30,70,.35);
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--text);
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased;
+  padding-bottom:calc(88px + var(--safe-bot));overscroll-behavior-y:contain}
+body.modal-open{overflow:hidden}
+.hidden{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none;padding:0}
+input,textarea,select{font:inherit;color:inherit}
+h1,h2,h3,h4,p{margin:0}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.text-emerald-400{color:#34d399}.text-amber-400{color:#fbbf24}.text-rose-400{color:#fb7185}
+
+/* ---------- Barra superior ---------- */
+.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+  padding:calc(12px + var(--safe-top)) 16px 12px;background:var(--bar);
+  backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);border-bottom:1px solid var(--line)}
+.avatar{width:42px;height:42px;border-radius:14px;flex:none;display:grid;place-items:center;font-weight:900;font-size:13.5px;color:#fff;
+  background:linear-gradient(135deg,#3b82f6,#6366f1);box-shadow:0 8px 18px -8px rgba(59,130,246,.8)}
+.who{min-width:0;flex:1;display:flex;flex-direction:column;line-height:1.2}
+.who-sub{font-size:9.9px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.who strong{font-size:13.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;font-size:9.9px;font-weight:800;padding:7px 11px;border-radius:99px;
+  background:var(--surface);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.icon-btn{width:44px;height:44px;border-radius:14px;flex:none;display:grid;place-items:center;font-size:14.4px;
+  background:var(--surface);border:1px solid var(--line);color:var(--text);transition:transform .12s,background .2s}
+.icon-btn:active{transform:scale(.94)}
+
+/* ---------- Avisos ---------- */
+.offline-banner{position:sticky;top:0;z-index:29;display:flex;gap:10px;align-items:center;padding:10px 16px;font-size:10.8px;font-weight:700;
+  background:#78350f;color:#fde68a;border-bottom:1px solid #92400e}
+html[data-theme="light"] .offline-banner{background:#fef3c7;color:#78350f;border-color:#fcd34d}
+
+/* ---------- Contenido ---------- */
+.main{max-width:760px;margin:0 auto;padding:18px 16px 24px}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px}
+.hero h1{font-size:23.4px;font-weight:900;letter-spacing:-.02em}
+.hero p{font-size:10.8px;font-weight:600;color:var(--muted);margin-top:2px}
+.pending-chip{font-size:9.9px;font-weight:800;padding:7px 11px;border-radius:99px;background:rgba(251,191,36,.14);color:var(--accent);border:1px solid rgba(251,191,36,.35)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.stat{padding:14px 16px;border-radius:20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;align-items:center;gap:12px}
+.stat i{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-size:15.3px}
+.stat .s-pend{background:rgba(59,130,246,.16);color:#7db1ff}
+.stat .s-done{background:rgba(34,197,94,.16);color:#4ade80}
+.stat b{display:block;font-size:23.4px;font-weight:900;line-height:1}
+.stat span{font-size:9.9px;font-weight:700;color:var(--muted)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:16px;background:var(--surface);border:1px solid var(--line);margin-bottom:16px}
+.seg button{min-height:42px;border-radius:12px;font-size:10.8px;font-weight:800;color:var(--muted);transition:all .2s}
+.seg button.is-active{background:linear-gradient(135deg,var(--primary),var(--primary-2));color:#fff;box-shadow:0 8px 18px -8px rgba(59,130,246,.9)}
+.seg button em{font-style:normal;opacity:.75;margin-left:4px}
+.list{display:grid;gap:14px}
+@media (min-width:700px){.list{grid-template-columns:1fr 1fr}}
+.empty{grid-column:1/-1;text-align:center;padding:42px 20px;border-radius:22px;border:1.5px dashed var(--line);color:var(--muted);font-weight:700;font-size:11.7px;line-height:1.5}
+.empty i{display:block;font-size:27px;margin-bottom:10px;color:var(--soft)}
+
+/* ---------- Tarjeta de rutina ---------- */
+.r-card{position:relative;overflow:hidden;padding:18px 18px 16px;border-radius:24px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px}
+.r-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#3b82f6,#6366f1)}
+.r-card.is-done::before{background:linear-gradient(180deg,#22c55e,#10b981)}
+.r-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.r-id{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.8px;font-weight:800;padding:5px 10px;border-radius:10px;background:var(--surface-2);color:#8bb6ff}
+.r-client{font-size:17.1px;font-weight:900;letter-spacing:-.01em;line-height:1.2}
+.zone-chip{display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:5px 11px;border-radius:999px;font-size:11.5px;font-weight:900;letter-spacing:.01em;background:rgba(16,185,129,.16);color:#34d399;border:1px solid rgba(16,185,129,.45)}
+html[data-theme="light"] .zone-chip{color:#047857}
+.r-meta{display:flex;flex-wrap:wrap;gap:14px;font-size:10.8px;font-weight:700;color:var(--muted)}
+.r-meta i{margin-right:6px;color:var(--primary)}
+.r-progress{display:flex;align-items:center;gap:10px;font-size:10.8px;font-weight:800;color:var(--muted)}
+.bar{flex:1;height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#3b82f6,#22d3ee);transition:width .3s}
+.r-card.is-done .bar i{background:linear-gradient(90deg,#22c55e,#4ade80)}
+
+/* ---------- Pills ---------- */
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;padding:6px 10px;border-radius:99px;border:1px solid transparent;white-space:nowrap}
+.pill-pend{background:rgba(251,191,36,.14);color:#fbbf24;border-color:rgba(251,191,36,.35)}
+.pill-ok{background:rgba(34,197,94,.14);color:#4ade80;border-color:rgba(34,197,94,.35)}
+.pill-idle{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
+.pill-warn{background:rgba(251,146,60,.16);color:#fb923c;border-color:rgba(251,146,60,.4)}
+html[data-theme="light"] .pill-pend{color:#a16207}html[data-theme="light"] .pill-ok{color:#15803d}html[data-theme="light"] .pill-warn{color:#c2410c}
+
+/* ---------- Botones ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;min-height:50px;padding:0 18px;border-radius:16px;font-size:12.6px;font-weight:800;
+  transition:transform .12s,filter .2s,box-shadow .2s;user-select:none;text-align:center}
+.btn:active{transform:scale(.97)}
 .btn-lg{min-height:58px;font-size:13.5px;border-radius:18px}
 .btn-block{width:100%}
 .btn-primary{color:#fff;background:linear-gradient(135deg,#3b82f6,#1d5fd6);box-shadow:0 12px 24px -10px rgba(59,130,246,.9)}
@@ -248,17 +382,6 @@ html[data-theme="light"] .pill-ok{color:#047857}
   #tech-sync-modal #tech-sync-title { font-size: 19px !important; }
 }
 @media (prefers-reduced-motion: reduce) { #tech-sync-modal .tech-sync-card { animation: none; } }
-
-
-/* ===== Orden de servicio: rutina, lecturas y fotos Antes/Después ===== */
-.tipo-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.tipo-seg label{position:relative;display:block}
-.tipo-seg input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.tipo-seg span{display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 4px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--muted);font-size:12px;font-weight:800;text-align:center}
-.tipo-seg input:checked + span{background:#10b981;border-color:#10b981;color:#fff}
-.tipo-seg input:focus-visible + span{outline:2px solid #3b82f6;outline-offset:2px}
-.ph-group + .ph-group{margin-top:16px}
-.ph-group-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:800;color:var(--text)}
 
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -518,29 +641,12 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             <form class="sheet-form" onsubmit="event.preventDefault(); saveEquipmentExecution();" novalidate>
                 <div class="sheet-body">
                     <div id="exec-equipment-identity-card" style="margin-bottom:16px;"></div>
-                    <!-- Orden de servicio: tipo de rutina -->
                     <div>
-                        <div class="section-t" style="margin-bottom:10px">Tipo de rutina</div>
-                        <div class="tipo-seg" role="radiogroup" aria-label="Tipo de rutina">
-                            <label><input type="radio" name="exec-tipo-rutina" value="PREVENTIVO" checked><span>Preventivo</span></label>
-                            <label><input type="radio" name="exec-tipo-rutina" value="CORRECTIVO"><span>Correctivo</span></label>
-                            <label><input type="radio" name="exec-tipo-rutina" value="REVISION"><span>Revisión</span></label>
-                        </div>
-                    </div>
-                    <div>
-                        <div class="section-t" style="margin-bottom:10px">Lecturas obligatorias</div>
-                        <div class="params">
-                            <label class="field"><span>Voltaje (V) *</span><input type="text" id="exec-f-voltaje" class="input exec-lectura" inputmode="decimal" placeholder="Ej. 220" autocomplete="off" enterkeyhint="next"></label>
-                            <label class="field"><span>Amperaje (A) *</span><input type="text" id="exec-f-amperaje" class="input exec-lectura" inputmode="decimal" placeholder="Ej. 4.5" autocomplete="off" enterkeyhint="next"></label>
-                            <label class="field" style="grid-column:1/-1"><span>Presión / Otros *</span><input type="text" id="exec-f-presion" class="input exec-lectura" placeholder="Ej. Succión 68 PSI, descarga 250 PSI" autocomplete="off" enterkeyhint="done"></label>
-                        </div>
-                    </div>
-                    <div id="exec-params-section">
                         <div class="section-t" style="margin-bottom:10px">Parámetros técnicos <span id="exec-params-count">0/0</span></div>
                         <div id="exec-params-container" class="params"></div>
                     </div>
 
-                    <div id="exec-checklist-section">
+                    <div>
                         <div class="section-t" style="margin-bottom:10px">Check-list de mantenimiento <span id="exec-chk-count">0/0</span></div>
                         <div id="exec-checklist-container" class="checks"></div>
                     </div>
@@ -559,40 +665,20 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         </div>
                     </div>
 
-                    <div>
-                        <label class="field">
-                            <span>Notas del técnico</span>
-                            <textarea id="exec-f-obs" rows="3" class="input" placeholder="Escribe rápido: qué encontraste y qué hiciste…"></textarea>
-                        </label>
-                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">🤖 Optimizar con IA</button>
-                        <label class="field" style="margin-top:10px">
-                            <span>Notas analíticas (puedes editarlas)</span>
-                            <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el texto formal generado por la IA…"></textarea>
-                        </label>
-                    </div>
+                    <label class="field">
+                        <span>Observaciones técnicas</span>
+                        <textarea id="exec-f-obs" rows="3" class="input" placeholder="Estado del equipo, recomendaciones o partes a reemplazar…"></textarea>
+                    </label>
 
                     <div>
-                        <div class="section-t" style="margin-bottom:10px">Fotos de evidencia <span id="ph-total">0/8</span></div>
-                        <div class="ph-group">
-                            <div class="ph-group-h"><span>Antes</span></div>
-                            <div class="photo-actions">
-                                <label for="ph-antes-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
-                                <label for="ph-antes-gal" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
-                            </div>
-                            <input type="file" id="ph-antes-cam" data-ph-cat="antes" accept="image/*" capture="environment" class="sr-only">
-                            <input type="file" id="ph-antes-gal" data-ph-cat="antes" accept="image/*" multiple class="sr-only">
-                            <div id="ph-antes-grid" class="photo-grid" style="margin-top:10px"></div>
+                        <div class="section-t" style="margin-bottom:10px">Fotos de evidencia <span id="exec-photos-count">0/5</span></div>
+                        <div class="photo-actions">
+                            <label for="exec-f-photos-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
+                            <label for="exec-f-photos" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
                         </div>
-                        <div class="ph-group">
-                            <div class="ph-group-h"><span>Después</span></div>
-                            <div class="photo-actions">
-                                <label for="ph-despues-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
-                                <label for="ph-despues-gal" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
-                            </div>
-                            <input type="file" id="ph-despues-cam" data-ph-cat="despues" accept="image/*" capture="environment" class="sr-only">
-                            <input type="file" id="ph-despues-gal" data-ph-cat="despues" accept="image/*" multiple class="sr-only">
-                            <div id="ph-despues-grid" class="photo-grid" style="margin-top:10px"></div>
-                        </div>
+                        <input type="file" id="exec-f-photos-cam" accept="image/*" capture="environment" class="sr-only">
+                        <input type="file" id="exec-f-photos" multiple accept="image/*" class="sr-only">
+                        <div id="exec-photos-preview" class="photo-grid" style="margin-top:12px"></div>
                     </div>
                 </div>
                 <div class="sheet-foot">
@@ -615,19 +701,6 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         const SUPABASE_URL = "https://jlcbjotyhdwupzsxehnl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsY2Jqb3R5aGR3dXB6c3hlaG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTY2MjMsImV4cCI6MjEwNzAzMjYyM30.JVQtxJP_4XuBnTsDZ9onMSkFZT-P8U3ntWnLQUqdPl8";
 
-        // UUID obligatorio para claves primarias y relaciones offline. No usar consecutivos como PK.
-        function hvacUUID() {
-            if (!globalThis.crypto || typeof globalThis.crypto.randomUUID !== 'function') {
-                throw new Error('Este navegador no soporta crypto.randomUUID(); abre la aplicación en HTTPS o localhost.');
-            }
-            return globalThis.crypto.randomUUID();
-        }
-        function hvacStorageError(err, context) {
-            const quota = err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED');
-            console.error('[Almacenamiento] ' + context, err);
-            try { if (typeof showToast === 'function') showToast(quota ? 'El almacenamiento local está lleno. Libera espacio o sincroniza los cambios antes de continuar.' : 'No se pudo guardar en el almacenamiento local. Tus cambios podrían quedar pendientes.', 'error'); } catch (_) {}
-            return err;
-        }
         // ===== Almacenamiento local con respaldo IndexedDB (sin pérdida al agotar localStorage) =====
         // La app del técnico solo sincroniza: agenda (correctivos que reporta) y formularios (solo lectura).
         const CLOUD_STATE_KEYS = ['HVAC_AGENDA_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP'];
@@ -658,9 +731,10 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
         function hvacIDBWriteOnce(id, value) {
             return hvacOpenDb().then(db => new Promise((resolve, reject) => {
-                let tx; try { tx = db.transaction('kv', 'readwrite'); const req = tx.objectStore('kv').put({ id: String(id), value: String(value), updatedAt: Date.now() }); req.onerror = () => { try { hvacStorageError(req.error, 'Escritura IndexedDB'); } catch (_) {} }; } catch (e) { reject(e); return; }
+                const tx = db.transaction('kv', 'readwrite');
+                tx.objectStore('kv').put({ id: String(id), value: String(value), updatedAt: Date.now() });
                 tx.oncomplete = () => resolve(true);
-                tx.onerror = tx.onabort = () => { const e = tx.error || new Error('No se pudo respaldar en IndexedDB'); hvacStorageError(e, 'Transacción IndexedDB'); reject(e); };
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo respaldar en IndexedDB'));
             }));
         }
         function hvacEvictRedundantIndexedBackups(protectedId) {
@@ -718,9 +792,10 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
         function hvacIDBDelete(id) {
             return hvacOpenDb().then(db => new Promise((resolve, reject) => {
-                let tx; try { tx = db.transaction('kv', 'readwrite'); const req = tx.objectStore('kv').delete(String(id)); req.onerror = () => { try { hvacStorageError(req.error, 'Borrado IndexedDB'); } catch (_) {} }; } catch (e) { reject(e); return; }
+                const tx = db.transaction('kv', 'readwrite');
+                tx.objectStore('kv').delete(String(id));
                 tx.oncomplete = () => resolve(true);
-                tx.onerror = tx.onabort = () => { const e = tx.error || new Error('No se pudo borrar de IndexedDB'); hvacStorageError(e, 'Transacción IndexedDB'); reject(e); };
+                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo borrar de IndexedDB'));
             }));
         }
         async function hvacRestoreIndexedStorage() {
@@ -775,7 +850,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         if (!idbOnly) orig.call(this, k, value);
                     } catch (e) {
                         if (isHVAC) {
-                            hvacStorageError(e, 'Cuota de localStorage para ' + k); console.warn('[Storage] El dato queda en memoria mientras se recupera espacio:', k, e);
+                            console.warn('[Storage] Cuota de localStorage; el dato queda en memoria mientras se recupera espacio:', k, e);
                             if (hvacIsQuotaError(e)) {
                                 hvacStorageWriteTail = hvacStorageWriteTail
                                     .then(() => hvacCleanupOldLocalBackups(key))
@@ -1911,7 +1986,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             }
                         }
                         if (result) sent++;
-                        else { console.warn('[Sync] Operación no confirmada; se conserva para reintento:', entry.table, entry.id, cloudCtl.lastStatus); }
+                        else if ([401, 403, 429, 500, 502, 503, 504, 'network', 'timeout'].includes(cloudCtl.lastStatus)) break;
                     } catch (e) {
                         console.warn('[Offline] Se conserva operación pendiente para reintentar:', entry.table, entry.id, e);
                     }
@@ -3038,220 +3113,6 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             };
             document.querySelectorAll('.modal-backdrop').forEach(el => new MutationObserver(lock).observe(el, { attributes: true, attributeFilter: ['class'] }));
             lock();
-
-        // ===== Extras de orden de servicio integrados con el estado existente =====
-        const ordenFotos = { antes: [], despues: [] };
-        const ordenMaxFotos = 8;
-        const ordenLecturas = [['voltaje', 'Voltaje'], ['amperaje', 'Amperaje'], ['presionOtros', 'Presión / Otros']];
-        let ordenFirmaVacia = true;
-        let ordenFirmaRedimensionar = null;
-
-        function ordenTipoActual() {
-            const radio = document.querySelector('input[name="exec-tipo-rutina"]:checked');
-            return radio ? radio.value : 'PREVENTIVO';
-        }
-        function ordenAplicarTipo() {
-            const preventivo = ordenTipoActual() === 'PREVENTIVO';
-            const p = document.getElementById('exec-params-section');
-            const c = document.getElementById('exec-checklist-section');
-            if (p) p.classList.toggle('hidden', !preventivo);
-            if (c) c.classList.toggle('hidden', !preventivo);
-            if (typeof updateExecProgress === 'function') updateExecProgress();
-        }
-        document.querySelectorAll('input[name="exec-tipo-rutina"]').forEach(r => r.addEventListener('change', ordenAplicarTipo));
-
-        async function ordenOptimizarNotas() {
-            const btn = document.getElementById('exec-btn-ia');
-            const obs = document.getElementById('exec-f-obs');
-            const out = document.getElementById('exec-f-notas-analiticas');
-            const notas = obs.value.trim();
-            if (!notas) return showToast('Escribe primero las notas del técnico.', 'error');
-            const original = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Optimizando…';
-            try {
-                const r = await fetch('/api/ia/procesar-notas', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
-                });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(data.error || 'No se pudo procesar el texto.');
-                out.value = data.notas_analiticas || '';
-                if (data.advertencia_numeros && data.advertencia_numeros.length)
-                    showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
-                else showToast('Notas analíticas generadas. Revísalas antes de guardar.');
-            } catch (e) {
-                showToast(navigator.onLine ? e.message : 'Sin conexión: la IA necesita internet.', 'error');
-            } finally { btn.disabled = false; btn.innerHTML = original; }
-        }
-        document.getElementById('exec-btn-ia').addEventListener('click', ordenOptimizarNotas);
-
-        function ordenRenderFotos() {
-            ['antes', 'despues'].forEach(cat => {
-                const cont = document.getElementById('ph-' + cat + '-grid');
-                if (!cont) return;
-                cont.innerHTML = ordenFotos[cat].length ? ordenFotos[cat].map((src, i) => `
-                    <div class="ph">
-                        <button type="button" class="ph-img" onclick="verFotoOrden('${cat}',${i})" aria-label="Ampliar foto ${i + 1}"><img src="${esc(src)}" alt="Foto ${cat} ${i + 1}"></button>
-                        <button type="button" class="ph-del" onclick="quitarFotoOrden('${cat}',${i})" aria-label="Eliminar foto ${i + 1}"><i class="fa-solid fa-trash"></i></button>
-                        <span class="ph-n">${i + 1}</span>
-                    </div>`).join('') : '<div class="ph-empty"><i class="fa-solid fa-camera"></i> Sin fotos</div>';
-            });
-            const total = ordenFotos.antes.length + ordenFotos.despues.length;
-            const label = document.getElementById('ph-total');
-            if (label) label.textContent = total + '/' + ordenMaxFotos;
-            tempPhotosList = [...ordenFotos.antes, ...ordenFotos.despues];
-            const oldCount = document.getElementById('exec-photos-count');
-            if (oldCount) oldCount.textContent = total + '/' + ordenMaxFotos;
-        }
-        async function ordenAgregarFotos(cat, files) {
-            appBusyStart('Comprimiendo fotos…');
-            try {
-                for (const f of files) {
-                    if (ordenFotos.antes.length + ordenFotos.despues.length >= ordenMaxFotos) {
-                        showToast('Máximo 8 fotos entre Antes y Después.', 'error'); break;
-                    }
-                    try {
-                        ordenFotos[cat].push(await r2keep(await compressImage(f, 800, 0.65), 'reportes'));
-                        ordenRenderFotos();
-                    } catch (err) { console.warn('[Fotos] No se agregó la imagen:', err); showToast('No se pudo agregar una foto.', 'error'); }
-                }
-            } finally { appBusyEnd(); }
-        }
-        document.querySelectorAll('[data-ph-cat]').forEach(inp => inp.addEventListener('change', async e => {
-            const files = Array.from(e.target.files || []); e.target.value = '';
-            if (files.length) await ordenAgregarFotos(inp.dataset.phCat, files);
-        }));
-        window.quitarFotoOrden = (cat, i) => { if (ordenFotos[cat]) ordenFotos[cat].splice(i, 1); ordenRenderFotos(); };
-        window.verFotoOrden = (cat, i) => {
-            const img = document.getElementById('receipt-viewer-img');
-            const box = document.getElementById('receipt-viewer-modal-backdrop');
-            if (!img || !box || !ordenFotos[cat] || !ordenFotos[cat][i]) return;
-            img.src = ordenFotos[cat][i]; box.classList.remove('hidden');
-        };
-        // El flujo original invoca este nombre al abrir y al cambiar el correctivo.
-        renderExecPhotosPreview = ordenRenderFotos;
-
-        const ordenOpenOriginal = openEquipmentExecutionModal;
-        openEquipmentExecutionModal = function(orderId, eqId) {
-            ordenOpenOriginal.apply(this, arguments);
-            const order = workOrders.find(o => o.id === orderId);
-            const eq = techFindEq(eqId) || { code: eqId };
-            const exec = (order && order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
-            const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${exec.tipoRutina || 'PREVENTIVO'}"]`);
-            if (radio) radio.checked = true;
-            document.getElementById('exec-f-voltaje').value = exec.voltaje || '';
-            document.getElementById('exec-f-amperaje').value = exec.amperaje || '';
-            document.getElementById('exec-f-presion').value = exec.presionOtros || '';
-            document.getElementById('exec-f-notas-analiticas').value = exec.notasAnaliticas || '';
-            ordenFotos.antes = [...(exec.fotosAntes || exec.photos || [])];
-            ordenFotos.despues = [...(exec.fotosDespues || [])];
-            ordenRenderFotos();
-            ordenAplicarTipo();
-        };
-
-        const ordenPersistOriginal = persistOrderLocallyAndSync;
-        persistOrderLocallyAndSync = function(order) {
-            const eq = techFindEq(currentExecEqId);
-            const key = currentExecEqId;
-            const e = order && order.executions && (order.executions[key] || (eq && order.executions[eq.code]));
-            if (e) {
-                e.tipoRutina = ordenTipoActual();
-                e.voltaje = document.getElementById('exec-f-voltaje').value.trim();
-                e.amperaje = document.getElementById('exec-f-amperaje').value.trim();
-                e.presionOtros = document.getElementById('exec-f-presion').value.trim();
-                e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
-                e.fotosAntes = [...ordenFotos.antes];
-                e.fotosDespues = [...ordenFotos.despues];
-                e.photos = [...ordenFotos.antes, ...ordenFotos.despues];
-                const missing = ordenLecturas.filter(([k]) => !String(e[k] || '').trim()).map(([, label]) => label);
-                if (e.tipoRutina !== 'PREVENTIVO') {
-                    e.formConfigSnapshot = { ...(e.formConfigSnapshot || {}), params: '', checklist: '' };
-                    e.paramsValues = {};
-                    e.checklist = {};
-                }
-                e.partial = missing.length > 0 || (e.tipoRutina === 'PREVENTIVO' && e.partial);
-                order.tipoRutina = e.tipoRutina;
-            }
-            return ordenPersistOriginal.apply(this, arguments);
-        };
-
-
-        // En Correctivo/Revisión los campos dinámicos no son obligatorios; se neutralizan
-        // solo durante el guardado original y luego se restauran en el formulario.
-        const ordenSaveOriginal = saveEquipmentExecution;
-        saveEquipmentExecution = async function() {
-            if (ordenTipoActual() === 'PREVENTIVO') return ordenSaveOriginal.apply(this, arguments);
-            const inputs = Array.from(document.querySelectorAll('.exec-param-input'));
-            const checks = Array.from(document.querySelectorAll('.exec-chk-input'));
-            const oldValues = inputs.map(el => el.value);
-            const oldChecks = checks.map(el => el.checked);
-            inputs.forEach(el => { if (!String(el.value || '').trim()) el.value = 'N/A'; });
-            checks.forEach(el => { el.checked = true; });
-            try { return await ordenSaveOriginal.apply(this, arguments); }
-            finally {
-                inputs.forEach((el, i) => { el.value = oldValues[i]; });
-                checks.forEach((el, i) => { el.checked = oldChecks[i]; });
-            }
-        };
-
-        const ordenMetricsOriginal = getTechChecklistMetrics;
-        getTechChecklistMetrics = function(eq, exec) {
-            if (!exec || !exec.tipoRutina) return ordenMetricsOriginal.apply(this, arguments);
-            const isPreventivo = exec.tipoRutina === 'PREVENTIVO';
-            const normalized = isPreventivo ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
-            const m = ordenMetricsOriginal(eq, normalized);
-            const missing = ordenLecturas.filter(([k]) => !String(exec[k] || '').trim()).map(([, label]) => label);
-            const total = m.total + ordenLecturas.length;
-            const done = m.done + ordenLecturas.length - missing.length;
-            return { done, total, missing: [...m.missing, ...missing], percent: total ? Math.round(done / total * 100) : 0 };
-        };
-        const ordenStatusOriginal = getEquipmentExecutionStatus;
-        getEquipmentExecutionStatus = function(eq, eqId, exec) {
-            if (!exec || !exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
-            const normalized = exec.tipoRutina === 'PREVENTIVO' ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
-            const base = ordenStatusOriginal(eq, eqId, normalized);
-            const missing = ordenLecturas.some(([k]) => !String(exec[k] || '').trim());
-            if (base === 'pending' && ordenLecturas.every(([k]) => !String(exec[k] || '').trim())) return 'pending';
-            return !missing && (exec.tipoRutina !== 'PREVENTIVO' || base === 'done') ? 'done' : 'progress';
-        };
-
-        // Firma de cliente: conserva el modal existente y adapta el canvas a pantallas HiDPI y Pointer Events.
-        const ordenInitFirmaOriginal = initSignatureCanvas;
-        initSignatureCanvas = function() {
-            sigCanvas = document.getElementById('global-sig-canvas');
-            if (!sigCanvas) return;
-            sigCtx = sigCanvas.getContext('2d');
-            const ajustar = () => {
-                const rect = sigCanvas.getBoundingClientRect();
-                if (!rect.width || !rect.height) return;
-                const dpr = window.devicePixelRatio || 1;
-                sigCanvas.width = Math.round(rect.width * dpr);
-                sigCanvas.height = Math.round(rect.height * dpr);
-                sigCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                sigCtx.strokeStyle = '#0f172a'; sigCtx.lineWidth = 2.5; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round';
-                ordenFirmaVacia = true;
-            };
-            ajustar();
-            ordenFirmaRedimensionar = ajustar;
-            let drawing = false;
-            const pos = e => { const r = sigCanvas.getBoundingClientRect(); return { x: e.clientX-r.left, y: e.clientY-r.top }; };
-            sigCanvas.onpointerdown = e => { e.preventDefault(); sigCanvas.setPointerCapture(e.pointerId); drawing = true; ordenFirmaVacia = false; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); sigCtx.lineTo(p.x+.1,p.y+.1); sigCtx.stroke(); };
-            sigCanvas.onpointermove = e => { if (!drawing) return; const p=pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); };
-            sigCanvas.onpointerup = sigCanvas.onpointercancel = () => { drawing = false; };
-        };
-        clearSignatureCanvas = function() {
-            if (sigCtx && sigCanvas) {
-                sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
-                ordenFirmaVacia = true;
-            }
-        };
-        const ordenSubmitFirmaOriginal = submitGlobalSignature;
-        submitGlobalSignature = async function() {
-            if (ordenFirmaVacia) { showToast('El cliente debe firmar antes de confirmar.', 'error'); return; }
-            return ordenSubmitFirmaOriginal.apply(this, arguments);
-        };
-        ordenRenderFotos();
         })();
 
         window.addEventListener('DOMContentLoaded', async () => {
