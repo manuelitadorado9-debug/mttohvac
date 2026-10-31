@@ -43,12 +43,6 @@
     <!-- CSS compilado (se genera con "npm run build:css"). Si el CDN de abajo está bloqueado en el celular, esto mantiene los estilos. -->
     <link rel="stylesheet" href="/tailwind.css?v=1">
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-    <!-- Respaldo: si el CDN anterior está bloqueado o no responde en el celular, carga otro CDN de Tailwind -->
-    <script>
-    if (typeof window.tailwind === 'undefined') {
-        document.write('<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"><\/script>');
-    }
-    </script>
     <script src="common.js?v=8"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -200,7 +194,7 @@ label.block{letter-spacing:.01em}
 }
 @media (max-width:1023.98px){
   #sidebar-drawer{width:min(19rem,88vw);transform:translateX(-105%);visibility:hidden;transition:transform .28s cubic-bezier(.3,.9,.3,1),visibility 0s linear .28s}
-  #sidebar-drawer.sidebar-open{transform:none;visibility:visible;transition-delay:0s}
+  #sidebar-drawer.sidebar-open{transform:none!important;translate:none!important;visibility:visible!important;transition-delay:0s}
   .rail-close{display:inline-flex}
 }
 
@@ -4775,6 +4769,7 @@ async function authPedirNuevaClave() {
             if (!drawer || !overlay) return;
             const mobile = window.matchMedia('(max-width: 1023.98px)').matches;
             if (show && mobile) {
+                drawer.classList.remove('-translate-x-full');
                 drawer.classList.add('sidebar-open');
                 overlay.classList.add('sidebar-open');
                 overlay.style.display = 'block';
