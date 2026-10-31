@@ -11307,9 +11307,38 @@ async function attDelete(id) {
     return safe ? `<img class="${className}" src="${esc(safe)}" alt="${esc(alt)}">` : '';
   }
 
+  /* Recorta el blanco sobrante arriba y abajo de una imagen (logo / pie) para pegarla al borde. */
+  const TRIM_CACHE = new Map();
+  function trimWhiteMargins(src) {
+    if (TRIM_CACHE.has(src)) return Promise.resolve(TRIM_CACHE.get(src));
+    return new Promise(resolve => {
+      const done = out => { TRIM_CACHE.set(src, out); resolve(out); };
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const w = img.naturalWidth, h = img.naturalHeight;
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+          const data = ctx.getImageData(0, 0, w, h).data;
+          const rowHasInk = y => { for (let x = 0; x < w; x += 2) { const i = (y * w + x) * 4; if (data[i] < 235 || data[i + 1] < 235 || data[i + 2] < 235) return true; } return false; };
+          let top = 0; while (top < h && !rowHasInk(top)) top++;
+          let bottom = h - 1; while (bottom > top && !rowHasInk(bottom)) bottom--;
+          if (top >= bottom) return done(src);
+          top = Math.max(0, top - 2); bottom = Math.min(h - 1, bottom + 2);
+          const out = document.createElement('canvas'); out.width = w; out.height = bottom - top + 1;
+          out.getContext('2d').drawImage(c, 0, top, w, out.height, 0, 0, w, out.height);
+          done(out.toDataURL('image/jpeg', 0.92));
+        } catch (e) { done(src); }
+      };
+      img.onerror = () => done(src);
+      img.src = src;
+    });
+  }
+
   /* ---------- Bloques comunes del diseño ---------- */
-  const headHtml = order => `${imageTag(getHeaderImage(), COMPANY, 'hi')}<div class="ord"><b>ORDEN: ${esc(order?.id || '')}</b><span>Bogotá, D.C. Colombia</span></div>`;
-  const footHtml = () => imageTag(getFooterImage(), 'Pie de página', 'fi');
+  const RUNTIME_IMG = { header: '', footer: '' };
+  const headHtml = order => `${imageTag(RUNTIME_IMG.header || getHeaderImage(), COMPANY, 'hi')}<div class="ord"><b>ORDEN: ${esc(order?.id || '')}</b><span>Bogotá, D.C. Colombia</span></div>`;
+  const footHtml = () => imageTag(RUNTIME_IMG.footer || getFooterImage(), 'Pie de página', 'fi');
   const pageHtml = (order, inner, cls = '') => `<section class="page${cls ? ' ' + cls : ''}">${headHtml(order)}${inner}${footHtml()}</section>`;
 
   const cell = (label, value, extra = '') => `<div${extra ? ` style="${extra}"` : ''}><small>${esc(label)}</small>${esc(first(value, 'No registrado'))}</div>`;
@@ -11591,6 +11620,15 @@ h2{break-after:avoid;page-break-after:avoid}
 .sigimg{max-width:100%;max-height:100px;object-fit:contain;display:block}
 .txt{overflow-wrap:anywhere}
 .box>.row:last-child{border-bottom:0}
+/* Encabezado pegado arriba y pie pegado abajo, de borde a borde */
+.page{padding:0 .5in!important}
+.hi{display:block;width:calc(100% + 1in)!important;max-width:none!important;margin:0 -.5in 4px!important;padding:0!important;border:0!important}
+.fi{display:block;width:calc(100% + 1in)!important;max-width:none!important;margin:auto -.5in 0!important;padding:0!important}
+/* Texto centrado verticalmente en filas y celdas (compensa el desplazamiento del render a imagen) */
+td,th,.row>div{vertical-align:middle!important;line-height:1.25!important}
+td{padding-top:3px!important;padding-bottom:7px!important}
+th{padding-top:4px!important;padding-bottom:7px!important}
+.row>div{padding-top:6px!important;padding-bottom:10px!important}
 .stack{display:grid;gap:8px}
 .page.cover .title{padding:14px 20px;margin-bottom:10px}
 .page.cover .title p{font-size:10.5px;line-height:1.45}
@@ -11600,7 +11638,7 @@ h2{break-after:avoid;page-break-after:avoid}
 .page.cover .k span{font-size:8px}
 .page.cover .box{margin-bottom:10px}
 .page.cover .g div{padding:6px 12px}
-.page.cover td{padding:5px 10px;font-size:10.5px}
+.page.cover td{font-size:10.5px}
 .page.cover ul{padding:8px 12px 8px 26px;font-size:10.5px;line-height:1.5}`;
 
   /* ---------- Descarga directa del PDF (sin diálogo de impresión) ---------- */
@@ -11640,7 +11678,9 @@ h2{break-after:avoid;page-break-after:avoid}
         onclone: clonedDoc => { clonedDoc.querySelectorAll('.page').forEach((el, idx) => { if (idx !== i) el.remove(); }); }
       });
       const sheetPx = Math.round(canvas.width * H / W);                       // alto de una hoja carta en px del canvas
-      const sheets = Math.max(1, Math.ceil((canvas.height - 4 * scale) / sheetPx));
+      const tooTallBy = canvas.height / sheetPx;
+      const shrinkToOne = tooTallBy > 1 && tooTallBy <= 1.08;                 // sobra poco: se reduce un poco para que quepa en una hoja
+      const sheets = shrinkToOne ? 1 : Math.max(1, Math.ceil((canvas.height - 40 * scale) / sheetPx));
       for (let k = 0; k < sheets; k++) {
         const sy = k * sheetPx;
         const sh = Math.min(sheetPx, canvas.height - sy);
@@ -11654,7 +11694,9 @@ h2{break-after:avoid;page-break-after:avoid}
         }
         if (!firstSheet) pdf.addPage('letter', 'portrait');
         firstSheet = false;
-        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', 0, 0, W, Math.min(H, sh * W / canvas.width), undefined, 'FAST');
+        const imgH = sh * W / canvas.width;
+        const k = imgH > H && sheets === 1 ? H / imgH : 1;                    // reducción proporcional (solo si sobra poco)
+        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', (W - W * k) / 2, 0, W * k, imgH * k, undefined, 'FAST');
       }
       canvas.width = 0; canvas.height = 0;                                    // libera memoria en el celular
       if (pages.length > 3 && i % 3 === 2) notify(`Generando PDF… ${i + 1} de ${pages.length} páginas`, 'info');
@@ -11730,6 +11772,8 @@ h2{break-after:avoid;page-break-after:avoid}
 
     try { if (typeof ensureOrderEquipments === 'function') await ensureOrderEquipments(order); } catch (e) { /* se usa el catálogo cargado */ }
     await preloadPhotos(order);
+    RUNTIME_IMG.header = await trimWhiteMargins(getHeaderImage());
+    RUNTIME_IMG.footer = await trimWhiteMargins(getFooterImage());
     const built = buildReport(order, typeKey, options);
 
     const frame = document.createElement('iframe');
