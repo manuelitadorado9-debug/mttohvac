@@ -40,7 +40,15 @@
     })();
     </script>
     <!-- Tailwind (CDN, versión fija). Va síncrono en el head para que la página se pinte ya con estilos, sin saltos. -->
+    <!-- CSS compilado (se genera con "npm run build:css"). Si el CDN de abajo está bloqueado en el celular, esto mantiene los estilos. -->
+    <link rel="stylesheet" href="/tailwind.css?v=1">
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <!-- Respaldo: si el CDN anterior está bloqueado o no responde en el celular, carga otro CDN de Tailwind -->
+    <script>
+    if (typeof window.tailwind === 'undefined') {
+        document.write('<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.1.11"><\/script>');
+    }
+    </script>
     <script src="common.js?v=8"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
@@ -2016,6 +2024,14 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     <label class="block text-xs font-bold text-slate-700 mb-1">Cliente / Sede *<span id="nr-client-lock" class="hidden ml-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md"><i class="fa-solid fa-lock"></i> Bloqueado en edición</span></label>
                     <select id="nr-client" required onchange="renderAvailableEquipmentForNewRoutine()" class="input-box font-bold text-xs"></select>
                 </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tipo de Mantenimiento *</label>
+                    <select id="nr-type" required class="input-box font-bold text-xs">
+                        <option value="PREVENTIVO" selected>Preventivo</option>
+                        <option value="CORRECTIVO">Correctivo</option>
+                        <option value="REVISION">Revisión / Diagnóstico</option>
+                    </select>
+                </div>
                 <div id="nr-pb-row" class="grid grid-cols-2 gap-2.5">
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Periodicidad *</label>
@@ -2786,13 +2802,13 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             return id;
         }
         // ----- Consecutivos: PRE-0001 (preventivo) y COR-0001 (correctivo). Los PREV0001 heredados siguen ordenándose. -----
-const CONSEC_PREF = { PREVENTIVO: 'PRE-', CORRECTIVO: 'COR-' }, PREV_DIGITS = 4;
+const CONSEC_PREF = { PREVENTIVO: 'PRE-', CORRECTIVO: 'COR-', REVISION: 'REV-' }, PREV_DIGITS = 4;
 function prevFormat(n, pref = 'PRE-') { return pref + String(n).padStart(PREV_DIGITS, '0'); }
 function consecParse(id, pref) { const m = new RegExp('^' + pref + '(\\d+)(?:-P\\d+)?$', 'i').exec(String(id || '').trim()); return m ? parseInt(m[1], 10) : 0; }
 // Número ordenable: PREV#### (heredado) < PRE-#### / COR-####
 function prevParse(id) {
     const s = String(id || '').trim(); let m = /^PREV(\d+)$/i.exec(s); if (m) return parseInt(m[1], 10);
-    m = /^(?:PRE|COR)-(\d+)(?:-P(\d+))?$/i.exec(s); return m ? 100000 + parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 1000 : 0) : 0;
+    m = /^(?:PRE|COR|REV)-(\d+)(?:-P(\d+))?$/i.exec(s); return m ? 100000 + parseInt(m[1], 10) + (m[2] ? parseInt(m[2], 10) / 1000 : 0) : 0;
 }
 function consecLocalMax(pref) {
     let max = 0;
@@ -6488,6 +6504,11 @@ async function authPedirNuevaClave() {
             const proj = editing ? hvacProjForOrder(order.id) : null;
             const sel = document.getElementById('nr-client');
             if (sel) sel.disabled = editing;                                   // integridad: no se cambia el cliente
+            const typeSel = document.getElementById('nr-type');
+            if (typeSel) {                                                      // el tipo define el consecutivo: no se cambia al editar
+                typeSel.disabled = editing;
+                if (editing) { try { typeSel.value = billingRoutineType(order); } catch (e) { typeSel.value = 'PREVENTIVO'; } }
+            }
             document.getElementById('nr-client-lock').classList.toggle('hidden', !editing);
             document.getElementById('nr-modal-title').innerText = editing ? `Editar Rutina ${order.id}` : 'Nueva Rutina de Mantenimiento (Manual)';
             document.getElementById('nr-submit-label').innerText = editing ? 'Guardar Cambios' : 'Registrar y Programar Rutina';
@@ -6504,6 +6525,7 @@ async function authPedirNuevaClave() {
             document.getElementById('nr-date').value = '';
             document.getElementById('nr-budget').value = '';
             const per = document.getElementById('nr-periodicity'); if (per) per.selectedIndex = 0;
+            const nrT = document.getElementById('nr-type'); if (nrT) nrT.value = 'PREVENTIVO';
             document.querySelectorAll('#nr-tech input[type=checkbox]').forEach(c => { c.checked = false; });
         }
 
@@ -6714,10 +6736,10 @@ async function authPedirNuevaClave() {
             });
             return out;
         }
-        function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base }) {
+        function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base, type = 'PREVENTIVO' }) {
             const ids = hvacZoneOrderIds(base, groups);
             return groups.map((g, i) => {
-                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: 'PREVENTIVO' };
+                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: type, tipoRutina: type };
                 linkClientFields(o, client); return o;
             });
         }
@@ -6735,6 +6757,7 @@ async function authPedirNuevaClave() {
             const periodicity = document.getElementById('nr-periodicity').value;
             const budget = parseFloat(document.getElementById('nr-budget').value) || 0;
             const date = document.getElementById('nr-date').value;
+            const routineType = (document.getElementById('nr-type') || {}).value || 'PREVENTIVO';
             const technicians = techPickerValues('nr-tech'); const technician = technicians.join(', ');
             const equipmentIds = Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(c => c.value);
             if (!client || !periodicity || !date || !technician) return showToast("Completa todos los campos obligatorios.", "error");
@@ -6746,7 +6769,7 @@ async function authPedirNuevaClave() {
                 const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
                 const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
                 // Equipos ya programados en este cliente y periodo (en cualquiera de sus consecutivos)
-                const periodProjs=monthlyProjections.filter(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId);
+                const periodProjs=monthlyProjections.filter(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId&&(p.maintenanceType||'PREVENTIVO')===routineType);
                 const already=new Set();periodProjs.forEach(p=>(p.scheduledEquipmentIds||p.equipmentIds||[]).forEach(id=>already.add(String(id))));
                 if(equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
                 // Plan de facturación: cada grupo = un consecutivo (PRE-000X) con una parte -P# por zona. Sin selección: un solo grupo.
@@ -6755,16 +6778,16 @@ async function authPedirNuevaClave() {
                 let k=0;
                 for(const pg of plan){
                     k++;
-                    const sameProj=pg.target&&pg.target!=='NEW'?monthlyProjections.find(p=>p&&p.id===pg.target):null;
-                    const baseId=sameProj?await hvacBaseIdForProjection(sameProj):await reservePrevId();
-                    const objs=hvacBuildZoneOrders({client,date,technician,technicians,groups:pg.groups,base:baseId});
+                    const sameProj=pg.target&&pg.target!=='NEW'&&(((monthlyProjections.find(p=>p&&p.id===pg.target)||{}).maintenanceType||'PREVENTIVO')===routineType)?monthlyProjections.find(p=>p&&p.id===pg.target):null;
+                    const baseId=sameProj?await hvacBaseIdForProjection(sameProj):await reservePrevId(routineType);
+                    const objs=hvacBuildZoneOrders({client,date,technician,technicians,groups:pg.groups,base:baseId,type:routineType});
                     if(sameProj){
                         sameProj.orderIds=[...new Set([...(sameProj.orderIds||[sameProj.orderId]).filter(Boolean),...objs.map(o=>o.id)])];
                         sameProj.equipmentIds=[...new Set([...(sameProj.equipmentIds||[]).map(String),...pg.equipmentIds.map(String)])];
                         sameProj.scheduledEquipmentIds=[...new Set([...(sameProj.scheduledEquipmentIds||[]).map(String),...pg.equipmentIds.map(String)])];
                         sameProj.budget=(Number(sameProj.budget)||0)+(Number(pg.value)||0);
                     }else{
-                        monthlyProjections.push({id:plan.length>1?`${projId}-${k}`:projId,client,periodicity,month,year,budget:Number(pg.value)||0,equipmentIds:pg.equipmentIds,status:'SCHEDULED',orderId:objs[0].id,orderIds:objs.map(o=>o.id),zoneBaseId:baseId});
+                        monthlyProjections.push({id:plan.length>1?`${projId}-${k}`:projId,client,periodicity,month,year,budget:Number(pg.value)||0,equipmentIds:pg.equipmentIds,status:'SCHEDULED',orderId:objs[0].id,orderIds:objs.map(o=>o.id),zoneBaseId:baseId,maintenanceType:routineType});
                     }
                     orderObjs.push(...objs);
                 }
