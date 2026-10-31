@@ -1999,12 +1999,16 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Zona / Piso que deseas programar</label>
-                    <select id="nr-zone-filter" class="input-box text-xs mb-2" onchange="hvacApplyRoutineZoneFilter('nr')"><option value="ALL">Todas las zonas</option></select>
+                    <div class="flex flex-col sm:flex-row gap-2 mb-2">
+                        <select id="nr-zone-filter" class="input-box text-xs flex-1" onchange="hvacApplyRoutineZoneFilter('nr')"><option value="ALL">Todas las zonas</option></select>
+                        <button type="button" id="nr-all-zones-btn" onclick="hvacNrSelectAllZones()" class="text-[11px] font-black text-white bg-teal-600 hover:bg-teal-700 px-3 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 min-h-[44px] sm:min-h-0 whitespace-nowrap"><i class="fa-solid fa-layer-group"></i> Todas las zonas (rutinas separadas)</button>
+                    </div>
                     <div class="flex items-center justify-between mb-1">
                         <label class="block text-xs font-bold text-slate-700">Equipos a Intervenir</label>
                         <button type="button" onclick="toggleSelectAllCheckboxes('.nr-eq-checkbox', this)" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos</button>
                     </div>
                     <div id="nr-equipments-picker" class="border border-slate-200 rounded-2xl p-3 max-h-48 overflow-y-auto space-y-1.5 bg-slate-50 text-xs"></div>
+                    <div id="nr-zone-preview" class="hidden mt-2 border border-teal-200 bg-teal-50/60 rounded-2xl p-3 text-xs"></div>
                 </div>
                 <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
                     <button type="button" onclick="closeNewRoutineModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
@@ -10584,6 +10588,49 @@ async function attDelete(id) {
    }finally{btn.disabled=false;lbl.textContent=old;}
  };
  document.addEventListener('change',e=>{if(e.target?.id==='eq-f-client')window.hvacLoadZonesForClient(e.target.value);});
+})();
+</script>
+
+<script>
+/* ===== Nueva rutina: seleccionar todas las zonas y ver las rutinas -P# que se generarán ===== */
+(function(){
+  function nrChecked(){ return Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(function(c){return c.value;}); }
+  window.hvacNrUpdateZonePreview = function(){
+    var box = document.getElementById('nr-zone-preview'); if(!box) return;
+    var editing = (typeof nrEditingId !== 'undefined') && nrEditingId !== null;
+    var ids = nrChecked();
+    if(editing || !ids.length){ box.classList.add('hidden'); box.innerHTML=''; return; }
+    var groups = hvacGroupEquipmentByZone(ids);
+    var codes = hvacZoneOrderIds('PREV####', groups);
+    var rows = groups.map(function(g,i){
+      var suf = codes[i] && codes[i].part ? '-P'+codes[i].part : '';
+      return '<li class="flex items-center justify-between gap-2"><span><b class="font-mono text-teal-800">PREV####'+suf+'</b> · '+esc(g.zoneName)+'</span><span class="text-slate-500 font-semibold">'+g.ids.length+' equipo(s)</span></li>';
+    }).join('');
+    box.innerHTML = '<p class="font-black text-teal-800 mb-1.5"><i class="fa-solid fa-layer-group mr-1"></i>'+
+      (groups.length>1 ? 'Se generarán '+groups.length+' rutinas separadas (una por zona), con el mismo consecutivo base:' : 'Se generará 1 rutina:')+'</p>'+
+      '<ul class="space-y-1">'+rows+'</ul>'+
+      (groups.length>1 ? '<p class="text-[10px] text-slate-500 mt-1.5">El valor presupuestado queda registrado una sola vez para toda la matriz y se factura junto cuando todas las partes estén completadas.</p>' : '');
+    box.classList.remove('hidden');
+  };
+  window.hvacNrSelectAllZones = function(){
+    var cbs = Array.from(document.querySelectorAll('.nr-eq-checkbox'));
+    if(!cbs.length) return showToast('Primero selecciona un cliente para ver sus equipos por zona.','error');
+    var sel = document.getElementById('nr-zone-filter'); if(sel) sel.value='ALL';
+    hvacApplyRoutineZoneFilter('nr');
+    var n=0; document.querySelectorAll('.nr-eq-checkbox').forEach(function(cb){ if(!cb.disabled){ cb.checked=true; n++; } });
+    hvacNrUpdateZonePreview();
+    var g = hvacGroupEquipmentByZone(nrChecked()).length;
+    showToast(n+' equipo(s) seleccionados · '+g+' zona(s): se generará una rutina por zona.','success');
+  };
+  document.addEventListener('change', function(e){
+    var t=e.target; if(!t) return;
+    if((t.classList && t.classList.contains('nr-eq-checkbox')) || t.id==='nr-zone-filter') hvacNrUpdateZonePreview();
+  });
+  document.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('#new-routine-modal-backdrop button[onclick*="toggleSelectAllCheckboxes"]')) setTimeout(hvacNrUpdateZonePreview,0);
+  });
+  var picker = document.getElementById('nr-equipments-picker');
+  if(picker) new MutationObserver(function(){ hvacNrUpdateZonePreview(); }).observe(picker,{childList:true});
 })();
 </script>
 
