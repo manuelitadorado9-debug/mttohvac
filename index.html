@@ -5117,11 +5117,9 @@ async function authPedirNuevaClave() {
                         <div class="flex items-center justify-end gap-1.5 flex-wrap">
                             <button onclick="openOrderHub('${escJs(o.id)}')" class="btn-teal text-xs py-1.5 px-3"><i class="fa-solid fa-folder-open"></i> Revisar</button>
                             <select id="hvac-report-type-${escJs(o.id)}" aria-label="Tipo de informe para ${esc(o.id)}" class="input-box text-xs" style="width:150px;min-width:130px;padding:6px 8px">
-                                <option value="REVISION">Revisión / Diagnóstico</option>
-                                <option value="PREVENTIVO">Mantenimiento preventivo</option>
-                                <option value="CORRECTIVO">Mantenimiento correctivo</option>
+                                ${(() => { const rt = billingRoutineType(o); return [['REVISION','Revisión / Diagnóstico'],['PREVENTIVO','Mantenimiento preventivo'],['CORRECTIVO','Mantenimiento correctivo']].map(([v,l]) => `<option value="${v}"${v === rt ? ' selected' : ''}>${l}</option>`).join(''); })()}
                             </select>
-                            <button onclick="hvacGenerateOrderReport('${escJs(o.id)}', this.parentElement.querySelector('select').value)" class="text-xs py-1.5 px-3 rounded-lg font-bold bg-indigo-600 hover:bg-indigo-700 text-white" title="Generar informe PDF"><i class="fa-solid fa-file-pdf"></i> Informe PDF</button>
+                            <button onclick="hvacGenerateOrderReport('${escJs(o.id)}', document.getElementById('hvac-report-type-${escJs(o.id)}').value)" class="text-xs py-1.5 px-3 rounded-lg font-bold bg-indigo-600 hover:bg-indigo-700 text-white" title="Generar informe PDF"><i class="fa-solid fa-file-pdf"></i> Informe PDF</button>
                         </div>
                     </td>
                 </tr>`);
@@ -11465,6 +11463,11 @@ async function attDelete(id) {
 
   // Exponer la función para botones onclick y para otros módulos del index.
   window.generateMaintenancePDF = generateMaintenancePDF;
+  window.generateRevisionPDF = (orderId, options) => generateMaintenancePDF(orderId, 'REVISION', options);
+  window.generatePreventivoPDF = (orderId, options) => generateMaintenancePDF(orderId, 'PREVENTIVO', options);
+  window.generateCorrectivoPDF = (orderId, options) => generateMaintenancePDF(orderId, 'CORRECTIVO', options);
+  window.hvacNormalizeReportType = value => normalizeRoutine(value);
+  window.hvacOrderReportType = order => getOrderType(order);
   window.generateMaintenancePDFPreview = (orderId, reportType) =>
     generateMaintenancePDF(orderId, reportType, { autoPrint: false, removeAfterPrint: false });
 })();
@@ -11472,17 +11475,47 @@ async function attDelete(id) {
 
 <!-- Informes PDF integrados en las acciones normales de cada orden -->
 <script>
-window.hvacGenerateOrderReport = async function(orderId, reportType) {
-  reportType = reportType || 'REVISION';
-  try {
-    if (typeof window.generateMaintenancePDF !== 'function') throw new Error('El generador de informes no está disponible. Recarga la página.');
-    await window.generateMaintenancePDF(orderId, reportType);
-  } catch (error) {
+(() => {
+  'use strict';
+  let busy = false;
+
+  function reportError(error) {
+    const msg = 'No se pudo generar el informe: ' + (error && error.message ? error.message : String(error));
     console.error('Error al generar informe HVAC:', error);
-    if (typeof showToast === 'function') showToast('No se pudo generar el informe: ' + (error && error.message ? error.message : String(error)), 'error');
-    else alert('No se pudo generar el informe: ' + (error && error.message ? error.message : String(error)));
+    if (typeof showToast === 'function') showToast(msg, 'error');
+    else alert(msg);
   }
-};
+
+  // Cada tipo de informe se enruta a su propio generador.
+  const ROUTES = {
+    REVISION: () => window.generateRevisionPDF,
+    PREVENTIVO: () => window.generatePreventivoPDF,
+    CORRECTIVO: () => window.generateCorrectivoPDF
+  };
+
+  window.hvacGenerateOrderReport = async function(orderId, reportType) {
+    if (busy) return;
+    busy = true;
+    try {
+      if (typeof window.generateMaintenancePDF !== 'function') {
+        throw new Error('El generador de informes no está disponible. Recarga la página.');
+      }
+      let typeKey = window.hvacNormalizeReportType(reportType);
+      if (!typeKey) {
+        const orders = (typeof workOrders !== 'undefined' && Array.isArray(workOrders)) ? workOrders : [];
+        const order = orders.find(o => String(o.id) === String(orderId));
+        typeKey = order ? window.hvacOrderReportType(order) : 'REVISION';
+      }
+      const generator = ROUTES[typeKey] && ROUTES[typeKey]();
+      if (typeof generator !== 'function') throw new Error('Tipo de informe no soportado: ' + typeKey);
+      await generator(orderId);
+    } catch (error) {
+      reportError(error);
+    } finally {
+      busy = false;
+    }
+  };
+})();
 </script>
 
 </body>
