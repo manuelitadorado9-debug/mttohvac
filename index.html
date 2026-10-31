@@ -11291,7 +11291,7 @@ async function attDelete(id) {
   /* ---------- Bloques comunes del diseño ---------- */
   const headHtml = order => `${imageTag(getHeaderImage(), COMPANY, 'hi')}<div class="ord"><b>ORDEN: ${esc(order?.id || '')}</b><span>Bogotá, D.C. Colombia</span></div>`;
   const footHtml = () => imageTag(getFooterImage(), 'Pie de página', 'fi');
-  const pageHtml = (order, inner) => `<section class="page">${headHtml(order)}${inner}${footHtml()}</section>`;
+  const pageHtml = (order, inner, cls = '') => `<section class="page${cls ? ' ' + cls : ''}">${headHtml(order)}${inner}${footHtml()}</section>`;
 
   const cell = (label, value, extra = '') => `<div${extra ? ` style="${extra}"` : ''}><small>${esc(label)}</small>${esc(first(value, 'No registrado'))}</div>`;
   const rowsHtml = list => list.map(([label, value, cls], i) =>
@@ -11343,8 +11343,7 @@ async function attDelete(id) {
     const job = {
       id: 'ph' + index, mode: photos.mode, before: photos.before, after: photos.after, all: photos.all,
       title: photoTitle, contTitle: photoTitle + ' (CONTINUACIÓN)',
-      unit: useBA ? 2 : (typeKey === 'REVISION' ? 3 : 2), cap: useBA ? 4 : 6,
-      cols: typeKey === 'REVISION' ? 3 : 2, height: typeKey === 'REVISION' ? '1.6in' : '1.5in',
+      cap: useBA ? 2 : 4,   // máximo 4 fotos por página: 2 columnas de 2 (en correctivo: ANTES y DESPUÉS, 2 filas)
       head: headHtml(order), foot: footHtml(),
       eqTitle: `<div class="eqt">${esc(equipmentTitle(item))}</div>`
     };
@@ -11364,21 +11363,24 @@ async function attDelete(id) {
       ${section('RESUMEN DE EQUIPOS INTERVENIDOS', `<table class="t"><tr><th>CÓDIGO</th><th>EQUIPO</th><th>TIPO</th><th>MODELO</th></tr>${eqRows || '<tr><td colspan="4">No hay equipos asociados a esta orden.</td></tr>'}</table>`)}`;
 
     if (typeKey === 'PREVENTIVO') {
+      // Labores ejecutadas agrupadas por TIPO de equipo (un solo tipo = una sola línea)
       const groups = new Map();
       let measured = 0;
       items.forEach(({ eq, exec }) => {
-        const label = `${first(eq.name, eq.type, 'Equipo')} (${first(eq.type, eq.systemType, 'HVAC')})`;
-        if (!groups.has(label)) groups.set(label, new Set());
-        getChecklist(exec, eq).filter(r => r.done).forEach(r => groups.get(label).add(r.name));
+        const label = String(first(eq.type, eq.systemType, eq.name, 'HVAC')).toUpperCase();
+        if (!groups.has(label)) groups.set(label, { count: 0, tasks: new Set() });
+        const g = groups.get(label);
+        g.count++;
+        getChecklist(exec, eq).filter(r => r.done).forEach(r => g.tasks.add(r.name));
         if (getParams(exec, eq).some(([, v]) => v !== '—')) measured++;
       });
-      const lis = [...groups.entries()].filter(([, set]) => set.size).map(([label, set]) =>
-        `<li><b>${esc(label)}:</b> ${esc([...set].join(', ').toLowerCase())}.</li>`);
+      const lis = [...groups.entries()].filter(([, g]) => g.tasks.size).map(([label, g]) =>
+        `<li><b>${esc(label)} (${g.count} equipo${g.count === 1 ? '' : 's'}):</b> ${esc([...g.tasks].join(', ').toLowerCase())}.</li>`);
       if (measured) lis.push(`<li><b>Mediciones:</b> parámetros técnicos registrados en ${measured} equipo(s).</li>`);
       if (!lis.length) lis.push('<li>No hay labores marcadas como realizadas en esta orden.</li>');
       inner += section('ACTIVIDADES REALIZADAS', `<ul>${lis.join('')}</ul>`);
     }
-    return pageHtml(order, inner);
+    return pageHtml(order, inner, 'cover');
   }
 
   function lines(value) {
@@ -11444,20 +11446,47 @@ async function attDelete(id) {
   /* ---------- Fotos: un grupo nunca se corta entre dos páginas ---------- */
   function photoCell(src, alt, height) {
     const img = imageTag(src, alt, 'ph-img');
-    return `<div class="ph${img ? ' has' : ''}" style="height:${height}">${img || 'SIN FOTO'}</div>`;
+    return `<div class="ph${img ? ' has' : ''}" style="height:${height}px">${img || 'SIN FOTO'}</div>`;
   }
 
-  function photoBlock(job, from, to, title) {
+  // count = fotos (modo cuadrícula) o filas de pares ANTES/DESPUÉS (modo 'ba')
+  function photoBlock(job, from, to, title, h) {
     let body;
     if (job.mode === 'ba') {
-      const column = (arr, label) => `<div><h4>${label}</h4><div class="p4">${
-        Array.from({ length: to - from }, (_, i) => photoCell(arr[from + i], `${label} ${from + i + 1}`, '1.35in')).join('')}</div></div>`;
+      const column = (arr, label) => `<div><h4>${label}</h4><div class="stack">${
+        Array.from({ length: to - from }, (_, i) => photoCell(arr[from + i], `${label} ${from + i + 1}`, h)).join('')}</div></div>`;
       body = `<div class="cols">${column(job.before, 'ANTES')}${column(job.after, 'DESPUÉS')}</div>`;
     } else {
-      const cells = job.all.slice(from, to).map((src, i) => photoCell(src, `Foto ${from + i + 1}`, job.height)).join('');
-      body = `<div class="p6" style="grid-template-columns:repeat(${job.cols},1fr)">${cells}</div>`;
+      const cells = job.all.slice(from, to).map((src, i) => photoCell(src, `Foto ${from + i + 1}`, h)).join('');
+      body = `<div class="p6" style="grid-template-columns:repeat(${to - from === 1 ? 1 : 2},1fr)">${cells}</div>`;
     }
     return `<h2>${esc(title)}</h2><div class="box fotos">${body}</div>`;
+  }
+
+  const PROBE_H = 8;          // altura mínima de prueba para medir el espacio libre
+  function setPhotoHeight(slot, h) { slot.querySelectorAll('.ph').forEach(el => { el.style.height = h + 'px'; }); }
+
+  /* Coloca el grupo de fotos usando TODO el espacio libre de la página (sin invadir
+     encabezado, pie ni otras secciones). Devuelve false si no cabe con la altura mínima. */
+  function fitPhotos(pageEl, slot, job, from, to, title, minH) {
+    const count = to - from;
+    const rows = job.mode === 'ba' ? count : Math.ceil(count / 2);
+    slot.innerHTML = photoBlock(job, from, to, title, PROBE_H);
+    if (pageEl.offsetHeight > PAGE_LIMIT_PX) return false;
+    const foot = pageEl.querySelector('.fi');
+    const bottom = slot.getBoundingClientRect().bottom;
+    const limit = foot ? foot.getBoundingClientRect().top : pageEl.getBoundingClientRect().bottom - 96;
+    const maxH = (job.mode !== 'ba' && count === 1) ? 420 : 300;
+    let h = Math.min(maxH, PROBE_H + Math.floor((limit - bottom - 6) / rows));
+    if (h < minH) return false;
+    setPhotoHeight(slot, h);
+    let guard = 0;
+    while (pageEl.offsetHeight > PAGE_LIMIT_PX && guard++ < 14) {
+      h -= 6;
+      if (h < minH) return false;
+      setPhotoHeight(slot, h);
+    }
+    return true;
   }
 
   function paginatePhotos(doc, jobs) {
@@ -11470,24 +11499,25 @@ async function attDelete(id) {
         slot.innerHTML = `<h2>${esc(job.title)}</h2><div class="box"><div class="txt" style="font-style:normal">Sin registro fotográfico para este equipo.</div></div>`;
         return;
       }
-      // Coloca en la página del equipo la mayor cantidad de fotos que quepa completa.
-      const counts = [];
-      for (let n = Math.ceil(total / job.unit) * job.unit; n >= job.unit; n -= job.unit) counts.push(Math.min(n, total));
+      // Página del equipo: la mayor cantidad de fotos (máx. 4) que quepa, lo más grandes posible.
       let placed = 0;
-      for (const n of counts) {
-        slot.innerHTML = photoBlock(job, 0, n, job.title);
-        if (pageEl.offsetHeight <= PAGE_LIMIT_PX) { placed = n; break; }
+      for (let n = Math.min(total, job.cap); n >= 1; n--) {
+        if (fitPhotos(pageEl, slot, job, 0, n, job.title, n >= 3 ? 150 : 110)) { placed = n; break; }
       }
       if (!placed) slot.innerHTML = '';
-      // El resto pasa completo a páginas nuevas con encabezado y pie repetidos.
+      // Resto: páginas nuevas con encabezado y pie repetidos, fotos al máximo tamaño.
       let anchor = pageEl;
       for (let from = placed; from < total; from += job.cap) {
         const to = Math.min(from + job.cap, total);
         const sec = doc.createElement('section');
         sec.className = 'page';
-        sec.innerHTML = `${job.head}${job.eqTitle}${photoBlock(job, from, to, job.contTitle)}${job.foot}`;
+        sec.innerHTML = `${job.head}${job.eqTitle}<div data-slot="cont"></div>${job.foot}`;
         anchor.after(sec);
         anchor = sec;
+        const contSlot = sec.querySelector('[data-slot]');
+        if (!fitPhotos(sec, contSlot, job, from, to, job.contTitle, 60)) {
+          contSlot.innerHTML = photoBlock(job, from, to, job.contTitle, 150);
+        }
       }
     });
   }
@@ -11541,7 +11571,76 @@ h2{break-after:avoid;page-break-after:avoid}
 .ph-img{width:100%;height:100%;object-fit:contain;display:block}
 .sigimg{max-width:100%;max-height:100px;object-fit:contain;display:block}
 .txt{overflow-wrap:anywhere}
-.box>.row:last-child{border-bottom:0}`;
+.box>.row:last-child{border-bottom:0}
+.stack{display:grid;gap:8px}
+.page.cover .title{padding:14px 20px;margin-bottom:10px}
+.page.cover .title p{font-size:10.5px;line-height:1.45}
+.page.cover .kpis{margin-bottom:10px}
+.page.cover .k{padding:10px}
+.page.cover .k b{font-size:21px}
+.page.cover .k span{font-size:8px}
+.page.cover .box{margin-bottom:10px}
+.page.cover .g div{padding:6px 12px}
+.page.cover td{padding:5px 10px;font-size:10.5px}
+.page.cover ul{padding:8px 12px 8px 26px;font-size:10.5px;line-height:1.5}`;
+
+  /* ---------- Descarga directa del PDF (sin diálogo de impresión) ---------- */
+  function loadScriptOnce(src, isReady) {
+    if (isReady()) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => (isReady() ? resolve() : reject(new Error('Librería no disponible: ' + src)));
+      el.onerror = () => reject(new Error('No se pudo cargar ' + src));
+      document.head.appendChild(el);
+    });
+  }
+
+  async function ensurePdfLibs() {
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => typeof window.html2canvas === 'function');
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
+  }
+
+  function notify(message, type) {
+    try { if (typeof showToast === 'function') showToast(message, type || 'success'); } catch (e) { /* sin aviso */ }
+  }
+
+  async function exportFramePdf(frame, fileName) {
+    await ensurePdfLibs();
+    const doc = frame.contentDocument;
+    const pages = [...doc.querySelectorAll('.page')];
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF('portrait', 'mm', 'letter');
+    const W = pdf.internal.pageSize.getWidth();
+    const H = pdf.internal.pageSize.getHeight();
+    const scale = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) ? 1.5 : 2;
+    let firstSheet = true;
+    for (let i = 0; i < pages.length; i++) {
+      const canvas = await window.html2canvas(pages[i], {
+        scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 900
+      });
+      const sheetPx = Math.round(canvas.width * H / W);                       // alto de una hoja carta en px del canvas
+      const sheets = Math.max(1, Math.ceil((canvas.height - 4 * scale) / sheetPx));
+      for (let k = 0; k < sheets; k++) {
+        const sy = k * sheetPx;
+        const sh = Math.min(sheetPx, canvas.height - sy);
+        let source = canvas;
+        if (sheets > 1) {                                                     // página más larga que una hoja: se parte en hojas
+          source = document.createElement('canvas');
+          source.width = canvas.width; source.height = sh;
+          const ctx = source.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, source.width, source.height);
+          ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
+        }
+        if (!firstSheet) pdf.addPage('letter', 'portrait');
+        firstSheet = false;
+        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', 0, 0, W, Math.min(H, sh * W / canvas.width), undefined, 'FAST');
+      }
+      canvas.width = 0; canvas.height = 0;                                    // libera memoria en el celular
+      if (pages.length > 3 && i % 3 === 2) notify(`Generando PDF… ${i + 1} de ${pages.length} páginas`, 'info');
+    }
+    pdf.save(fileName);
+  }
 
   async function waitForImages(doc, timeoutMs = 12000) {
     const images = [...doc.images];
@@ -11597,11 +11696,28 @@ h2{break-after:avoid;page-break-after:avoid}
       paginatePhotos(doc, built.jobs);
       await waitForImages(doc);
       if (options.autoPrint !== false) {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
-        if (options.removeAfterPrint !== false) {
-          frame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
-          setTimeout(cleanup, 120000);   // algunos navegadores móviles no emiten afterprint
+        const printDialog = () => {
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+          if (options.removeAfterPrint !== false) {
+            frame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
+            setTimeout(cleanup, 120000);   // algunos navegadores móviles no emiten afterprint
+          }
+        };
+        if (options.print === true) {
+          printDialog();                   // modo antiguo: abrir el diálogo de impresión
+        } else {
+          const fileName = `Informe_${typeKey.charAt(0) + typeKey.slice(1).toLowerCase()}_${String(order.id).replace(/[^\w.-]+/g, '_')}${Array.isArray(options.only) && options.only.length ? '_' + String(options.only[0]).replace(/[^\w.-]+/g, '_') : ''}.pdf`;
+          notify('Generando PDF…', 'info');
+          try {
+            await exportFramePdf(frame, fileName);
+            notify('Informe descargado: ' + fileName);
+            cleanup();
+          } catch (exportError) {
+            console.error('No se pudo exportar el PDF directo:', exportError);
+            notify('No se pudo descargar directo; se abre la impresión como alternativa.', 'error');
+            printDialog();
+          }
         }
       }
       return { orderId: order.id, reportType: typeKey, iframe: frame, close: cleanup };
