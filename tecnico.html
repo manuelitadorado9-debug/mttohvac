@@ -383,9 +383,20 @@ html[data-theme="light"] .pill-ok{color:#047857}
 }
 @media (prefers-reduced-motion: reduce) { #tech-sync-modal .tech-sync-card { animation: none; } }
 
+
+/* ===== Orden de servicio: rutina, lecturas y fotos Antes/Después ===== */
+.tipo-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tipo-seg label{position:relative;display:block}
+.tipo-seg input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.tipo-seg span{display:flex;align-items:center;justify-content:center;min-height:46px;padding:0 4px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--muted);font-size:12px;font-weight:800;text-align:center}
+.tipo-seg input:checked + span{background:#10b981;border-color:#10b981;color:#fff}
+.tipo-seg input:focus-visible + span{outline:2px solid #3b82f6;outline-offset:2px}
+.ph-group + .ph-group{margin-top:16px}
+.ph-group-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px;font-weight:800;color:var(--text)}
+
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="common.js?v=7"></script>
+    <script src="common.js?v=8"></script>
 
 <style id="ui-transitions-v1">
 /* ============================================================
@@ -446,6 +457,29 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
 @media (prefers-reduced-motion:reduce){
   .mx-back,.mx-back > .mx-card{transition-duration:.01ms!important;transition-delay:0s!important}
 }
+</style>
+<style id="auth-dialog-css">
+/* Diálogo de contraseña propio (reemplaza window.prompt: oculta los caracteres y funciona en móvil) */
+.hv-dlg-backdrop{--hv-acc:#059669;position:fixed;inset:0;z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(7,12,25,.66);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.hv-dlg-card{width:100%;max-width:400px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:22px 20px;border-radius:20px;background:#fff;color:#0f172a;box-shadow:0 24px 60px rgba(2,6,23,.4)}
+.hv-dlg-card h3{margin:0;font-size:17px;font-weight:800;line-height:1.25}
+.hv-dlg-card p{margin:0;font-size:13px;line-height:1.5;color:#475569}
+.hv-dlg-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155}
+.hv-dlg-field input{height:46px;padding:0 14px;border:1.5px solid #cbd5e1;border-radius:12px;font:inherit;font-size:16px;font-weight:500;color:#0f172a;background:#f8fafc;outline:none}
+.hv-dlg-field input:focus-visible{border-color:var(--hv-acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--hv-acc) 28%,transparent)}
+.hv-dlg-err{padding:10px 12px;border-radius:10px;background:#fff1f2;border:1px solid #fecdd3;color:#be123c;font-size:12.5px;font-weight:600}
+.hv-dlg-err[hidden]{display:none}
+.hv-dlg-actions{display:flex;gap:10px;margin-top:4px}
+.hv-dlg-btn{flex:1;min-height:46px;border:0;border-radius:12px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:var(--hv-acc);color:#fff}
+.hv-dlg-btn.ghost{background:#e2e8f0;color:#334155}
+.hv-dlg-btn:focus-visible{outline:3px solid color-mix(in srgb,var(--hv-acc) 45%,transparent);outline-offset:2px}
+[data-theme="dark"] .hv-dlg-card{background:#0f172a;color:#e2e8f0;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+[data-theme="dark"] .hv-dlg-card p{color:#94a3b8}
+[data-theme="dark"] .hv-dlg-field{color:#cbd5e1}
+[data-theme="dark"] .hv-dlg-field input{background:#1e293b;border-color:#334155;color:#f1f5f9}
+[data-theme="dark"] .hv-dlg-err{background:rgba(190,18,60,.18);border-color:rgba(251,113,133,.35);color:#fda4af}
+[data-theme="dark"] .hv-dlg-btn.ghost{background:#1e293b;color:#cbd5e1}
+@media (prefers-reduced-motion:no-preference){.hv-dlg-card{animation:hvDlgIn .2s ease-out}@keyframes hvDlgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}
 </style>
 </head>
 <body>
@@ -641,12 +675,29 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             <form class="sheet-form" onsubmit="event.preventDefault(); saveEquipmentExecution();" novalidate>
                 <div class="sheet-body">
                     <div id="exec-equipment-identity-card" style="margin-bottom:16px;"></div>
+                    <!-- Orden de servicio: tipo de rutina -->
                     <div>
+                        <div class="section-t" style="margin-bottom:10px">Tipo de rutina</div>
+                        <div class="tipo-seg" role="radiogroup" aria-label="Tipo de rutina">
+                            <label><input type="radio" name="exec-tipo-rutina" value="PREVENTIVO" checked><span>Preventivo</span></label>
+                            <label><input type="radio" name="exec-tipo-rutina" value="CORRECTIVO"><span>Correctivo</span></label>
+                            <label><input type="radio" name="exec-tipo-rutina" value="REVISION"><span>Revisión</span></label>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="section-t" style="margin-bottom:10px">Lecturas obligatorias</div>
+                        <div class="params">
+                            <label class="field"><span>Voltaje (V) *</span><input type="text" id="exec-f-voltaje" class="input exec-lectura" inputmode="decimal" placeholder="Ej. 220" autocomplete="off" enterkeyhint="next"></label>
+                            <label class="field"><span>Amperaje (A) *</span><input type="text" id="exec-f-amperaje" class="input exec-lectura" inputmode="decimal" placeholder="Ej. 4.5" autocomplete="off" enterkeyhint="next"></label>
+                            <label class="field" style="grid-column:1/-1"><span>Presión / Otros *</span><input type="text" id="exec-f-presion" class="input exec-lectura" placeholder="Ej. Succión 68 PSI, descarga 250 PSI" autocomplete="off" enterkeyhint="done"></label>
+                        </div>
+                    </div>
+                    <div id="exec-params-section">
                         <div class="section-t" style="margin-bottom:10px">Parámetros técnicos <span id="exec-params-count">0/0</span></div>
                         <div id="exec-params-container" class="params"></div>
                     </div>
 
-                    <div>
+                    <div id="exec-checklist-section">
                         <div class="section-t" style="margin-bottom:10px">Check-list de mantenimiento <span id="exec-chk-count">0/0</span></div>
                         <div id="exec-checklist-container" class="checks"></div>
                     </div>
@@ -665,20 +716,40 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         </div>
                     </div>
 
-                    <label class="field">
-                        <span>Observaciones técnicas</span>
-                        <textarea id="exec-f-obs" rows="3" class="input" placeholder="Estado del equipo, recomendaciones o partes a reemplazar…"></textarea>
-                    </label>
+                    <div>
+                        <label class="field">
+                            <span>Notas del técnico</span>
+                            <textarea id="exec-f-obs" rows="3" class="input" placeholder="Escribe rápido: qué encontraste y qué hiciste…"></textarea>
+                        </label>
+                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">🤖 Optimizar con IA</button>
+                        <label class="field" style="margin-top:10px">
+                            <span>Notas analíticas (puedes editarlas)</span>
+                            <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el texto formal generado por la IA…"></textarea>
+                        </label>
+                    </div>
 
                     <div>
-                        <div class="section-t" style="margin-bottom:10px">Fotos de evidencia <span id="exec-photos-count">0/5</span></div>
-                        <div class="photo-actions">
-                            <label for="exec-f-photos-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
-                            <label for="exec-f-photos" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
+                        <div class="section-t" style="margin-bottom:10px">Fotos de evidencia <span id="ph-total">0/8</span></div>
+                        <div class="ph-group">
+                            <div class="ph-group-h"><span>Antes</span></div>
+                            <div class="photo-actions">
+                                <label for="ph-antes-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
+                                <label for="ph-antes-gal" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
+                            </div>
+                            <input type="file" id="ph-antes-cam" data-ph-cat="antes" accept="image/*" capture="environment" class="sr-only">
+                            <input type="file" id="ph-antes-gal" data-ph-cat="antes" accept="image/*" multiple class="sr-only">
+                            <div id="ph-antes-grid" class="photo-grid" style="margin-top:10px"></div>
                         </div>
-                        <input type="file" id="exec-f-photos-cam" accept="image/*" capture="environment" class="sr-only">
-                        <input type="file" id="exec-f-photos" multiple accept="image/*" class="sr-only">
-                        <div id="exec-photos-preview" class="photo-grid" style="margin-top:12px"></div>
+                        <div class="ph-group">
+                            <div class="ph-group-h"><span>Después</span></div>
+                            <div class="photo-actions">
+                                <label for="ph-despues-cam" class="btn btn-ghost"><i class="fa-solid fa-camera"></i> Tomar foto</label>
+                                <label for="ph-despues-gal" class="btn btn-ghost"><i class="fa-solid fa-images"></i> Galería</label>
+                            </div>
+                            <input type="file" id="ph-despues-cam" data-ph-cat="despues" accept="image/*" capture="environment" class="sr-only">
+                            <input type="file" id="ph-despues-gal" data-ph-cat="despues" accept="image/*" multiple class="sr-only">
+                            <div id="ph-despues-grid" class="photo-grid" style="margin-top:10px"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="sheet-foot">
@@ -701,6 +772,19 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         const SUPABASE_URL = "https://jlcbjotyhdwupzsxehnl.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsY2Jqb3R5aGR3dXB6c3hlaG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0NTY2MjMsImV4cCI6MjEwNzAzMjYyM30.JVQtxJP_4XuBnTsDZ9onMSkFZT-P8U3ntWnLQUqdPl8";
 
+        // UUID obligatorio para claves primarias y relaciones offline. No usar consecutivos como PK.
+        function hvacUUID() {
+            if (!globalThis.crypto || typeof globalThis.crypto.randomUUID !== 'function') {
+                throw new Error('Este navegador no soporta crypto.randomUUID(); abre la aplicación en HTTPS o localhost.');
+            }
+            return globalThis.crypto.randomUUID();
+        }
+        function hvacStorageError(err, context) {
+            const quota = err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+            console.error('[Almacenamiento] ' + context, err);
+            try { if (typeof showToast === 'function') showToast(quota ? 'El almacenamiento local está lleno. Libera espacio o sincroniza los cambios antes de continuar.' : 'No se pudo guardar en el almacenamiento local. Tus cambios podrían quedar pendientes.', 'error'); } catch (_) {}
+            return err;
+        }
         // ===== Almacenamiento local con respaldo IndexedDB (sin pérdida al agotar localStorage) =====
         // La app del técnico solo sincroniza: agenda (correctivos que reporta) y formularios (solo lectura).
         const CLOUD_STATE_KEYS = ['HVAC_AGENDA_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP'];
@@ -731,10 +815,9 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
         function hvacIDBWriteOnce(id, value) {
             return hvacOpenDb().then(db => new Promise((resolve, reject) => {
-                const tx = db.transaction('kv', 'readwrite');
-                tx.objectStore('kv').put({ id: String(id), value: String(value), updatedAt: Date.now() });
+                let tx; try { tx = db.transaction('kv', 'readwrite'); const req = tx.objectStore('kv').put({ id: String(id), value: String(value), updatedAt: Date.now() }); req.onerror = () => { try { hvacStorageError(req.error, 'Escritura IndexedDB'); } catch (_) {} }; } catch (e) { reject(e); return; }
                 tx.oncomplete = () => resolve(true);
-                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo respaldar en IndexedDB'));
+                tx.onerror = tx.onabort = () => { const e = tx.error || new Error('No se pudo respaldar en IndexedDB'); hvacStorageError(e, 'Transacción IndexedDB'); reject(e); };
             }));
         }
         function hvacEvictRedundantIndexedBackups(protectedId) {
@@ -792,10 +875,9 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
         function hvacIDBDelete(id) {
             return hvacOpenDb().then(db => new Promise((resolve, reject) => {
-                const tx = db.transaction('kv', 'readwrite');
-                tx.objectStore('kv').delete(String(id));
+                let tx; try { tx = db.transaction('kv', 'readwrite'); const req = tx.objectStore('kv').delete(String(id)); req.onerror = () => { try { hvacStorageError(req.error, 'Borrado IndexedDB'); } catch (_) {} }; } catch (e) { reject(e); return; }
                 tx.oncomplete = () => resolve(true);
-                tx.onerror = tx.onabort = () => reject(tx.error || new Error('No se pudo borrar de IndexedDB'));
+                tx.onerror = tx.onabort = () => { const e = tx.error || new Error('No se pudo borrar de IndexedDB'); hvacStorageError(e, 'Transacción IndexedDB'); reject(e); };
             }));
         }
         async function hvacRestoreIndexedStorage() {
@@ -850,7 +932,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         if (!idbOnly) orig.call(this, k, value);
                     } catch (e) {
                         if (isHVAC) {
-                            console.warn('[Storage] Cuota de localStorage; el dato queda en memoria mientras se recupera espacio:', k, e);
+                            hvacStorageError(e, 'Cuota de localStorage para ' + k); console.warn('[Storage] El dato queda en memoria mientras se recupera espacio:', k, e);
                             if (hvacIsQuotaError(e)) {
                                 hvacStorageWriteTail = hvacStorageWriteTail
                                     .then(() => hvacCleanupOldLocalBackups(key))
@@ -1010,24 +1092,66 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         function authAcierto() { authIntentos.n = 0; }
 
         // ---- pide una contraseña nueva (3 intentos) ----
-        function authPedirNuevaClave() {
-            for (let i = 0; i < 3; i++) {
-                const a = window.prompt('Por seguridad crea una nueva contraseña (mínimo ' + AUTH_MIN_LEN + ' caracteres):');
-                if (a === null) return null;
-                const nueva = a.trim();
-                if (nueva.length < AUTH_MIN_LEN || nueva === '123') { showToast('La contraseña debe tener al menos ' + AUTH_MIN_LEN + ' caracteres.', 'error'); continue; }
-                const b = window.prompt('Repite la nueva contraseña:');
-                if (b === null) return null;
-                if (b.trim() === nueva) return nueva;
-                showToast('Las contraseñas no coinciden.', 'error');
-            }
-            return null;
+                // ---- Diálogo propio para pedir datos sensibles (reemplaza window.prompt) ----
+        // cfg: { title, intro, fields:[{label,type,autocomplete,placeholder}], submitText, cancelable, validate(valores)->texto de error o '' }
+        // Devuelve una promesa con el arreglo de valores, o null si se cancela.
+        function hvAuthDialog(cfg) {
+            return new Promise(resolve => {
+                const previo = document.activeElement;
+                const wrap = document.createElement('div');
+                wrap.className = 'hv-dlg-backdrop';
+                wrap.setAttribute('role', 'dialog');
+                wrap.setAttribute('aria-modal', 'true');
+                wrap.setAttribute('aria-labelledby', 'hv-dlg-title');
+                const campos = cfg.fields.map((f, i) =>
+                    '<label class="hv-dlg-field" for="hv-dlg-f' + i + '"><span>' + esc(f.label) + '</span>' +
+                    '<input id="hv-dlg-f' + i + '" type="' + (f.type || 'text') + '" autocomplete="' + (f.autocomplete || 'off') + '"' +
+                    ' autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="' + esc(f.placeholder || '') + '"></label>').join('');
+                wrap.innerHTML = '<form class="hv-dlg-card" novalidate>' +
+                    '<h3 id="hv-dlg-title">' + esc(cfg.title) + '</h3>' + (cfg.intro ? '<p>' + esc(cfg.intro) + '</p>' : '') + campos +
+                    '<div class="hv-dlg-err" role="alert" hidden></div>' +
+                    '<div class="hv-dlg-actions">' + (cfg.cancelable === false ? '' : '<button type="button" class="hv-dlg-btn ghost" data-cancel>Cancelar</button>') +
+                    '<button type="submit" class="hv-dlg-btn">' + esc(cfg.submitText || 'Continuar') + '</button></div></form>';
+                const form = wrap.firstChild, err = form.querySelector('.hv-dlg-err');
+                const cerrar = valor => { document.removeEventListener('keydown', onKey, true); wrap.remove(); try { previo && previo.focus && previo.focus(); } catch (_) {} resolve(valor); };
+                const onKey = e => { if (e.key === 'Escape' && cfg.cancelable !== false) { e.preventDefault(); cerrar(null); } };
+                form.addEventListener('submit', e => {
+                    e.preventDefault();
+                    const vals = Array.from(form.querySelectorAll('input')).map(i => i.value);
+                    const msg = cfg.validate ? cfg.validate(vals) : '';
+                    if (msg) { err.textContent = msg; err.hidden = false; return; }
+                    cerrar(vals);
+                });
+                const btnCancel = form.querySelector('[data-cancel]');
+                if (btnCancel) btnCancel.addEventListener('click', () => cerrar(null));
+                document.addEventListener('keydown', onKey, true);
+                document.body.appendChild(wrap);
+                const primero = form.querySelector('input'); if (primero) primero.focus();
+            });
+        }
+
+async function authPedirNuevaClave() {
+            const r = await hvAuthDialog({
+                title: 'Crea una nueva contraseña',
+                intro: 'Por seguridad debes reemplazar tu contraseña actual. Mínimo ' + AUTH_MIN_LEN + ' caracteres.',
+                fields: [
+                    { label: 'Nueva contraseña', type: 'password', autocomplete: 'new-password' },
+                    { label: 'Repite la nueva contraseña', type: 'password', autocomplete: 'new-password' }
+                ],
+                submitText: 'Guardar contraseña',
+                validate: v => {
+                    const a = v[0].trim(), b = v[1].trim();
+                    if (a.length < AUTH_MIN_LEN || a === '123') return 'La contraseña debe tener al menos ' + AUTH_MIN_LEN + ' caracteres.';
+                    return a === b ? '' : 'Las contraseñas no coinciden.';
+                }
+            });
+            return r ? r[0].trim() : null;
         }
 
         // Verifica el login. Si la cuenta aún tiene contraseña en texto plano, la convierte a hash
         // (y exige cambiarla si es débil, p. ej. "123").
         // Devuelve { ok, changed }: si changed=true hay que guardar el usuario (authGuardarUsuario).
-        function authRevisarClave(user, passwordInput) {
+        async function authRevisarClave(user, passwordInput) {
             if (!user) return { ok: false, changed: false };
             let changed = false;
             if (user.passwordHash) {
@@ -1041,7 +1165,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 return { ok: false, changed: false };
             }
             if (user.debeCambiarClave) {
-                const nueva = authPedirNuevaClave();
+                const nueva = await authPedirNuevaClave();
                 if (!nueva) return { ok: false, changed };
                 user.passwordHash = hashPassword(nueva);
                 delete user.debeCambiarClave;
@@ -1986,7 +2110,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             }
                         }
                         if (result) sent++;
-                        else if ([401, 403, 429, 500, 502, 503, 504, 'network', 'timeout'].includes(cloudCtl.lastStatus)) break;
+                        else { console.warn('[Sync] Operación no confirmada; se conserva para reintento:', entry.table, entry.id, cloudCtl.lastStatus); }
                     } catch (e) {
                         console.warn('[Offline] Se conserva operación pendiente para reintentar:', entry.table, entry.id, e);
                     }
@@ -2356,7 +2480,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         }
 
 
-        function executeLogin() {
+        async function executeLogin() {
             const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
             const passwordInput = document.getElementById('login-password').value.trim();
             const errorBox = document.getElementById('login-error-msg');
@@ -2370,7 +2494,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             }
 
             const matchedUser = systemUsers.find(u => u.username && u.username.toLowerCase() === usernameInput);
-            const check = authRevisarClave(matchedUser, passwordInput);
+            const check = await authRevisarClave(matchedUser, passwordInput);
             if (check.changed) authGuardarUsuario(matchedUser, 'HVAC_TECH_USERS_BACKUP');
             if (!check.ok) { authFallo(); return mostrarError('Usuario o contraseña incorrectos.'); }
             authAcierto();
@@ -3113,6 +3237,220 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             };
             document.querySelectorAll('.modal-backdrop').forEach(el => new MutationObserver(lock).observe(el, { attributes: true, attributeFilter: ['class'] }));
             lock();
+
+        // ===== Extras de orden de servicio integrados con el estado existente =====
+        const ordenFotos = { antes: [], despues: [] };
+        const ordenMaxFotos = 8;
+        const ordenLecturas = [['voltaje', 'Voltaje'], ['amperaje', 'Amperaje'], ['presionOtros', 'Presión / Otros']];
+        let ordenFirmaVacia = true;
+        let ordenFirmaRedimensionar = null;
+
+        function ordenTipoActual() {
+            const radio = document.querySelector('input[name="exec-tipo-rutina"]:checked');
+            return radio ? radio.value : 'PREVENTIVO';
+        }
+        function ordenAplicarTipo() {
+            const preventivo = ordenTipoActual() === 'PREVENTIVO';
+            const p = document.getElementById('exec-params-section');
+            const c = document.getElementById('exec-checklist-section');
+            if (p) p.classList.toggle('hidden', !preventivo);
+            if (c) c.classList.toggle('hidden', !preventivo);
+            if (typeof updateExecProgress === 'function') updateExecProgress();
+        }
+        document.querySelectorAll('input[name="exec-tipo-rutina"]').forEach(r => r.addEventListener('change', ordenAplicarTipo));
+
+        async function ordenOptimizarNotas() {
+            const btn = document.getElementById('exec-btn-ia');
+            const obs = document.getElementById('exec-f-obs');
+            const out = document.getElementById('exec-f-notas-analiticas');
+            const notas = obs.value.trim();
+            if (!notas) return showToast('Escribe primero las notas del técnico.', 'error');
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Optimizando…';
+            try {
+                const r = await fetch('/api/ia/procesar-notas', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
+                });
+                const data = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(data.error || 'No se pudo procesar el texto.');
+                out.value = data.notas_analiticas || '';
+                if (data.advertencia_numeros && data.advertencia_numeros.length)
+                    showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
+                else showToast('Notas analíticas generadas. Revísalas antes de guardar.');
+            } catch (e) {
+                showToast(navigator.onLine ? e.message : 'Sin conexión: la IA necesita internet.', 'error');
+            } finally { btn.disabled = false; btn.innerHTML = original; }
+        }
+        document.getElementById('exec-btn-ia').addEventListener('click', ordenOptimizarNotas);
+
+        function ordenRenderFotos() {
+            ['antes', 'despues'].forEach(cat => {
+                const cont = document.getElementById('ph-' + cat + '-grid');
+                if (!cont) return;
+                cont.innerHTML = ordenFotos[cat].length ? ordenFotos[cat].map((src, i) => `
+                    <div class="ph">
+                        <button type="button" class="ph-img" onclick="verFotoOrden('${cat}',${i})" aria-label="Ampliar foto ${i + 1}"><img src="${esc(src)}" alt="Foto ${cat} ${i + 1}"></button>
+                        <button type="button" class="ph-del" onclick="quitarFotoOrden('${cat}',${i})" aria-label="Eliminar foto ${i + 1}"><i class="fa-solid fa-trash"></i></button>
+                        <span class="ph-n">${i + 1}</span>
+                    </div>`).join('') : '<div class="ph-empty"><i class="fa-solid fa-camera"></i> Sin fotos</div>';
+            });
+            const total = ordenFotos.antes.length + ordenFotos.despues.length;
+            const label = document.getElementById('ph-total');
+            if (label) label.textContent = total + '/' + ordenMaxFotos;
+            tempPhotosList = [...ordenFotos.antes, ...ordenFotos.despues];
+            const oldCount = document.getElementById('exec-photos-count');
+            if (oldCount) oldCount.textContent = total + '/' + ordenMaxFotos;
+        }
+        async function ordenAgregarFotos(cat, files) {
+            appBusyStart('Comprimiendo fotos…');
+            try {
+                for (const f of files) {
+                    if (ordenFotos.antes.length + ordenFotos.despues.length >= ordenMaxFotos) {
+                        showToast('Máximo 8 fotos entre Antes y Después.', 'error'); break;
+                    }
+                    try {
+                        ordenFotos[cat].push(await r2keep(await compressImage(f, 800, 0.65), 'reportes'));
+                        ordenRenderFotos();
+                    } catch (err) { console.warn('[Fotos] No se agregó la imagen:', err); showToast('No se pudo agregar una foto.', 'error'); }
+                }
+            } finally { appBusyEnd(); }
+        }
+        document.querySelectorAll('[data-ph-cat]').forEach(inp => inp.addEventListener('change', async e => {
+            const files = Array.from(e.target.files || []); e.target.value = '';
+            if (files.length) await ordenAgregarFotos(inp.dataset.phCat, files);
+        }));
+        window.quitarFotoOrden = (cat, i) => { if (ordenFotos[cat]) ordenFotos[cat].splice(i, 1); ordenRenderFotos(); };
+        window.verFotoOrden = (cat, i) => {
+            const img = document.getElementById('receipt-viewer-img');
+            const box = document.getElementById('receipt-viewer-modal-backdrop');
+            if (!img || !box || !ordenFotos[cat] || !ordenFotos[cat][i]) return;
+            img.src = ordenFotos[cat][i]; box.classList.remove('hidden');
+        };
+        // El flujo original invoca este nombre al abrir y al cambiar el correctivo.
+        renderExecPhotosPreview = ordenRenderFotos;
+
+        const ordenOpenOriginal = openEquipmentExecutionModal;
+        openEquipmentExecutionModal = function(orderId, eqId) {
+            ordenOpenOriginal.apply(this, arguments);
+            const order = workOrders.find(o => o.id === orderId);
+            const eq = techFindEq(eqId) || { code: eqId };
+            const exec = (order && order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
+            const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${exec.tipoRutina || 'PREVENTIVO'}"]`);
+            if (radio) radio.checked = true;
+            document.getElementById('exec-f-voltaje').value = exec.voltaje || '';
+            document.getElementById('exec-f-amperaje').value = exec.amperaje || '';
+            document.getElementById('exec-f-presion').value = exec.presionOtros || '';
+            document.getElementById('exec-f-notas-analiticas').value = exec.notasAnaliticas || '';
+            ordenFotos.antes = [...(exec.fotosAntes || exec.photos || [])];
+            ordenFotos.despues = [...(exec.fotosDespues || [])];
+            ordenRenderFotos();
+            ordenAplicarTipo();
+        };
+
+        const ordenPersistOriginal = persistOrderLocallyAndSync;
+        persistOrderLocallyAndSync = function(order) {
+            const eq = techFindEq(currentExecEqId);
+            const key = currentExecEqId;
+            const e = order && order.executions && (order.executions[key] || (eq && order.executions[eq.code]));
+            if (e) {
+                e.tipoRutina = ordenTipoActual();
+                e.voltaje = document.getElementById('exec-f-voltaje').value.trim();
+                e.amperaje = document.getElementById('exec-f-amperaje').value.trim();
+                e.presionOtros = document.getElementById('exec-f-presion').value.trim();
+                e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
+                e.fotosAntes = [...ordenFotos.antes];
+                e.fotosDespues = [...ordenFotos.despues];
+                e.photos = [...ordenFotos.antes, ...ordenFotos.despues];
+                const missing = ordenLecturas.filter(([k]) => !String(e[k] || '').trim()).map(([, label]) => label);
+                if (e.tipoRutina !== 'PREVENTIVO') {
+                    e.formConfigSnapshot = { ...(e.formConfigSnapshot || {}), params: '', checklist: '' };
+                    e.paramsValues = {};
+                    e.checklist = {};
+                }
+                e.partial = missing.length > 0 || (e.tipoRutina === 'PREVENTIVO' && e.partial);
+                order.tipoRutina = e.tipoRutina;
+            }
+            return ordenPersistOriginal.apply(this, arguments);
+        };
+
+
+        // En Correctivo/Revisión los campos dinámicos no son obligatorios; se neutralizan
+        // solo durante el guardado original y luego se restauran en el formulario.
+        const ordenSaveOriginal = saveEquipmentExecution;
+        saveEquipmentExecution = async function() {
+            if (ordenTipoActual() === 'PREVENTIVO') return ordenSaveOriginal.apply(this, arguments);
+            const inputs = Array.from(document.querySelectorAll('.exec-param-input'));
+            const checks = Array.from(document.querySelectorAll('.exec-chk-input'));
+            const oldValues = inputs.map(el => el.value);
+            const oldChecks = checks.map(el => el.checked);
+            inputs.forEach(el => { if (!String(el.value || '').trim()) el.value = 'N/A'; });
+            checks.forEach(el => { el.checked = true; });
+            try { return await ordenSaveOriginal.apply(this, arguments); }
+            finally {
+                inputs.forEach((el, i) => { el.value = oldValues[i]; });
+                checks.forEach((el, i) => { el.checked = oldChecks[i]; });
+            }
+        };
+
+        const ordenMetricsOriginal = getTechChecklistMetrics;
+        getTechChecklistMetrics = function(eq, exec) {
+            if (!exec || !exec.tipoRutina) return ordenMetricsOriginal.apply(this, arguments);
+            const isPreventivo = exec.tipoRutina === 'PREVENTIVO';
+            const normalized = isPreventivo ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
+            const m = ordenMetricsOriginal(eq, normalized);
+            const missing = ordenLecturas.filter(([k]) => !String(exec[k] || '').trim()).map(([, label]) => label);
+            const total = m.total + ordenLecturas.length;
+            const done = m.done + ordenLecturas.length - missing.length;
+            return { done, total, missing: [...m.missing, ...missing], percent: total ? Math.round(done / total * 100) : 0 };
+        };
+        const ordenStatusOriginal = getEquipmentExecutionStatus;
+        getEquipmentExecutionStatus = function(eq, eqId, exec) {
+            if (!exec || !exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
+            const normalized = exec.tipoRutina === 'PREVENTIVO' ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
+            const base = ordenStatusOriginal(eq, eqId, normalized);
+            const missing = ordenLecturas.some(([k]) => !String(exec[k] || '').trim());
+            if (base === 'pending' && ordenLecturas.every(([k]) => !String(exec[k] || '').trim())) return 'pending';
+            return !missing && (exec.tipoRutina !== 'PREVENTIVO' || base === 'done') ? 'done' : 'progress';
+        };
+
+        // Firma de cliente: conserva el modal existente y adapta el canvas a pantallas HiDPI y Pointer Events.
+        const ordenInitFirmaOriginal = initSignatureCanvas;
+        initSignatureCanvas = function() {
+            sigCanvas = document.getElementById('global-sig-canvas');
+            if (!sigCanvas) return;
+            sigCtx = sigCanvas.getContext('2d');
+            const ajustar = () => {
+                const rect = sigCanvas.getBoundingClientRect();
+                if (!rect.width || !rect.height) return;
+                const dpr = window.devicePixelRatio || 1;
+                sigCanvas.width = Math.round(rect.width * dpr);
+                sigCanvas.height = Math.round(rect.height * dpr);
+                sigCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                sigCtx.strokeStyle = '#0f172a'; sigCtx.lineWidth = 2.5; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round';
+                ordenFirmaVacia = true;
+            };
+            ajustar();
+            ordenFirmaRedimensionar = ajustar;
+            let drawing = false;
+            const pos = e => { const r = sigCanvas.getBoundingClientRect(); return { x: e.clientX-r.left, y: e.clientY-r.top }; };
+            sigCanvas.onpointerdown = e => { e.preventDefault(); sigCanvas.setPointerCapture(e.pointerId); drawing = true; ordenFirmaVacia = false; const p=pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x,p.y); sigCtx.lineTo(p.x+.1,p.y+.1); sigCtx.stroke(); };
+            sigCanvas.onpointermove = e => { if (!drawing) return; const p=pos(e); sigCtx.lineTo(p.x,p.y); sigCtx.stroke(); };
+            sigCanvas.onpointerup = sigCanvas.onpointercancel = () => { drawing = false; };
+        };
+        clearSignatureCanvas = function() {
+            if (sigCtx && sigCanvas) {
+                sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+                ordenFirmaVacia = true;
+            }
+        };
+        const ordenSubmitFirmaOriginal = submitGlobalSignature;
+        submitGlobalSignature = async function() {
+            if (ordenFirmaVacia) { showToast('El cliente debe firmar antes de confirmar.', 'error'); return; }
+            return ordenSubmitFirmaOriginal.apply(this, arguments);
+        };
+        ordenRenderFotos();
         })();
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -3248,8 +3586,8 @@ const mxMonthLabel = () => new Date().toLocaleDateString('es-CO', { month: 'long
 const mxNorm = s => String(s == null ? '' : s).trim().toUpperCase();
 
 /* ---------------- PWA ---------------- */
-HVAC.pwa.register();
-HVAC.letterhead.load().then(r => { AFC_HEADER_IMG = r.header; AFC_FOOTER_IMG = r.footer; });
+try { if (window.HVAC && HVAC.pwa && HVAC.pwa.register) HVAC.pwa.register(); } catch (e) { console.warn("PWA:", e); }
+Promise.resolve(window.HVAC && HVAC.letterhead ? HVAC.letterhead.load() : { header: '', footer: '' }).then(r => { AFC_HEADER_IMG = r.header; AFC_FOOTER_IMG = r.footer; }).catch(e => console.warn('Membrete PDF:', e));
 
 /* ---------------- 1) QR + validación de rutina del mes ---------------- */
 function mxParseQr(raw) {
