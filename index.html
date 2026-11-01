@@ -931,9 +931,10 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
 .modal-card>.flex.border-b:first-child{position:static!important;flex-wrap:nowrap!important;margin:0 0 1rem!important;padding:0 0 .85rem!important;background:transparent!important}
 .modal-card>.flex.border-b:first-child>h3{min-width:0;flex:1 1 auto;overflow-wrap:anywhere}
 .modal-card>.flex.border-b:first-child>.modal-close{flex:0 0 auto}
-.modal-backdrop,.mx-modal,.qrm-back,#sidebar-overlay{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
-.modal-backdrop{background:rgba(8,14,32,.42)!important}
-html[data-theme="dark"] .modal-backdrop{background:rgba(2,5,14,.55)!important}
+.modal-backdrop,.mx-modal,.qrm-back{backdrop-filter:blur(10px)!important;-webkit-backdrop-filter:blur(10px)!important}
+.modal-backdrop{background:rgba(8,14,32,.5)!important}
+html[data-theme="dark"] .modal-backdrop{background:rgba(2,5,14,.58)!important}
+.plan-tab{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;min-height:3rem;padding:.5rem .75rem;line-height:1.2;text-align:center}
 
 /* ===== Modo noche: variantes con opacidad que no tenían regla (cajas claras sobre fondo oscuro) ===== */
 html[data-theme="dark"] [class*="bg-teal-50/"]{background-color:rgba(20,184,166,.11)}
@@ -1327,10 +1328,9 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
 
         <!-- VIEW: PLANNING -->
         <section id="view-admin-planning" class="hidden space-y-4">
-            <div id="plan-tabs" class="grid grid-cols-2 sm:grid-flow-col sm:auto-cols-max gap-2">
-                <button type="button" id="plan-tab-main" onclick="planTab('main')" class="btn-teal text-xs">Proyección mensual</button>
-                <button type="button" id="plan-tab-prog" onclick="planTab('prog')" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl inline-flex items-center justify-center gap-2"><i class="fa-solid fa-people-group"></i> Programación de Personal</button>
-                <button type="button" onclick="progExportExcel()" class="col-span-2 sm:col-span-1 px-4 py-2.5 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl inline-flex items-center justify-center gap-2"><i class="fa-solid fa-file-excel"></i> Exportar a Excel</button>
+            <div id="plan-tabs" class="grid grid-cols-2 gap-2">
+                <button type="button" id="plan-tab-main" onclick="planTab('main')" class="plan-tab btn-teal text-xs">Proyección mensual</button>
+                <button type="button" id="plan-tab-prog" onclick="planTab('prog')" class="plan-tab text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl"><i class="fa-solid fa-people-group"></i> Programación de Personal</button>
             </div>
             <div id="prog-panel" class="hidden space-y-4">
                 <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
@@ -1902,6 +1902,16 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <button onclick="closeBatchProjectionModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="space-y-4">
+                <div class="bg-emerald-50/70 border border-emerald-100 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h4 class="font-black text-xs text-emerald-900">Exportar planificación actual</h4>
+                        <p class="text-[11px] text-emerald-700 mt-0.5">Descarga en Excel la planificación de personal registrada (fecha, técnico, cliente y labor).</p>
+                    </div>
+                    <button type="button" onclick="progExportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 transition shadow-sm">
+                        <i class="fa-solid fa-file-excel"></i> Exportar a Excel
+                    </button>
+                </div>
+
                 <div class="bg-teal-50/70 border border-teal-100 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-3">
                     <div>
                         <h4 class="font-black text-xs text-teal-900">Paso 1: Descargar Plantilla Modelo</h4>
@@ -9904,8 +9914,8 @@ function planTab(t) {
     const sec = progEl('view-admin-planning');
     [...sec.children].forEach(c => { if (c.id === 'plan-tabs' || c.id === 'prog-modal') return; if (c.id === 'prog-panel') return c.classList.toggle('hidden', t !== 'prog');
         if (t === 'prog') { if (!c.classList.contains('hidden')) { c.classList.add('hidden'); c.dataset.ph = '1'; } } else if (c.dataset.ph) { c.classList.remove('hidden'); delete c.dataset.ph; } });
-    progEl('plan-tab-main').className = t === 'main' ? 'btn-teal text-xs' : 'px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl inline-flex items-center justify-center gap-2';
-    progEl('plan-tab-prog').className = t === 'prog' ? 'btn-teal text-xs' : 'px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl inline-flex items-center justify-center gap-2';
+    progEl('plan-tab-main').className = t === 'main' ? 'plan-tab btn-teal text-xs' : 'plan-tab text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl';
+    progEl('plan-tab-prog').className = t === 'prog' ? 'plan-tab btn-teal text-xs' : 'plan-tab text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl';
     if (t === 'prog') { if (!progEl('prog-date').value) progEl('prog-date').value = progISO(new Date()); progLoad(); }
 }
 function progRange() {
@@ -11621,14 +11631,13 @@ h2{break-after:avoid;page-break-after:avoid}
 .txt{overflow-wrap:anywhere}
 .box>.row:last-child{border-bottom:0}
 /* Encabezado pegado arriba y pie pegado abajo, de borde a borde */
-.page{padding:0 .5in!important}
+.page{padding:3mm .5in!important}
 .hi{display:block;width:calc(100% + 1in)!important;max-width:none!important;margin:0 -.5in 4px!important;padding:0!important;border:0!important}
 .fi{display:block;width:calc(100% + 1in)!important;max-width:none!important;margin:auto -.5in 0!important;padding:0!important}
-/* Texto centrado verticalmente en filas y celdas (compensa el desplazamiento del render a imagen) */
+/* Texto centrado verticalmente en filas y celdas */
 td,th,.row>div{vertical-align:middle!important;line-height:1.25!important}
-td{padding-top:3px!important;padding-bottom:7px!important}
-th{padding-top:4px!important;padding-bottom:7px!important}
-.row>div{padding-top:6px!important;padding-bottom:10px!important}
+td,th{padding-top:5px!important;padding-bottom:5px!important}
+.row>div{padding-top:8px!important;padding-bottom:8px!important}
 .stack{display:grid;gap:8px}
 .page.cover .title{padding:14px 20px;margin-bottom:10px}
 .page.cover .title p{font-size:10.5px;line-height:1.45}
@@ -11653,8 +11662,37 @@ th{padding-top:4px!important;padding-bottom:7px!important}
     });
   }
 
-  async function ensurePdfLibs() {
+  /* Dibuja una página con el propio motor del navegador (SVG + foreignObject). No necesita librerías
+     externas y respeta exactamente el diseño. Si falla, se usa html2canvas como respaldo. */
+  async function renderPageNative(pageEl, scale) {
+    const rect = pageEl.getBoundingClientRect();
+    const w = Math.ceil(rect.width), h = Math.ceil(rect.height);
+    const xhtml = new XMLSerializer().serializeToString(pageEl);
+    const css = REPORT_CSS.replace(/(^|\})(\s*)body\{/g, '$1$2.pdfroot{').replace(/@page\{[^}]*\}/g, '').replace(/@media print\{[^]*?\}\}/g, '');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><foreignObject x="0" y="0" width="${w}" height="${h}"><div xmlns="http://www.w3.org/1999/xhtml" class="pdfroot" style="width:${w}px;margin:0;padding:0;background:#fff"><style><![CDATA[${css}\n.page{margin:0!important;box-shadow:none!important}]]></style>${xhtml}</div></foreignObject></svg>`;
+    // data: URL (no blob:), porque con blob: el navegador marca el lienzo como bloqueado
+    const bytes = new TextEncoder().encode(svg);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    const url = 'data:image/svg+xml;base64,' + btoa(binary);
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('El navegador no pudo dibujar la página')); img.src = url; });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      ctx.getImageData(0, 0, 1, 1);                       // lanza error si el lienzo quedó bloqueado (imagen externa)
+      return canvas;
+    } finally { /* sin recursos que liberar */ }
+  }
+
+  async function ensureHtml2canvas() {
     await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => typeof window.html2canvas === 'function');
+  }
+
+  async function ensurePdfLibs() {
     await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
   }
 
@@ -11673,17 +11711,32 @@ th{padding-top:4px!important;padding-bottom:7px!important}
     const scale = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) ? 1.5 : 2;
     let firstSheet = true;
     for (let i = 0; i < pages.length; i++) {
-      const canvas = await window.html2canvas(pages[i], {
-        scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 900,
+      const base = {
+        useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 900,
         onclone: clonedDoc => { clonedDoc.querySelectorAll('.page').forEach((el, idx) => { if (idx !== i) el.remove(); }); }
-      });
+      };
+      let canvas = null, lastError = null;
+      try { canvas = await renderPageNative(pages[i], scale); }                 // 1) método propio del navegador
+      catch (err) { lastError = err; console.warn('Render nativo falló en la página', i + 1, err); canvas = null; }
+      if (!canvas) {                                                            // 2) respaldo: html2canvas con reintentos
+        try { await ensureHtml2canvas(); } catch (err) { lastError = err; }
+        if (typeof window.html2canvas === 'function') {
+          const attempts = [{ scale }, { scale: 1 }, { scale: 1, foreignObjectRendering: true }];
+          for (const attempt of attempts) {
+            try { canvas = await window.html2canvas(pages[i], Object.assign({}, base, attempt)); if (canvas && canvas.width && canvas.height) break; }
+            catch (err) { lastError = err; console.warn('Reintentando captura de página', i + 1, err); }
+            canvas = null;
+          }
+        }
+      }
+      if (!canvas) throw new Error(`Página ${i + 1}: ${lastError && lastError.message ? lastError.message : 'no se pudo capturar'}`);
       const sheetPx = Math.round(canvas.width * H / W);                       // alto de una hoja carta en px del canvas
       const tooTallBy = canvas.height / sheetPx;
       const shrinkToOne = tooTallBy > 1 && tooTallBy <= 1.08;                 // sobra poco: se reduce un poco para que quepa en una hoja
       const sheets = shrinkToOne ? 1 : Math.max(1, Math.ceil((canvas.height - 40 * scale) / sheetPx));
       for (let k = 0; k < sheets; k++) {
         const sy = k * sheetPx;
-        const sh = Math.min(sheetPx, canvas.height - sy);
+        const sh = sheets === 1 ? canvas.height : Math.min(sheetPx, canvas.height - sy);
         let source = canvas;
         if (sheets > 1) {                                                     // página más larga que una hoja: se parte en hojas
           source = document.createElement('canvas');
@@ -11695,8 +11748,8 @@ th{padding-top:4px!important;padding-bottom:7px!important}
         if (!firstSheet) pdf.addPage('letter', 'portrait');
         firstSheet = false;
         const imgH = sh * W / canvas.width;
-        const k = imgH > H && sheets === 1 ? H / imgH : 1;                    // reducción proporcional (solo si sobra poco)
-        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', (W - W * k) / 2, 0, W * k, imgH * k, undefined, 'FAST');
+        const fit = imgH > H && sheets === 1 ? H / imgH : 1;                  // reducción proporcional (solo si sobra poco)
+        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', (W - W * fit) / 2, 0, W * fit, imgH * fit, undefined, 'FAST');
       }
       canvas.width = 0; canvas.height = 0;                                    // libera memoria en el celular
       if (pages.length > 3 && i % 3 === 2) notify(`Generando PDF… ${i + 1} de ${pages.length} páginas`, 'info');
@@ -11704,6 +11757,26 @@ th{padding-top:4px!important;padding-bottom:7px!important}
     const blob = pdf.output('blob');
     if (!blob || !blob.size) throw new Error('El PDF quedó vacío.');
     presentPdf(blob, fileName);
+  }
+
+  function showPdfError(message, onRetry, onPrint, onClose) {
+    const old = document.getElementById('pdf-ready-card');
+    if (old) old.remove();
+    const card = document.createElement('div');
+    card.id = 'pdf-ready-card';
+    card.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:30000;max-width:460px;margin:0 auto;background:#0f1a33;color:#e8edf7;border:1px solid rgba(251,113,133,.5);border-radius:18px;padding:14px 16px;box-shadow:0 24px 60px -12px rgba(0,0,0,.65);font-family:inherit';
+    const btn = 'display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;font-size:12px;font-weight:800;border:0;cursor:pointer;';
+    card.innerHTML = `<div style="font-weight:900;font-size:13px;color:#fb7185">No se pudo generar el PDF</div>
+      <div style="font-size:11px;opacity:.85;margin:4px 0 12px;word-break:break-word">${esc(message)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" id="pdf-err-retry" style="${btn}background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff;flex:1 1 auto">Reintentar</button>
+        <button type="button" id="pdf-err-print" style="${btn}background:#1b2744;color:#e8edf7">Usar impresión</button>
+        <button type="button" id="pdf-err-close" style="${btn}background:transparent;color:#9fb0d1">Cerrar</button>
+      </div>`;
+    document.body.appendChild(card);
+    card.querySelector('#pdf-err-retry').onclick = () => { card.remove(); onRetry(); };
+    card.querySelector('#pdf-err-print').onclick = () => { card.remove(); onPrint(); };
+    card.querySelector('#pdf-err-close').onclick = () => { card.remove(); onClose(); };
   }
 
   /* Chrome móvil bloquea descargas automáticas repetidas (sin toque del usuario). Por eso, además
@@ -11819,8 +11892,9 @@ th{padding-top:4px!important;padding-bottom:7px!important}
             cleanup();
           } catch (exportError) {
             console.error('No se pudo exportar el PDF directo:', exportError);
-            notify('No se pudo descargar directo; se abre la impresión como alternativa.', 'error');
-            printDialog();
+            showPdfError(String(exportError && exportError.message ? exportError.message : exportError),
+              () => { cleanup(); generateMaintenancePDF(orderId, reportType, options).catch(e => notify(String(e.message || e), 'error')); },
+              printDialog, cleanup);
           }
         }
       }
