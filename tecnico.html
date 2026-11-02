@@ -385,6 +385,21 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 
 /* ===== Orden de servicio: rutina, lecturas y fotos Antes/Después ===== */
+.obs-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mic-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:#10b981;font-size:18px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;transition:background .15s,color .15s}
+.mic-btn.on{background:#ef4444;color:#fff;border-color:#ef4444;animation:micPulse 1.4s infinite}
+@keyframes micPulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.55)}70%{box-shadow:0 0 0 12px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+.dictado-estado{display:flex;align-items:center;gap:10px;margin-top:8px;padding:10px 12px;border-radius:12px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);font-size:13px;font-weight:800}
+.dictado-estado.hidden{display:none}
+.ondas{display:inline-flex;align-items:center;gap:3px;height:22px}
+.ondas i{display:block;width:4px;height:6px;border-radius:2px;background:#ef4444;animation:onda 1s ease-in-out infinite}
+.ondas i:nth-child(2){animation-delay:.12s}.ondas i:nth-child(3){animation-delay:.24s}.ondas i:nth-child(4){animation-delay:.36s}.ondas i:nth-child(5){animation-delay:.48s}
+@keyframes onda{0%,100%{height:5px}50%{height:22px}}
+.dictado-estado .parar{margin-left:auto;border:0;border-radius:10px;padding:8px 12px;font-weight:800;font-size:12px;background:#ef4444;color:#fff;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.ondas i,.mic-btn.on{animation:none}}
+.tipo-fijo{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border-radius:999px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--surface);border:1px solid var(--line)}
+.tipo-fijo b{color:var(--text,#1a2433);font-weight:900}
+.tipo-fijo i{color:#10b981;font-size:11px}
 .tipo-seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .tipo-seg label{position:relative;display:block}
 .tipo-seg input{position:absolute;inset:0;opacity:0;cursor:pointer}
@@ -675,13 +690,13 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
             <form class="sheet-form" onsubmit="event.preventDefault(); saveEquipmentExecution();" novalidate>
                 <div class="sheet-body">
                     <div id="exec-equipment-identity-card" style="margin-bottom:16px;"></div>
-                    <!-- Orden de servicio: tipo de rutina -->
+                    <!-- Tipo de rutina: lo define el administrador al planificar; el técnico solo lo ve -->
                     <div>
-                        <div class="section-t" style="margin-bottom:10px">Tipo de rutina</div>
-                        <div class="tipo-seg" role="radiogroup" aria-label="Tipo de rutina">
-                            <label><input type="radio" name="exec-tipo-rutina" value="PREVENTIVO" checked><span>Preventivo</span></label>
-                            <label><input type="radio" name="exec-tipo-rutina" value="CORRECTIVO"><span>Correctivo</span></label>
-                            <label><input type="radio" name="exec-tipo-rutina" value="REVISION"><span>Revisión</span></label>
+                        <div id="exec-tipo-fijo" class="tipo-fijo" role="status"><i class="fa-solid fa-lock" aria-hidden="true"></i><span>Tipo de rutina: <b id="exec-tipo-fijo-nombre">Preventivo</b></span></div>
+                        <div style="display:none" aria-hidden="true">
+                            <input type="radio" name="exec-tipo-rutina" value="PREVENTIVO" checked>
+                            <input type="radio" name="exec-tipo-rutina" value="CORRECTIVO">
+                            <input type="radio" name="exec-tipo-rutina" value="REVISION">
                         </div>
                     </div>
                     <div>
@@ -717,14 +732,26 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                     </div>
 
                     <div>
-                        <label class="field">
-                            <span>Notas del técnico</span>
-                            <textarea id="exec-f-obs" rows="3" class="input" placeholder="Escribe rápido: qué encontraste y qué hiciste…"></textarea>
-                        </label>
-                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">🤖 Optimizar con IA</button>
+                        <div class="field">
+                            <div class="obs-head">
+                                <span>Notas del técnico</span>
+                                <button type="button" id="exec-btn-mic" class="mic-btn" aria-pressed="false" aria-label="Dictar por voz"><i class="fa-solid fa-microphone"></i></button>
+                            </div>
+                            <textarea id="exec-f-obs" rows="4" class="input" placeholder="Escribe rápido o toca el micrófono y cuenta qué encontraste y qué hiciste…"></textarea>
+                        </div>
+                        <div id="dictado-estado" class="dictado-estado hidden" role="status" aria-live="polite">
+                            <span class="ondas" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                            <span id="dictado-texto">Escuchando…</span>
+                            <button type="button" id="dictado-parar" class="parar">Detener</button>
+                        </div>
+                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar con IA</button>
                         <label class="field" style="margin-top:10px">
-                            <span>Notas analíticas (puedes editarlas)</span>
-                            <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el texto formal generado por la IA…"></textarea>
+                            <span>Observaciones técnicas (puedes editarlas)</span>
+                            <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el párrafo técnico redactado a partir de tus notas…"></textarea>
+                        </label>
+                        <label class="field" style="margin-top:10px">
+                            <span>Conclusiones (puedes editarlas)</span>
+                            <textarea id="exec-f-conclusion" rows="4" class="input" placeholder="Aquí aparecerá el estado general del equipo y si requiere correctivo…"></textarea>
                         </label>
                     </div>
 
@@ -2982,6 +3009,7 @@ async function authPedirNuevaClave() {
         }
 
         function closeEquipmentExecutionModal() {
+            try { if (typeof DICT !== 'undefined' && DICT.active) dictStop(); } catch (e) { /* sin dictado activo */ }
             document.getElementById('exec-equipment-modal-backdrop').classList.add('hidden');
             currentExecEqId = null;
         }
@@ -3282,31 +3310,208 @@ async function authPedirNuevaClave() {
         }
         document.querySelectorAll('input[name="exec-tipo-rutina"]').forEach(r => r.addEventListener('change', ordenAplicarTipo));
 
-        async function ordenOptimizarNotas() {
-            const btn = document.getElementById('exec-btn-ia');
-            const obs = document.getElementById('exec-f-obs');
-            const out = document.getElementById('exec-f-notas-analiticas');
+        /* =====================================================================
+           DICTADO POR VOZ + PROCESAMIENTO DE NOTAS (100 % gratis)
+           - Voz a texto: API nativa de Chrome (SpeechRecognition), sin costo ni claves.
+           - Redacción: función /api/ia/procesar-notas (Gemini, capa gratuita). Si falla o
+             no hay internet, se usa un procesador local básico que NO necesita IA ni claves.
+           ===================================================================== */
+        const DICT = { rec: null, active: false, base: '', finals: [], interim: '', timer: null, finishing: false };
+        const DICT_SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const dEl = id => document.getElementById(id);
+        const dNorm = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+        function dictUI(on) {
+            const btn = dEl('exec-btn-mic'), box = dEl('dictado-estado');
+            btn.classList.toggle('on', on);
+            btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            btn.setAttribute('aria-label', on ? 'Detener dictado' : 'Dictar por voz');
+            btn.innerHTML = on ? '<i class="fa-solid fa-stop"></i>' : '<i class="fa-solid fa-microphone"></i>';
+            box.classList.toggle('hidden', !on);
+        }
+        function dictWrite() {
+            const obs = dEl('exec-f-obs');
+            const parts = DICT.finals.slice();
+            if (DICT.interim) {
+                const last = parts[parts.length - 1];
+                if (last && DICT.interim.toLowerCase().startsWith(last.toLowerCase())) parts[parts.length - 1] = DICT.interim;
+                else parts.push(DICT.interim);
+            }
+            const spoken = parts.join(' ').replace(/\s+/g, ' ').trim();
+            obs.value = [DICT.base, spoken].filter(Boolean).join(' ');
+            obs.scrollTop = obs.scrollHeight;
+        }
+        function dictPushFinal(t) {                       // Chrome en Android a veces repite frases acumuladas
+            const last = DICT.finals[DICT.finals.length - 1];
+            if (last && t.toLowerCase().startsWith(last.toLowerCase())) DICT.finals[DICT.finals.length - 1] = t;
+            else if (!last || last.toLowerCase() !== t.toLowerCase()) DICT.finals.push(t);
+        }
+        function dictLaunch() {
+            const rec = new DICT_SR();
+            rec.lang = 'es-CO'; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+            rec.onresult = e => {
+                let interim = '';
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    const r = e.results[i], t = (r[0] && r[0].transcript || '').trim();
+                    if (!t) continue;
+                    if (r.isFinal) dictPushFinal(t); else interim = t;
+                }
+                DICT.interim = interim;
+                dictWrite();
+            };
+            rec.onerror = e => {
+                const err = e && e.error;
+                if (err === 'no-speech' || err === 'aborted') return;           // onend reinicia si sigue activo
+                DICT.active = false;
+                if (err === 'not-allowed' || err === 'service-not-allowed') showToast('Permite el micrófono: toca el candado de la barra de Chrome, Permisos, Micrófono.', 'error');
+                else if (err === 'network') showToast('Sin internet: el dictado de Chrome necesita conexión.', 'error');
+                else if (err === 'audio-capture') showToast('No se detecta ningún micrófono.', 'error');
+                else showToast('No se pudo dictar (' + err + ').', 'error');
+            };
+            rec.onend = () => {
+                if (DICT.interim) { dictPushFinal(DICT.interim); DICT.interim = ''; }
+                if (DICT.active) setTimeout(() => { if (DICT.active) dictLaunch(); }, 200);   // Chrome corta tras unos segundos de silencio
+                else dictFinish();
+            };
+            DICT.rec = rec;
+            try { rec.start(); } catch (err) { console.warn('[Dictado] start()', err); }
+        }
+        function dictStart() {
+            if (!DICT_SR) return showToast('Este navegador no permite dictado por voz. Usa Google Chrome.', 'error');
+            if (!navigator.onLine) return showToast('Sin internet: el dictado de Chrome necesita conexión.', 'error');
+            DICT.base = dEl('exec-f-obs').value.trim(); DICT.finals = []; DICT.interim = ''; DICT.active = true; DICT.finishing = false;
+            dictUI(true);
+            clearTimeout(DICT.timer); DICT.timer = setTimeout(dictStop, 180000);           // tope de 3 minutos
+            dictLaunch();
+        }
+        function dictStop() {
+            if (!DICT.active && !DICT.rec) return;
+            DICT.active = false; clearTimeout(DICT.timer);
+            try { DICT.rec && DICT.rec.stop(); } catch (e) { /* ya detenido */ }
+            setTimeout(dictFinish, 1200);                                                  // por si onend no se dispara
+        }
+        function dictFinish() {
+            if (DICT.finishing) return;
+            DICT.finishing = true; DICT.rec = null;
+            dictWrite(); dictUI(false);
+            if (dEl('exec-f-obs').value.trim().length >= 15) ordenOptimizarNotas({ auto: true });
+        }
+        dEl('exec-btn-mic').addEventListener('click', () => (DICT.active ? dictStop() : dictStart()));
+        dEl('dictado-parar').addEventListener('click', dictStop);
+        if (!DICT_SR) dEl('exec-btn-mic').style.display = 'none';
+        document.addEventListener('visibilitychange', () => { if (document.hidden && DICT.active) dictStop(); });
+        ['exec-f-notas-analiticas', 'exec-f-conclusion'].forEach(id => dEl(id).addEventListener('input', e => { e.target.dataset.edited = '1'; }));
+
+        /* ---- Procesador local (sin IA, sin claves): estructura el texto y detecta lecturas ---- */
+        function dictLocalProcess(raw, tipo) {
+            const original = String(raw || '').replace(/\s+/g, ' ').trim();
+            const n = dNorm(original).replace(/(\d),(\d)/g, '$1.$2').replace(/(\d)\s*punto\s*(\d)/g, '$1.$2');
+            let voltaje = '', amperaje = '', m;
+            m = n.match(/(\d{2,3}(?:\.\d+)?)\s*(?:v\b|volt)/) || n.match(/volt\w*\s*(?:de|es|en|a|:)?\s*(\d{2,3}(?:\.\d+)?)/);
+            if (m) voltaje = m[1];
+            m = n.match(/(\d{1,3}(?:\.\d+)?)\s*amp/) || n.match(/amper\w*\s*(?:de|es|en|a|:)?\s*(\d{1,3}(?:\.\d+)?)/);
+            if (m) amperaje = m[1];
+            const pres = []; const re = /(succion|descarga|presion(?:\s+de)?(?:\s+(?:alta|baja))?)\D{0,15}?(\d{1,4}(?:\.\d+)?)\s*(psi|bar|kpa|libras)?/g; let pm;
+            while ((pm = re.exec(n)) && pres.length < 3) {
+                const label = pm[1].startsWith('succion') ? 'Succión' : pm[1].startsWith('descarga') ? 'Descarga' : 'Presión';
+                const unit = pm[3] ? pm[3].toUpperCase().replace('LIBRAS', 'PSI') : 'PSI';
+                pres.push(label + ' ' + pm[2] + ' ' + unit);
+            }
+            const presion = pres.join(', ');
+
+            let t = original
+                .replace(/\b(e+h+m*|m+m+)\b[,.]?/gi, ' ')
+                .replace(/\b(o sea|digamos|como que|la verdad|pues)\b,?/gi, ' ')
+                .replace(/\b(yo )?creo que\b/gi, 'se considera que')
+                .replace(/\b(vimos|vi|observé|observamos) que\b/gi, 'se evidenció que')
+                .replace(/\b(encontré|encontramos|encontró)\b/gi, 'se encontró')
+                .replace(/\bluego de\b/gi, 'después de')
+                .replace(/\b([\p{L}]+(?:\s+[\p{L}]+)?)\s+\1\b/giu, '$1')               // repeticiones al dictar ("la polea la polea")
+                .replace(/\s+/g, ' ').trim();
+            let sentences = t.split(/(?<=[.!?])\s+|\s*;\s*|\s+(?:luego|despu[eé]s|entonces|posteriormente|finalmente|adem[aá]s)(?!\s+de\b)\s+/i)
+                .flatMap(x => { const k = x.length > 170 ? x.slice(50).search(/\s+(?:porque|ya que|medimos|se midi[oó]|la succi[oó]n|la descarga)\s+/i) : -1; return k >= 0 ? [x.slice(0, 50 + k), x.slice(50 + k)] : [x]; })
+                .map(x => x.replace(/^(y|que|pues|bueno)\s+/i, '').replace(/^porque\s+/i, 'Lo anterior se debe a que ').replace(/[,\s]+$/, '').trim())
+                .filter(x => x.length > 3)
+                .map(x => x.charAt(0).toUpperCase() + x.slice(1) + (/[.!?]$/.test(x) ? '' : '.'));
+            if (!sentences.length) sentences = [original.charAt(0).toUpperCase() + original.slice(1) + '.'];
+            const intros = { REVISION: 'Durante la revisión técnica del equipo se registró lo siguiente.', PREVENTIVO: 'Durante el mantenimiento preventivo del equipo se registró lo siguiente.', CORRECTIVO: 'Durante la intervención correctiva del equipo se registró lo siguiente.' };
+            const paras = [];
+            for (let i = 0; i < sentences.length; i += 3) paras.push(sentences.slice(i, i + 3).join(' '));
+            paras[0] = (intros[tipo] || intros.REVISION) + ' ' + paras[0];
+            const lect = [voltaje && 'voltaje de ' + voltaje + ' V', amperaje && 'amperaje de ' + amperaje + ' A', presion && 'presión: ' + presion].filter(Boolean);
+            if (lect.length) paras.push('Lecturas registradas: ' + lect.join('; ') + '.');
+
+            const falla = /(cambiar|cambio|reemplaz|dano|falla|averi|fuga|ruido|vibra|roto|rota|quemad|no enciende|apagado|no funciona|no arranca|golpe|desgast|afectad|requiere|necesita|debe)/;
+            const bien = /(funciona|funcionando|operativo|normal|buen estado|sin novedad|sin problema|correcto|ok\b)/;
+            const bad = sentences.find(x => /(cambiar|cambio|reemplaz|dano|falla|averi|fuga|ruido|quemad|no enciende|no arranca)/.test(dNorm(x))) || sentences.find(x => falla.test(dNorm(x)));
+            let conclusion, requiere = false, descCorr = '';
+            if (bad) {
+                requiere = true; descCorr = bad;
+                conclusion = 'Estado general: el equipo presenta novedades que afectan su correcto funcionamiento, descritas en las observaciones técnicas. Se recomienda programar la intervención correctiva correspondiente antes de mantenerlo en servicio continuo.';
+            } else if (bien.test(n)) {
+                conclusion = 'Estado general: el equipo se encuentra operativo y no se reportan novedades que requieran correctivo. Se recomienda mantener el plan de mantenimiento programado.';
+            } else {
+                conclusion = 'Estado general: no se reportaron fallas que requieran correctivo inmediato en el relato del técnico. Se recomienda verificar el estado final del equipo antes de cerrar la orden.';
+            }
+            return { notas_analiticas: paras.join('\n\n'), conclusion, voltaje, amperaje, presion, requiere_correctivo: requiere, descripcion_correctivo: descCorr, advertencia_numeros: [], fuente: 'local' };
+        }
+
+        function dictApply(data) {
+            const out = dEl('exec-f-notas-analiticas'), con = dEl('exec-f-conclusion');
+            out.value = data.notas_analiticas || ''; out.dataset.edited = '';
+            con.value = data.conclusion || ''; con.dataset.edited = '';
+            const fillNum = (id, v) => { const el = dEl(id); const val = String(v || '').replace(',', '.').trim(); if (el && !el.value.trim() && /^\d{1,4}(\.\d+)?$/.test(val)) el.value = val; };
+            fillNum('exec-f-voltaje', data.voltaje); fillNum('exec-f-amperaje', data.amperaje);
+            const pr = dEl('exec-f-presion'), pv = String(data.presion || '').trim();
+            if (pr && !pr.value.trim() && pv && pv.length <= 80) pr.value = pv;
+            let extra = '';
+            if (data.requiere_correctivo === true) {
+                const chk = dEl('exec-chk-correctivo');
+                if (chk && !chk.checked) { chk.checked = true; toggleCorrectiveSection(); }
+                const d = dEl('exec-corrective-desc');
+                if (d && !d.value.trim() && data.descripcion_correctivo) d.value = String(data.descripcion_correctivo).slice(0, 600);
+                extra = ' Marqué “¿Requiere correctivo?”: verifícalo.';
+            }
+            if (typeof updateExecProgress === 'function') updateExecProgress();
+            return extra;
+        }
+
+        async function ordenOptimizarNotas(opts) {
+            const auto = !!(opts && opts.auto);
+            const btn = dEl('exec-btn-ia'), obs = dEl('exec-f-obs');
+            const out = dEl('exec-f-notas-analiticas'), con = dEl('exec-f-conclusion');
             const notas = obs.value.trim();
-            if (!notas) return showToast('Escribe primero las notas del técnico.', 'error');
+            if (!notas) { if (!auto) showToast('Escribe o dicta primero las notas del técnico.', 'error'); return; }
+            const editado = (out.dataset.edited === '1' && out.value.trim()) || (con.dataset.edited === '1' && con.value.trim());
+            if (editado) {
+                if (auto) return showToast('Dictado listo. Toca “Procesar con IA” para actualizar tus textos editados.');
+                if (!confirm('Ya editaste las observaciones o las conclusiones. ¿Reemplazarlas con el nuevo resultado?')) return;
+            }
             const original = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Optimizando…';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…';
+            let data = null;
             try {
+                if (!navigator.onLine) throw new Error('offline');
                 const r = await fetch('/api/ia/procesar-notas', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
                 });
-                const data = await r.json().catch(() => ({}));
-                if (!r.ok) throw new Error(data.error || 'No se pudo procesar el texto.');
-                out.value = data.notas_analiticas || '';
-                if (data.advertencia_numeros && data.advertencia_numeros.length)
-                    showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
-                else showToast('Notas analíticas generadas. Revísalas antes de guardar.');
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok || !j.notas_analiticas) throw new Error(j.error || 'Respuesta vacía');
+                data = j;
             } catch (e) {
-                showToast(navigator.onLine ? e.message : 'Sin conexión: la IA necesita internet.', 'error');
+                console.warn('[IA] Se usa el procesador básico:', e && e.message);
+                data = dictLocalProcess(notas, ordenTipoActual());
+            }
+            try {
+                const extra = dictApply(data);
+                if (data.fuente === 'local') showToast('Texto estructurado en modo básico (sin IA). Revísalo antes de guardar.' + extra);
+                else if (data.advertencia_numeros && data.advertencia_numeros.length) showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
+                else showToast('Observaciones y conclusiones generadas. Revísalas antes de guardar.' + extra);
             } finally { btn.disabled = false; btn.innerHTML = original; }
         }
-        document.getElementById('exec-btn-ia').addEventListener('click', ordenOptimizarNotas);
+        dEl('exec-btn-ia').addEventListener('click', () => ordenOptimizarNotas());
 
         function ordenRenderFotos() {
             ['antes', 'despues'].forEach(cat => {
@@ -3361,12 +3566,18 @@ async function authPedirNuevaClave() {
             const eq = techFindEq(eqId) || { code: eqId };
             const exec = (order && order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
             const plannedType = order && ['PREVENTIVO', 'CORRECTIVO', 'REVISION'].includes(String(order.maintenanceType || '').toUpperCase()) ? String(order.maintenanceType).toUpperCase() : 'PREVENTIVO';
-            const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${exec.tipoRutina || plannedType}"]`);
+            const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${plannedType}"]`);
             if (radio) radio.checked = true;
+            const typeNames = { PREVENTIVO: 'Preventivo', CORRECTIVO: 'Correctivo', REVISION: 'Revisión' };
+            const typeLabel = document.getElementById('exec-tipo-fijo-nombre');
+            if (typeLabel) typeLabel.textContent = typeNames[plannedType] || 'Preventivo';
             document.getElementById('exec-f-voltaje').value = exec.voltaje || '';
             document.getElementById('exec-f-amperaje').value = exec.amperaje || '';
             document.getElementById('exec-f-presion').value = exec.presionOtros || '';
             document.getElementById('exec-f-notas-analiticas').value = exec.notasAnaliticas || '';
+            document.getElementById('exec-f-conclusion').value = exec.conclusion || '';
+            ['exec-f-notas-analiticas', 'exec-f-conclusion'].forEach(id => { const el = document.getElementById(id); el.dataset.edited = el.value.trim() ? '1' : ''; });
+            if (typeof dictStop === 'function' && DICT.active) dictStop();
             ordenFotos.antes = [...(exec.fotosAntes || exec.photos || [])];
             ordenFotos.despues = [...(exec.fotosDespues || [])];
             ordenRenderFotos();
@@ -3384,6 +3595,7 @@ async function authPedirNuevaClave() {
                 e.amperaje = document.getElementById('exec-f-amperaje').value.trim();
                 e.presionOtros = document.getElementById('exec-f-presion').value.trim();
                 e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
+                e.conclusion = document.getElementById('exec-f-conclusion').value.trim();
                 e.fotosAntes = [...ordenFotos.antes];
                 e.fotosDespues = [...ordenFotos.despues];
                 e.photos = [...ordenFotos.antes, ...ordenFotos.despues];

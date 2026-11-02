@@ -11364,9 +11364,9 @@ async function attDelete(id) {
 
   /* Texto principal del equipo según el tipo de informe. */
   function workText(typeKey, exec) {
-    if (typeKey === 'PREVENTIVO') return String(first(exec?.obs, 'Sin observaciones adicionales.'));
+    if (typeKey === 'PREVENTIVO') return String(first(exec?.notasAnaliticas, exec?.obs, 'Sin observaciones adicionales.'));
     if (typeKey === 'REVISION') return String(first(exec?.notasAnaliticas, exec?.hallazgos, exec?.obs, exec?.description, 'Sin hallazgos registrados para este equipo.'));
-    return String(first(exec?.correctiveDesc, exec?.obs, exec?.notasAnaliticas, exec?.description, exec?.notes, 'Sin descripción de actividades registrada para este equipo.'));
+    return String(first(exec?.notasAnaliticas, exec?.correctiveDesc, exec?.obs, exec?.description, exec?.notes, 'Sin descripción de actividades registrada para este equipo.'));
   }
 
   function buildEquipmentPage(order, typeKey, type, item, index, jobs) {
@@ -11449,11 +11449,14 @@ async function attDelete(id) {
     const clientName = resolveClientName(order);
     const signature = order.clientSignature || {};
     const signatureImg = first(signature.signatureImg, signature.image, signature.dataUrl, '');
-    const perEquipment = key => items
-      .map(({ eq, exec, key: k }) => {
-        const text = first(...key.map(name => exec?.[name]));
-        return text ? `${first(eq.code, eq.id, k)}: ${text}` : '';
-      }).filter(Boolean).join('\n');
+    const perEquipment = key => {
+      const rows = items.map(({ eq, exec, key: k }) => ({ code: String(first(eq.code, eq.id, k)), text: String(first(...key.map(name => exec?.[name]))).trim() })).filter(r => r.text);
+      if (!rows.length) return '';
+      const groups = new Map();
+      rows.forEach(r => { if (!groups.has(r.text)) groups.set(r.text, []); groups.get(r.text).push(r.code); });
+      if (groups.size === 1) return rows[0].text;                                  // todos igual: se muestra una sola vez
+      return [...groups.entries()].map(([text, codes]) => `${codes.join(', ')}: ${text}`).join('\n\n');
+    };
 
     const recText = String(first(order.recommendations, order.recomendaciones, perEquipment(['recomendaciones', 'recommendations'])));
     let body = `<div class="title"><small>${esc(type.closeSmall)}</small><h1>${esc(type.closeTitle)}</h1><p>${esc(type.closeText)}</p></div>`;
@@ -11462,7 +11465,7 @@ async function attDelete(id) {
       const pending = items.filter(({ exec }) => exec?.corrective).map(({ eq, exec, key }) =>
         `<li><b>${esc(first(eq.code, eq.id, key))}:</b> ${esc(first(exec.correctiveDesc, 'Se identificó una acción pendiente de atención correctiva.'))}</li>`);
       if (pending.length) body += `<div class="corr"><b>⚠ ACCIONES CORRECTIVAS REQUERIDAS</b><ul>${pending.join('')}</ul></div>`;
-      const conclusion = String(first(order.conclusion, order.finalConclusion, order.conclusiones));
+      const conclusion = String(first(order.conclusion, order.finalConclusion, order.conclusiones, perEquipment(['conclusion'])));
       if (conclusion) body += section('CONCLUSIÓN DEL TÉCNICO', textBlock(conclusion, 60));
       const recs = lines(recText);
       const list = (recs.length ? recs : type.defaultRecommendations).map(r => `<li>${esc(r)}</li>`).join('');
