@@ -723,11 +723,8 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <span class="chk-box"><i class="fa-solid fa-check"></i></span>
                             <span class="chk-text">¿Requiere correctivo?</span>
                         </label>
-                        <div id="corrective-details-box" class="hidden">
-                            <label class="field">
-                                <span>Descripción de la novedad o correctivo *</span>
-                                <textarea id="exec-corrective-desc" rows="3" class="input" placeholder="Explica la falla o el trabajo requerido…"></textarea>
-                            </label>
+                        <div id="corrective-details-box" class="hidden" style="display:none" aria-hidden="true">
+                            <textarea id="exec-corrective-desc" rows="1" tabindex="-1"></textarea>
                         </div>
                     </div>
 
@@ -3093,7 +3090,13 @@ async function authPedirNuevaClave() {
             });
 
             const corrective = document.getElementById('exec-chk-correctivo').checked;
-            const correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
+            let correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
+            if (corrective && !correctiveDesc) {
+                const formal = (document.getElementById('exec-f-notas-analiticas').value || '').replace(/^Durante[^.]*se registró lo siguiente\.\s*/i, '').replace(/\s+/g, ' ').trim();
+                const base = formal || String(document.getElementById('exec-f-obs').value || '').replace(/\s+/g, ' ').trim();
+                const cut = base.length > 260 ? base.slice(0, 260).replace(/[^.]*$/, '').trim() || base.slice(0, 260) + '…' : base;
+                correctiveDesc = cut;
+            }
 
             const eq = techFindEq(currentExecEqId);
             const typeKey = (eq && eq.type ? eq.type : 'EXTRACTOR').trim().toUpperCase();
@@ -3468,8 +3471,8 @@ async function authPedirNuevaClave() {
             if (data.requiere_correctivo === true) {
                 const chk = dEl('exec-chk-correctivo');
                 if (chk && !chk.checked) { chk.checked = true; toggleCorrectiveSection(); }
-                const d = dEl('exec-corrective-desc');
-                if (d && !d.value.trim() && data.descripcion_correctivo) d.value = String(data.descripcion_correctivo).slice(0, 600);
+                const d = dEl('exec-corrective-desc');                   // oculto: solo guarda la frase formal de la IA
+                if (d) d.value = (data.fuente === 'ia' && data.descripcion_correctivo) ? String(data.descripcion_correctivo).slice(0, 600) : '';
                 extra = ' Marqué “¿Requiere correctivo?”: verifícalo.';
             }
             if (typeof updateExecProgress === 'function') updateExecProgress();
@@ -3490,7 +3493,7 @@ async function authPedirNuevaClave() {
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…';
-            let data = null;
+            let data = null, motivo = '';
             try {
                 if (!navigator.onLine) throw new Error('offline');
                 const r = await fetch('/api/ia/procesar-notas', {
@@ -3502,11 +3505,13 @@ async function authPedirNuevaClave() {
                 data = j;
             } catch (e) {
                 console.warn('[IA] Se usa el procesador básico:', e && e.message);
+                const raw = String(e && e.message || '');
+                motivo = raw === 'offline' ? 'sin conexión' : /GEMINI_API_KEY|Falta/i.test(raw) ? 'falta la clave en Vercel' : /inv[aá]lida|permiso|key/i.test(raw) ? 'clave inválida' : /l[ií]mite/i.test(raw) ? 'límite gratuito alcanzado' : raw.slice(0, 80);
                 data = dictLocalProcess(notas, ordenTipoActual());
             }
             try {
                 const extra = dictApply(data);
-                if (data.fuente === 'local') showToast('Texto estructurado en modo básico (sin IA). Revísalo antes de guardar.' + extra);
+                if (data.fuente === 'local') showToast('Modo básico' + (motivo ? ' (IA no disponible: ' + motivo + ')' : '') + '. Revisa el texto antes de guardar.' + extra);
                 else if (data.advertencia_numeros && data.advertencia_numeros.length) showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
                 else showToast('Observaciones y conclusiones generadas. Revísalas antes de guardar.' + extra);
             } finally { btn.disabled = false; btn.innerHTML = original; }
