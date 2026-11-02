@@ -3484,7 +3484,7 @@ async function authPedirNuevaClave() {
 
         // El archivo del servidor puede quedar en distintas carpetas según cómo se subió a GitHub:
         // se prueban las rutas posibles y se recuerda la que responda.
-        const IA_ENDPOINTS = ['/api/ia/redactar-notas', '/api/redactar-notas', '/api/ia/procesar-notas', '/api/procesar-notas'];
+        const IA_ENDPOINTS = ['/api/ia/asistente-notas', '/api/ia/redactar-notas', '/api/redactar-notas'];
         let iaEndpointOk = null;
         function iaEstado(texto, ok) {
             const el = dEl('ia-estado'); if (!el) return;
@@ -3514,7 +3514,7 @@ async function authPedirNuevaClave() {
                 console.info('[IA] Endpoint activo:', url);
                 return r;
             }
-            throw new Error('IA no desplegada (404): el archivo api/ia/redactar-notas.js no está en esa ruta');
+            throw new Error('IA no desplegada (404): el archivo api/ia/asistente-notas.mjs no está en esa ruta');
         }
 
         async function ordenOptimizarNotas(opts) {
