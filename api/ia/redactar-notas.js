@@ -47,12 +47,9 @@ function parseJson(text) {
   return JSON.parse(clean);
 }
 
-module.exports = async function handler(req, res) {
-  res.setHeader('Cache-Control', 'no-store');
-  // Diagnóstico: abrir en el navegador  /api/ia/redactar-notas  (sin parámetros)
-  if (req.method === 'GET') {                       // cualquier visita desde el navegador muestra el diagnóstico
+async function diagnostico(res) {
     const k = process.env.GEMINI_API_KEY || '';
-    const info = { version_del_archivo: 'redactar-v1', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
+    const info = { version_del_archivo: 'redactar-v2', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
     if (!k) { info.resultado = 'FALTA la variable GEMINI_API_KEY en Vercel (Settings > Environment Variables, entorno Production) y luego hacer Redeploy.'; return res.status(200).json(info); }
     const probar = [process.env.GEMINI_MODEL, ...MODELS_FALLBACK].filter(Boolean).filter((m, i, a) => a.indexOf(m) === i);
     for (const model of probar) {
@@ -68,7 +65,14 @@ module.exports = async function handler(req, res) {
     const ok = info.pruebas.find(t => t.detalle === 'FUNCIONA');
     info.resultado = ok ? `LISTO: el modelo ${ok.modelo} responde. La IA está conectada.` : 'Ningún modelo respondió. Revisa el detalle de cada prueba.';
     return res.status(200).json(info);
-  }
+}
+
+module.exports = async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  // Diagnóstico: GET desde el navegador, o POST {"ping":true} desde la app
+  let preBody = req.body;
+  if (typeof preBody === 'string') { try { preBody = JSON.parse(preBody); } catch (e) { preBody = {}; } }
+  if (req.method === 'GET' || (req.method === 'POST' && preBody && preBody.ping)) return diagnostico(res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   const key = process.env.GEMINI_API_KEY;
