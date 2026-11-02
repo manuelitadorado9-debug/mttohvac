@@ -3316,7 +3316,7 @@ async function authPedirNuevaClave() {
         /* =====================================================================
            DICTADO POR VOZ + PROCESAMIENTO DE NOTAS (100 % gratis)
            - Voz a texto: API nativa de Chrome (SpeechRecognition), sin costo ni claves.
-           - Redacción: función /api/ia/procesar-notas (Gemini, capa gratuita). Si falla o
+           - Redacción: función /api/ia/redactar-notas (Gemini, capa gratuita). Si falla o
              no hay internet, se usa un procesador local básico que NO necesita IA ni claves.
            ===================================================================== */
         const DICT = { rec: null, active: false, base: '', finals: [], interim: '', timer: null, finishing: false };
@@ -3496,7 +3496,7 @@ async function authPedirNuevaClave() {
             let data = null, motivo = '';
             try {
                 if (!navigator.onLine) throw new Error('offline');
-                const r = await fetch('/api/ia/procesar-notas', {
+                const r = await fetch('/api/ia/redactar-notas', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
                 });
