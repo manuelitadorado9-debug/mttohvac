@@ -49,6 +49,26 @@ function parseJson(text) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  // Diagnóstico: abrir en el navegador  /api/ia/procesar-notas?test=1
+  if (req.method === 'GET' && req.query && (req.query.test || req.query.diagnostico)) {
+    const k = process.env.GEMINI_API_KEY || '';
+    const info = { funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
+    if (!k) { info.resultado = 'FALTA la variable GEMINI_API_KEY en Vercel (Settings > Environment Variables, entorno Production) y luego hacer Redeploy.'; return res.status(200).json(info); }
+    const probar = [process.env.GEMINI_MODEL, ...MODELS_FALLBACK].filter(Boolean).filter((m, i, a) => a.indexOf(m) === i);
+    for (const model of probar) {
+      try {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': k.trim() },
+          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 10 } })
+        });
+        const d = await r.json().catch(() => ({}));
+        info.pruebas.push({ modelo: model, estado: r.status, detalle: r.ok ? 'FUNCIONA' : String((d.error && d.error.message) || '').slice(0, 160) });
+      } catch (e) { info.pruebas.push({ modelo: model, estado: 0, detalle: String(e && e.message || e).slice(0, 160) }); }
+    }
+    const ok = info.pruebas.find(t => t.detalle === 'FUNCIONA');
+    info.resultado = ok ? `LISTO: el modelo ${ok.modelo} responde. La IA está conectada.` : 'Ningún modelo respondió. Revisa el detalle de cada prueba.';
+    return res.status(200).json(info);
+  }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
   const key = process.env.GEMINI_API_KEY;
@@ -67,7 +87,7 @@ module.exports = async function handler(req, res) {
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key.trim() },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
           contents: [{ role: 'user', parts: [{ text: `Tipo de servicio: ${tipo}\n\nRelato del técnico:\n${notas}` }] }],
