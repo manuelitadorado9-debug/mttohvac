@@ -385,6 +385,8 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 
 /* ===== Orden de servicio: rutina, lecturas y fotos Antes/Después ===== */
+.ia-estado{margin-top:6px;font-size:11.5px;line-height:1.35;color:var(--muted);word-break:break-word}
+.ia-link{border:0;background:none;padding:0;font-size:11.5px;font-weight:800;color:#10b981;text-decoration:underline;cursor:pointer}
 .obs-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mic-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:#10b981;font-size:18px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;transition:background .15s,color .15s}
 .mic-btn.on{background:#ef4444;color:#fff;border-color:#ef4444;animation:micPulse 1.4s infinite}
@@ -742,6 +744,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <button type="button" id="dictado-parar" class="parar">Detener</button>
                         </div>
                         <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar con IA</button>
+                        <div id="ia-estado" class="ia-estado" role="status">Estado de la IA: sin probar. <button type="button" id="ia-probar" class="ia-link">Probar conexión</button></div>
                         <label class="field" style="margin-top:10px">
                             <span>Observaciones técnicas (puedes editarlas)</span>
                             <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el párrafo técnico redactado a partir de tus notas…"></textarea>
@@ -3483,6 +3486,26 @@ async function authPedirNuevaClave() {
         // se prueban las rutas posibles y se recuerda la que responda.
         const IA_ENDPOINTS = ['/api/ia/redactar-notas', '/api/redactar-notas', '/api/ia/procesar-notas', '/api/procesar-notas'];
         let iaEndpointOk = null;
+        function iaEstado(texto, ok) {
+            const el = dEl('ia-estado'); if (!el) return;
+            el.innerHTML = (ok ? '✅ ' : '⚠️ ') + String(texto).replace(/</g, '&lt;') + ' <button type="button" id="ia-probar" class="ia-link">Probar conexión</button>';
+            dEl('ia-probar').addEventListener('click', iaProbar);
+        }
+        async function iaProbar() {
+            const lineas = [];
+            iaEstado('Probando conexión…', true);
+            for (const url of IA_ENDPOINTS) {
+                try {
+                    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ping: true }) });
+                    const t = await r.text();
+                    let resumen = t.slice(0, 220);
+                    try { const j = JSON.parse(t); resumen = j.resultado || j.error || resumen; if (j.pruebas && j.pruebas.length) resumen += ' | ' + j.pruebas.map(p => p.modelo + ': ' + p.estado + ' ' + p.detalle).join(' ; '); } catch (e) { /* texto plano */ }
+                    lineas.push(url + ' → ' + r.status + ' → ' + resumen);
+                } catch (e) { lineas.push(url + ' → sin respuesta (' + e.message + ')'); }
+            }
+            iaEstado('Prueba terminada.', true);
+            alert('Prueba de la IA:\n\n' + lineas.join('\n\n'));
+        }
         async function iaFetch(body) {
             for (const url of (iaEndpointOk ? [iaEndpointOk] : IA_ENDPOINTS)) {
                 const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
@@ -3513,13 +3536,15 @@ async function authPedirNuevaClave() {
                 if (!navigator.onLine) throw new Error('offline');
                 const r = await iaFetch(JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() }));
                 const j = await r.json().catch(() => ({}));
-                if (!r.ok || !j.notas_analiticas) throw new Error(j.error || 'Respuesta vacía');
+                if (!r.ok || !j.notas_analiticas) throw new Error(r.status + ': ' + (j.error || 'respuesta vacía del servidor'));
                 data = j;
+                iaEstado('IA conectada (' + iaEndpointOk + ').', true);
             } catch (e) {
                 console.warn('[IA] Se usa el procesador básico:', e && e.message);
                 const raw = String(e && e.message || '');
                 motivo = raw === 'offline' ? 'sin conexión' : /404|no desplegada/i.test(raw) ? 'archivo de IA no encontrado en Vercel' : /GEMINI_API_KEY|Falta/i.test(raw) ? 'falta la clave en Vercel' : /inv[aá]lida|permiso|key/i.test(raw) ? 'clave inválida' : /l[ií]mite/i.test(raw) ? 'límite gratuito alcanzado' : raw.slice(0, 80);
                 data = dictLocalProcess(notas, ordenTipoActual());
+                iaEstado('Modo básico. Motivo: ' + (raw === 'offline' ? 'sin conexión' : raw) + '.', false);
             }
             try {
                 const extra = dictApply(data);
@@ -3529,6 +3554,7 @@ async function authPedirNuevaClave() {
             } finally { btn.disabled = false; btn.innerHTML = original; }
         }
         dEl('exec-btn-ia').addEventListener('click', () => ordenOptimizarNotas());
+        dEl('ia-probar').addEventListener('click', iaProbar);
 
         function ordenRenderFotos() {
             ['antes', 'despues'].forEach(cat => {
