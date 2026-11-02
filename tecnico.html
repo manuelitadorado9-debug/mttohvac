@@ -3479,6 +3479,21 @@ async function authPedirNuevaClave() {
             return extra;
         }
 
+        // El archivo del servidor puede quedar en distintas carpetas según cómo se subió a GitHub:
+        // se prueban las rutas posibles y se recuerda la que responda.
+        const IA_ENDPOINTS = ['/api/ia/redactar-notas', '/api/redactar-notas', '/api/ia/procesar-notas', '/api/procesar-notas'];
+        let iaEndpointOk = null;
+        async function iaFetch(body) {
+            for (const url of (iaEndpointOk ? [iaEndpointOk] : IA_ENDPOINTS)) {
+                const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+                if (r.status === 404) continue;
+                iaEndpointOk = url;
+                console.info('[IA] Endpoint activo:', url);
+                return r;
+            }
+            throw new Error('IA no desplegada (404): el archivo api/ia/redactar-notas.js no está en esa ruta');
+        }
+
         async function ordenOptimizarNotas(opts) {
             const auto = !!(opts && opts.auto);
             const btn = dEl('exec-btn-ia'), obs = dEl('exec-f-obs');
@@ -3496,17 +3511,14 @@ async function authPedirNuevaClave() {
             let data = null, motivo = '';
             try {
                 if (!navigator.onLine) throw new Error('offline');
-                const r = await fetch('/api/ia/redactar-notas', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
-                });
+                const r = await iaFetch(JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() }));
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok || !j.notas_analiticas) throw new Error(j.error || 'Respuesta vacía');
                 data = j;
             } catch (e) {
                 console.warn('[IA] Se usa el procesador básico:', e && e.message);
                 const raw = String(e && e.message || '');
-                motivo = raw === 'offline' ? 'sin conexión' : /GEMINI_API_KEY|Falta/i.test(raw) ? 'falta la clave en Vercel' : /inv[aá]lida|permiso|key/i.test(raw) ? 'clave inválida' : /l[ií]mite/i.test(raw) ? 'límite gratuito alcanzado' : raw.slice(0, 80);
+                motivo = raw === 'offline' ? 'sin conexión' : /404|no desplegada/i.test(raw) ? 'archivo de IA no encontrado en Vercel' : /GEMINI_API_KEY|Falta/i.test(raw) ? 'falta la clave en Vercel' : /inv[aá]lida|permiso|key/i.test(raw) ? 'clave inválida' : /l[ií]mite/i.test(raw) ? 'límite gratuito alcanzado' : raw.slice(0, 80);
                 data = dictLocalProcess(notas, ordenTipoActual());
             }
             try {
