@@ -12,7 +12,28 @@
  *   GEMINI_API_KEY   (obligatoria)  clave de Google AI Studio
  *   GEMINI_MODEL     (opcional)     por defecto "gemini-2.0-flash"
  */
-const MODELS_FALLBACK = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+// Google retira modelos con el tiempo (gemini-2.0-flash y 1.5 ya no existen), por eso además de estos
+// nombres la función consulta a Google qué modelos "flash" hay disponibles y usa los más nuevos.
+const MODELS_FALLBACK = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
+
+let modelosCache = null, modelosCacheEn = 0;
+async function listarModelosFlash(key) {
+  try {
+    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key.trim() } });
+    if (!r.ok) return [];
+    const d = await r.json();
+    const nombres = (d.models || [])
+      .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map(m => String(m.name || '').replace(/^models\//, ''))
+      .filter(n => /^gemini-[\d.]+-flash/.test(n) && !/(image|tts|live|audio|embedding|vision|robotics|computer)/.test(n));
+    const puntaje = n => parseFloat((n.match(/^gemini-([\d.]+)/) || [])[1] || 0) + (/lite/.test(n) ? -0.01 : 0) + (/(preview|exp)/.test(n) ? -5 : 0);
+    return nombres.sort((a, b) => puntaje(b) - puntaje(a));
+  } catch (e) { return []; }
+}
+async function modelosCandidatos(key) {
+  if (!modelosCache || Date.now() - modelosCacheEn > 6 * 3600 * 1000) { modelosCache = await listarModelosFlash(key); modelosCacheEn = Date.now(); }
+  return [...new Set([process.env.GEMINI_MODEL, ...MODELS_FALLBACK, ...modelosCache].filter(Boolean))].slice(0, 6);
+}
 
 const SYSTEM = `Eres un ingeniero de mantenimiento HVAC (aire acondicionado y ventilación) que redacta informes técnicos en español de Colombia.
 Recibirás el relato coloquial de un técnico de campo. Devuelve SOLO JSON con estos campos:
@@ -51,7 +72,9 @@ async function diagnostico(res) {
     const k = process.env.GEMINI_API_KEY || '';
     const info = { version_del_archivo: 'asistente-v1', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
     if (!k) { info.resultado = 'FALTA la variable GEMINI_API_KEY en Vercel (Settings > Environment Variables, entorno Production) y luego hacer Redeploy.'; return res.status(200).json(info); }
-    const probar = [process.env.GEMINI_MODEL, ...MODELS_FALLBACK].filter(Boolean).filter((m, i, a) => a.indexOf(m) === i);
+    const disponibles = await listarModelosFlash(k);
+    info.modelos_disponibles_en_tu_cuenta = disponibles.slice(0, 8);
+    const probar = (await modelosCandidatos(k)).slice(0, 4);
     for (const model of probar) {
       try {
         const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -84,8 +107,8 @@ async function main(req, res) {
   const tipo = String((body && body.tipo_servicio) || 'REVISION').toUpperCase();
   if (notas.length < 5) return res.status(400).json({ error: 'Escribe o dicta las notas del técnico.' });
 
-  const models = [process.env.GEMINI_MODEL, ...MODELS_FALLBACK].filter(Boolean).filter((m, i, a) => a.indexOf(m) === i);
-  let lastError = 'No se pudo contactar el servicio de IA.';
+  const models = await modelosCandidatos(key);
+  let lastError = 'No se pudo contactar el servicio de IA.', lastStatus = 502;
 
   for (const model of models) {
     try {
@@ -95,13 +118,12 @@ async function main(req, res) {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: SYSTEM }] },
           contents: [{ role: 'user', parts: [{ text: `Tipo de servicio: ${tipo}\n\nRelato del técnico:\n${notas}` }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1200, responseMimeType: 'application/json', responseSchema: SCHEMA }
+          generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: SCHEMA }
         })
       });
       const data = await r.json().catch(() => ({}));
-      if (r.status === 429) return res.status(429).json({ error: 'Se alcanzó el límite gratuito de la IA. Intenta de nuevo en un minuto.' });
-      if (r.status === 400 && /API key/i.test(JSON.stringify(data))) return res.status(401).json({ error: 'Clave de IA inválida: revisa GEMINI_API_KEY en Vercel.' });
-      if (r.status === 401 || r.status === 403) return res.status(401).json({ error: 'La clave de IA no tiene permiso o es inválida.' });
+      if (r.status === 429) { lastError = 'Se alcanzó el límite gratuito de la IA. Intenta de nuevo en un minuto.'; lastStatus = 429; continue; }   // otro modelo puede tener cupo
+      if ([400, 401, 403].includes(r.status) && /api.?key|API_KEY_INVALID/i.test(JSON.stringify(data))) return res.status(401).json({ error: 'Clave de IA inválida: revisa GEMINI_API_KEY en Vercel.' });
       if (!r.ok) { lastError = (data.error && data.error.message) || `Error ${r.status} del modelo ${model}`; continue; }  // prueba el siguiente modelo
 
       const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
@@ -133,7 +155,7 @@ async function main(req, res) {
       lastError = e && e.message ? e.message : String(e);
     }
   }
-  return res.status(502).json({ error: lastError });
+  return res.status(lastStatus).json({ error: lastError });
 }
 
 // Formato ESM (.mjs): funciona sin importar la configuración de package.json.
