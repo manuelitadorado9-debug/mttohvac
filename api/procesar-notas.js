@@ -49,10 +49,10 @@ function parseJson(text) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  // Diagnóstico: abrir en el navegador  /api/ia/procesar-notas?test=1
-  if (req.method === 'GET' && req.query && (req.query.test || req.query.diagnostico)) {
+  // Diagnóstico: abrir en el navegador  /api/ia/procesar-notas  (sin parámetros)
+  if (req.method === 'GET') {                       // cualquier visita desde el navegador muestra el diagnóstico
     const k = process.env.GEMINI_API_KEY || '';
-    const info = { funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
+    const info = { version_del_archivo: 'diagnostico-v2', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
     if (!k) { info.resultado = 'FALTA la variable GEMINI_API_KEY en Vercel (Settings > Environment Variables, entorno Production) y luego hacer Redeploy.'; return res.status(200).json(info); }
     const probar = [process.env.GEMINI_MODEL, ...MODELS_FALLBACK].filter(Boolean).filter((m, i, a) => a.indexOf(m) === i);
     for (const model of probar) {
