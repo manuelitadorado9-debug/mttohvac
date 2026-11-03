@@ -7,8 +7,8 @@
 
   /* ---------- Configuración ---------- */
   HVAC.cfg = {
-    url: () => (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : ''),
-    key: () => (typeof SUPABASE_KEY !== 'undefined' ? SUPABASE_KEY : ''),
+    url: () => 'https://edmsbznmboctzkxivypa.supabase.co',
+    key: () => 'sb_publishable_S3nfcj-MEb41o0JZI7uW6g_ePDz7g8L',
     bucket: 'hvac-archivos',
     letterhead: { header: 'membrete/encabezado.jpg', footer: 'membrete/pie.jpg' }   // rutas dentro del bucket (público)
   };
@@ -58,7 +58,7 @@
     }
   };
 
-  /* ---------- Supabase REST ---------- */
+  /* ----------  REST ---------- */
   HVAC.sb = {
     async fetch(endpoint, method = 'GET', body = null, extraHeaders = null, opts = {}) {
       if (!HVAC.net.isOnline()) return null;
@@ -111,7 +111,7 @@
     toDataUrl: blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); })
   };
 
-  /* ---------- Membretes PDF (en Supabase Storage, con caché en IndexedDB) ---------- */
+  /* ---------- Membretes PDF (en  Storage, con caché en IndexedDB) ---------- */
   HVAC.letterhead = {
     async load() {
       const out = {};
