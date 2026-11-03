@@ -3606,8 +3606,10 @@ async function authPedirNuevaClave() {
         // ---------------------------------------------------------------------
         async function saveInvoiceRecord() {
             const orderId = document.getElementById('inv-f-order-id').value;
-            const order = workOrders.find(o => o.id === orderId);
+            let order = workOrders.find(o => o.id === orderId);
             if (!order) return;
+            if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
+            if (!order) return showToast('No se pudo cargar el detalle de la orden.', 'error');
 
             // Regla estricta: no se factura la matriz si alguna parte -P# no está Completada
             const chk = await hvacAssertMatrixBillable(order);
@@ -3668,8 +3670,9 @@ async function authPedirNuevaClave() {
         // ---------------------------------------------------------------------
         //  REEMPLAZA a downloadInvoicePDF() completa (soporta URL nueva y base64 antiguo)
         // ---------------------------------------------------------------------
-        function downloadInvoicePDF(orderId) {
-            const order = workOrders.find(o => o.id === orderId);
+        async function downloadInvoicePDF(orderId) {
+            let order = workOrders.find(o => o.id === orderId);
+            if (order && order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
             const inv = order && order.invoice;
             if (!inv || !(inv.pdfUrl || inv.pdfData)) return showToast('No hay PDF adjunto en esta orden.', 'error');
 
@@ -4110,7 +4113,15 @@ async function authPedirNuevaClave() {
 
         async function cloudSaveEquipment(eq) { return cloudUpsert('hvac_equipments', eq.id || eq.code, eq); }
         async function cloudDeleteEquipment(id) { return cloudDeleteGeneric('hvac_equipments', id); }
-        async function cloudSaveOrder(order) { return cloudUpsert('hvac_orders', order.id, order); }
+        async function cloudSaveOrder(order) {
+            let target = order;
+            if (target && target._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') {
+                target = await hvacEnsureFullOrder(target.id);
+            }
+            if (!target) return null;
+            delete target._hvacSummaryOnly;
+            return cloudUpsert('hvac_orders', target.id, target);
+        }
         async function cloudDeleteOrder(id) { return cloudDeleteGeneric('hvac_orders', id); }
         async function cloudSaveClient(cli) { return cloudUpsert('hvac_clients', cli.id, cli); }
         async function cloudDeleteClient(id) { return cloudDeleteGeneric('hvac_clients', id); }
@@ -4257,8 +4268,9 @@ async function authPedirNuevaClave() {
         // =====================================================================
         const cloudSectionsLoaded = new Set();
         const cloudSectionsInFlight = Object.create(null);
-        const cloudTableFetchedAt = Object.create(null); // evita volver a descargar una tabla recién consultada
-        const CLOUD_TABLE_TTL = 60 * 1000;
+        const cloudTableFetchedAt = Object.create(null); // caché compartida entre secciones
+        const cloudTableInFlight = Object.create(null);  // evita dos descargas simultáneas de la misma tabla
+        const CLOUD_TABLE_TTL = 5 * 60 * 1000;            // 5 min; la recarga manual sigue forzando sincronización
         const CLOUD_SECTION_CONFIG = {
             'admin-dashboard': { tables: ['hvac_orders'], state: ['HVAC_PROJECTIONS_BACKUP'] },
             'admin-clients': { tables: ['hvac_clients'], state: [] },
@@ -4319,9 +4331,91 @@ async function authPedirNuevaClave() {
             el.lastElementChild.textContent = message || (status === 'error' ? 'No se pudieron actualizar los datos. Puedes volver a intentarlo.' : 'Actualizando esta sección…');
         }
 
+        // La tabla hvac_orders guarda las fotos/ejecuciones dentro de payload. Nunca usar
+        // select=payload para pintar listados: esta proyección solo trae metadatos pequeños.
+        const HVAC_ORDER_SUMMARY_SELECT = [
+            'row_id:id',
+            'order_id:payload->>id',
+            'client:payload->>client',
+            'order_date:payload->>date',
+            'created_at:payload->>createdAt',
+            'updated_at:payload->>updatedAt',
+            'status:payload->>status',
+            'technician:payload->>technician',
+            'technicians:payload->technicians',
+            'equipment_ids:payload->equipmentIds',
+            'zone_name:payload->>zoneName',
+            'zone_base_id:payload->>zoneBaseId',
+            'zone_part:payload->>zonePart',
+            'zone_parts:payload->>zoneParts',
+            'tipo_rutina:payload->>tipoRutina',
+            'maintenance_type:payload->>maintenanceType',
+            'routine_type:payload->>routineType',
+            'invoice_date:payload->invoice->>date',
+            'invoice_number:payload->invoice->>number',
+            'invoice_amount:payload->invoice->>amount',
+            'invoice_expenses:payload->invoice->>expenses',
+            'invoice_pdf_url:payload->invoice->>pdfUrl',
+            'invoice_matrix_ref:payload->invoice->>matrixRef',
+            'pickup_status:payload->toolPickup->>status',
+            'pickup_requested_at:payload->toolPickup->>requestedAt',
+            'pickup_done_at:payload->toolPickup->>doneAt',
+            'pickup_done_by:payload->toolPickup->>doneBy',
+            'pickup_note:payload->toolPickup->>note',
+            'signature_timestamp:payload->clientSignature->>timestamp'
+        ].join(',');
+
+        function hvacOrderSummaryFromRow(row) {
+            if (!row) return null;
+            const id = row.order_id || row.row_id;
+            if (id == null || id === '') return null;
+            const invoice = {};
+            if (row.invoice_date != null) invoice.date = row.invoice_date;
+            if (row.invoice_number != null) invoice.number = row.invoice_number;
+            if (row.invoice_amount != null) invoice.amount = Number(row.invoice_amount) || 0;
+            if (row.invoice_expenses != null) invoice.expenses = Number(row.invoice_expenses) || 0;
+            if (row.invoice_pdf_url) invoice.pdfUrl = row.invoice_pdf_url;
+            if (row.invoice_matrix_ref) invoice.matrixRef = row.invoice_matrix_ref;
+            const toolPickup = {};
+            if (row.pickup_status) toolPickup.status = row.pickup_status;
+            if (row.pickup_requested_at) toolPickup.requestedAt = row.pickup_requested_at;
+            if (row.pickup_done_at) toolPickup.doneAt = row.pickup_done_at;
+            if (row.pickup_done_by) toolPickup.doneBy = row.pickup_done_by;
+            if (row.pickup_note) toolPickup.note = row.pickup_note;
+            const n = v => v == null || v === '' ? undefined : Number(v);
+            return {
+                id: String(id), client: row.client || '', date: row.order_date || '',
+                createdAt: row.created_at || '', updatedAt: row.updated_at || '',
+                status: String(row.status || 'PENDING').toUpperCase(),
+                technician: row.technician || '',
+                technicians: Array.isArray(row.technicians) ? row.technicians : [],
+                equipmentIds: Array.isArray(row.equipment_ids) ? row.equipment_ids : [],
+                zoneName: row.zone_name || '', zoneBaseId: row.zone_base_id || '',
+                zonePart: n(row.zone_part), zoneParts: n(row.zone_parts),
+                tipoRutina: row.tipo_rutina || '', maintenanceType: row.maintenance_type || '',
+                routineType: row.routine_type || '',
+                invoice: Object.keys(invoice).length ? invoice : null,
+                toolPickup: Object.keys(toolPickup).length ? toolPickup : null,
+                clientSignature: row.signature_timestamp ? { timestamp: row.signature_timestamp } : null,
+                _hvacSummaryOnly: true
+            };
+        }
+
+        async function cloudFetchOrderSummaries(query = '&order=payload->>date.desc&limit=1000') {
+            const rows = await supabaseFetch('hvac_orders?select=' + HVAC_ORDER_SUMMARY_SELECT + query, 'GET', null, null, { quiet: true });
+            return Array.isArray(rows) ? rows.map(hvacOrderSummaryFromRow).filter(Boolean) : null;
+        }
+
         async function cloudFetchTable(table) {
-            const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true });
-            return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
+            if (cloudTableInFlight[table]) return cloudTableInFlight[table];
+            const task = (async () => {
+                if (table === 'hvac_orders') return cloudFetchOrderSummaries();
+                const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true });
+                return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
+            })();
+            cloudTableInFlight[table] = task;
+            try { return await task; }
+            finally { delete cloudTableInFlight[table]; }
         }
 
 
@@ -4390,6 +4484,71 @@ async function authPedirNuevaClave() {
                 if (idx >= 0) workOrders[idx] = o; else workOrders.push(o);
             });
         }
+
+        // Fusiona metadatos de nube con la copia local. Si la orden ya tiene detalles,
+        // conserva executions/fotos/firmas; si no, queda marcada para hidratarla al abrirla.
+        function mergeOrderSummariesIntoList(list, replaceAll = false) {
+            if (!Array.isArray(list)) return;
+            const previous = new Map((workOrders || []).map(o => [String(o && o.id), o]));
+            const merged = replaceAll ? new Map() : new Map(previous);
+            list.forEach(summary => {
+                if (!summary || !summary.id || deletedOrderIdHas(summary.id)) return;
+                const key = String(summary.id), old = previous.get(key);
+                if (!old) { merged.set(key, summary); return; }
+                const hadDetails = old._hvacSummaryOnly !== true;
+                const next = Object.assign({}, hadDetails ? old : {}, summary);
+                if (hadDetails) {
+                    next.invoice = summary.invoice ? Object.assign({}, old.invoice || {}, summary.invoice) : null;
+                    next.toolPickup = summary.toolPickup ? Object.assign({}, old.toolPickup || {}, summary.toolPickup) : null;
+                    if (summary.clientSignature) next.clientSignature = Object.assign({}, old.clientSignature || {}, summary.clientSignature);
+                    else if (old.clientSignature) next.clientSignature = old.clientSignature;
+                    if (old.executions) next.executions = old.executions; // un resultado parcial de trazabilidad no pisa todos los detalles
+                    delete next._hvacSummaryOnly;
+                    if (old._hvacDetailFetchedAt) next._hvacDetailFetchedAt = old._hvacDetailFetchedAt;
+                } else {
+                    next._hvacSummaryOnly = true;
+                    if (old.executions || summary.executions) next.executions = Object.assign({}, old.executions || {}, summary.executions || {});
+                }
+                merged.set(key, next);
+            });
+            workOrders = Array.from(merged.values());
+        }
+
+        const hvacOrderDetailInFlight = Object.create(null);
+        async function hvacEnsureFullOrder(orderId) {
+            const key = String(orderId == null ? '' : orderId);
+            if (!key) return null;
+            let current = workOrders.find(o => String(o && o.id) === key);
+            if (!current) return null;
+            if (current._hvacSummaryOnly !== true) return current;
+            if (hvacOrderDetailInFlight[key]) return hvacOrderDetailInFlight[key];
+            const task = (async () => {
+                const cleanId = cloudCleanId(key);
+                let rows = await supabaseFetch('hvac_orders?select=payload&id=eq.' + encodeURIComponent(cleanId) + '&limit=1', 'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows) || !rows.length || !rows[0] || !rows[0].payload) {
+                    rows = await supabaseFetch('hvac_orders?select=payload&payload->>id=eq.' + encodeURIComponent(key) + '&limit=1', 'GET', null, null, { quiet: true });
+                }
+                const payload = Array.isArray(rows) && rows[0] && rows[0].payload;
+                if (!payload || typeof payload !== 'object') return null;
+                current = workOrders.find(o => String(o && o.id) === key) || current;
+                // El servidor aporta el documento completo; los campos ligeros actuales preservan
+                // cualquier cambio local reciente y se combinan con los objetos anidados completos.
+                const full = Object.assign({}, payload, current);
+                full.invoice = Object.assign({}, payload.invoice || {}, current.invoice || {});
+                full.toolPickup = Object.assign({}, payload.toolPickup || {}, current.toolPickup || {});
+                full.clientSignature = Object.assign({}, payload.clientSignature || {}, current.clientSignature || {});
+                full.executions = payload.executions || current.executions || {};
+                delete full._hvacSummaryOnly;
+                full._hvacDetailFetchedAt = Date.now();
+                const idx = workOrders.findIndex(o => String(o && o.id) === key);
+                if (idx >= 0) workOrders[idx] = full; else workOrders.push(full);
+                return full;
+            })();
+            hvacOrderDetailInFlight[key] = task;
+            try { return await task; }
+            finally { delete hvacOrderDetailInFlight[key]; }
+        }
+        window.hvacEnsureFullOrder = hvacEnsureFullOrder;
         function persistEquipmentBackup() { try { localStorage.setItem('HVAC_EQUIPMENTS_BACKUP', JSON.stringify(equipmentCatalog)); } catch (_) {} }
 
         // Equipos de UN cliente (modales de programación). No descarga el resto del catálogo.
@@ -4503,17 +4662,18 @@ async function authPedirNuevaClave() {
                 filters += '&or=' + encodeURIComponent(`(id.ilike.${pat},payload->>client.ilike.${pat},payload->>technician.ilike.${pat})`);
             }
             if (f.label) filters += '&payload->>client=ilike.' + encodeURIComponent(pgLikePattern(clientRootLabel(f.label)));
-            // La consulta trae solo una página, en el orden elegido (por defecto: fecha descendente).
-            let rows = await supabaseFetch(`hvac_orders?select=payload&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`, 'GET', null, null, { quiet: true });
+            // Paginación liviana: no descarga fotos, ejecuciones ni firmas en base64.
+            let rows = await cloudFetchOrderSummaries(`&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`);
             let paged = true;
-            if (!Array.isArray(rows)) { // plan B: el servidor no admite ordenar por JSON → se baja todo y se ordena aquí
-                rows = await supabaseFetch('hvac_orders?select=payload' + filters, 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows)) {
+                // Plan B acotado: conserva el límite y ordena por la PK, nunca descarga todo el payload.
+                rows = await cloudFetchOrderSummaries(`&order=id.desc&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`);
                 paged = false;
             }
             if (token !== st.token) return false; // llegó una consulta más nueva
             st.loading = false;
             if (!Array.isArray(rows)) return false;
-            mergeOrdersIntoList(rows.map(r => r && r.payload).filter(Boolean));
+            mergeOrderSummariesIntoList(rows);
             st.offset += rows.length;
             st.hasMore = paged && rows.length === HIST_FETCH_PAGE;
             return true;
@@ -4601,7 +4761,11 @@ async function authPedirNuevaClave() {
             if (!restoreActiveSession()) return;
             const cfg = CLOUD_SECTION_CONFIG[tabId];
             if (!cfg) return;
-            if (!force && cloudSectionsLoaded.has(tabId)) return;
+            if (!force && cloudSectionsLoaded.has(tabId)) {
+                const stale = (cfg.tables || []).some(table => Date.now() - (cloudTableFetchedAt[table] || 0) > CLOUD_TABLE_TTL);
+                if (!stale) return;
+                cloudSectionsLoaded.delete(tabId);
+            }
             if (cloudSectionsInFlight[tabId]) return cloudSectionsInFlight[tabId];
             const section = document.getElementById('view-' + tabId);
             if (!section || section.classList.contains('hidden')) return;
@@ -4619,8 +4783,9 @@ async function authPedirNuevaClave() {
                             if (!records) { failed.push(table); return; }
                             cloudTableFetchedAt[table] = Date.now();
                             if (table === 'hvac_users' && !records.length) return;
-                            records = tombFilter(table, records);        // lo borrado no se re-inserta (rutinas, equipos, clientes y usuarios)
-                            CLOUD_TABLE_TARGETS[table].set(records);
+                            records = tombFilter(table, records);        // lo borrado no se re-inserta
+                            if (table === 'hvac_orders') mergeOrderSummariesIntoList(records, true);
+                            else CLOUD_TABLE_TARGETS[table].set(records);
                         });
                         cloudReconcileOutbox(); // reaplica lo que aún no confirmó la nube
                         results.forEach(({ table }) => {
@@ -7279,13 +7444,36 @@ async function authPedirNuevaClave() {
             const container = document.getElementById('eq-hist-timeline-container');
             container.innerHTML = '<div class="text-center py-10 text-slate-400 font-medium text-xs">Buscando intervenciones de este equipo…</div>';
 
-            // Solo se piden las órdenes que incluyen este equipo (no todo el histórico).
+            // Trazabilidad liviana: solo metadatos y observaciones del equipo.
+            // Las fotos/ejecuciones completas se descargan al pulsar Revisar o generar el PDF.
             if (navigator.onLine) {
                 const keys = [...new Set([eq.id, eq.code].filter(Boolean).map(String))];
+                const idPath = encodeURIComponent(String(eq.id));
+                const codePath = encodeURIComponent(String(eq.code));
+                const select = [
+                    'order_id:payload->>id', 'client:payload->>client',
+                    'order_date:payload->>date', 'technician:payload->>technician',
+                    'equipment_ids:payload->equipmentIds',
+                    'exec_obs_by_id:payload->executions->' + idPath + '->>obs',
+                    'exec_obs_by_code:payload->executions->' + codePath + '->>obs'
+                ].join(',');
                 const found = await Promise.all(keys.map(k => supabaseFetch(
-                    'hvac_orders?select=payload&order=payload->>date.desc&limit=100&payload=cs.' + encodeURIComponent(JSON.stringify({ equipmentIds: [k] })),
+                    'hvac_orders?select=' + select + '&order=payload->>date.desc&limit=100&payload=cs.' + encodeURIComponent(JSON.stringify({ equipmentIds: [k] })),
                     'GET', null, null, { quiet: true })));
-                found.forEach(rows => { if (Array.isArray(rows)) mergeOrdersIntoList(rows.map(r => r && r.payload).filter(Boolean)); });
+                found.forEach(rows => {
+                    if (!Array.isArray(rows)) return;
+                    mergeOrderSummariesIntoList(rows.map(r => {
+                        if (!r || !r.order_id) return null;
+                        const executions = {};
+                        if (r.exec_obs_by_id != null) executions[eq.id] = { obs: r.exec_obs_by_id };
+                        if (r.exec_obs_by_code != null) executions[eq.code] = { obs: r.exec_obs_by_code };
+                        return {
+                            id: String(r.order_id), client: r.client || '', date: r.order_date || '',
+                            technician: r.technician || '', equipmentIds: Array.isArray(r.equipment_ids) ? r.equipment_ids : [],
+                            executions, _hvacSummaryOnly: true
+                        };
+                    }).filter(Boolean));
+                });
             }
 
             container.innerHTML = '';
@@ -7335,8 +7523,12 @@ async function authPedirNuevaClave() {
         // =========================================================================
         async function openOrderHub(orderId) {
             currentExecOrderId = orderId;
-            const order = workOrders.find(o => o.id === orderId);
+            let order = workOrders.find(o => String(o.id) === String(orderId));
             if (!order) return;
+            if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') {
+                order = await hvacEnsureFullOrder(orderId);
+                if (!order) { showToast('No se pudo cargar el detalle de la orden. Revisa la conexión e inténtalo de nuevo.', 'error'); return; }
+            }
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
             document.getElementById('hub-order-title').innerText = `Orden ${order.id}${order.zoneName ? ' · ' + order.zoneName : ''} - ${order.client}`;
@@ -7463,8 +7655,8 @@ async function authPedirNuevaClave() {
                         await supabaseFetch('hvac_orders?id=eq.' + encodeURIComponent(r.id), 'PATCH', { payload: order }, { 'Prefer': 'return=minimal' }, { quiet: true });
                     }
                 }
-                const own = await supabaseFetch('hvac_orders?select=payload&id=eq.' + encodeURIComponent(mine), 'GET', null, null, { quiet: true });
-                verified = Array.isArray(own) && !!own[0] && ((own[0].payload || {}).equipmentIds || []).length === order.equipmentIds.length;
+                const own = await supabaseFetch('hvac_orders?select=equipment_ids:payload->equipmentIds&id=eq.' + encodeURIComponent(mine), 'GET', null, null, { quiet: true });
+                verified = Array.isArray(own) && !!own[0] && (own[0].equipment_ids || []).length === order.equipmentIds.length;
             }
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
             showToast(verified ? "Equipo removido y confirmado en la nube." : "Se quitó aquí, pero la nube NO confirmó el cambio. Revisa la consola (F12).", verified ? 'success' : 'error');
@@ -8639,9 +8831,11 @@ async function authPedirNuevaClave() {
             });
         }
 
-        function openInvoiceModal(orderId) {
-            const order = workOrders.find(o => o.id === orderId);
+        async function openInvoiceModal(orderId) {
+            let order = workOrders.find(o => o.id === orderId);
             if (!order) return;
+            if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
+            if (!order) return showToast('No se pudo cargar el detalle de la orden.', 'error');
             const inv = hvacMatrixHolder(order).invoice || {};
             const projInv = hvacProjForOrder(order.id);
 
@@ -8804,6 +8998,9 @@ async function authPedirNuevaClave() {
         function hvacOrderState(o) {
             const s = String(o && o.status || '').toUpperCase();
             if (s === 'BILLED') return 'BILLED';
+            // En una fila resumen no existe executions (se carga solo al revisar/PDF).
+            // status COMPLETED ya es el estado persistido y se respeta sin bajar las fotos.
+            if (o && o._hvacSummaryOnly) return s === 'COMPLETED' ? 'COMPLETED' : s === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'PENDING';
             const p = hvacOrderProgress(o);
             if (s === 'COMPLETED' && p.complete) return 'COMPLETED';
             return (p.done > 0 || hvacOrderHasExecution(o)) ? 'IN_PROGRESS' : 'PENDING';
@@ -8826,12 +9023,9 @@ async function authPedirNuevaClave() {
         async function hvacLoadMatrixParts(o) {
             const base = encodeURIComponent(hvacMatrixBase(o));
             try {
-                const rows = await supabaseFetch('hvac_orders?select=payload&or=(id.eq.' + base + ',id.like.' + base + '-P*)&limit=100', 'GET', null, null, { quiet: true });
+                const rows = await cloudFetchOrderSummaries('&or=' + encodeURIComponent('(id.eq.' + base + ',id.like.' + base + '-P*)') + '&limit=100');
                 if (!Array.isArray(rows)) return false;
-                rows.forEach(r => {
-                    const p = r && r.payload; if (!p || !p.id) return;
-                    if (!workOrders.some(x => String(x.id) === String(p.id))) workOrders.push(p);
-                });
+                mergeOrderSummariesIntoList(rows);
                 return true;
             } catch (e) { console.warn('[Matriz] No se pudieron verificar las partes:', e); return false; }
         }
@@ -9009,20 +9203,24 @@ async function authPedirNuevaClave() {
 
             pageList.forEach(o => {
                 const eqIds = o.equipmentIds || [];
-                const executions = o.executions || {};
-                let checklistDone = 0, checklistTotal = 0;
-                const missingByEquipment = [];
-                eqIds.forEach(eqId => {
-                    const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
-                    const exec = executions[eqId] || executions[eq.id] || executions[eq.code];
-                    const metrics = getChecklistProgressMetrics(eq, exec);
-                    checklistDone += metrics.done; checklistTotal += metrics.total;
-                    if (!hvacExecutionIsFinalized(o, eqId)) missingByEquipment.push(`${eq.code || eqId}: pendiente de finalizar informe`);
-                });
-                const progress = hvacOrderProgress(o);
-                const doneCount = progress.done;
-                const percent = progress.total > 0 ? Math.round((doneCount / progress.total) * 100) : 0;
-                const progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
+                let doneCount = 0, percent = 0;
+                let progressTitle = 'Progreso detallado disponible al revisar la orden.';
+                if (o._hvacSummaryOnly) {
+                    doneCount = String(o.status || '').toUpperCase() === 'COMPLETED' ? eqIds.length : 0;
+                    percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                } else {
+                    const executions = o.executions || {};
+                    const missingByEquipment = [];
+                    eqIds.forEach(eqId => {
+                        const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
+                        const exec = executions[eqId] || executions[eq.id] || executions[eq.code];
+                        if (!hvacExecutionIsFinalized(o, eqId)) missingByEquipment.push(`${eq.code || eqId}: pendiente de finalizar informe`);
+                    });
+                    const progress = hvacOrderProgress(o);
+                    doneCount = progress.done;
+                    percent = progress.total > 0 ? Math.round((doneCount / progress.total) * 100) : 0;
+                    progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
+                }
                 const ownState = hvacOrderState(o);
                 const mParts = hvacMatrixParts(o);
                 let statusBadge = hvacStateBadge(ownState) + hvacToolChip(o);
@@ -9585,8 +9783,8 @@ function planCalEvents() {
 }
 async function planCalFetchRange(start, end) {
     const s = start.toLocaleDateString('en-CA'), e = end.toLocaleDateString('en-CA');
-    const rows = await supabaseFetch(`hvac_orders?select=payload&id=not.like.HIST-*&payload->>date=gte.${s}&payload->>date=lt.${e}&limit=500`, 'GET', null, null, { quiet: true });
-    if (Array.isArray(rows)) mergeOrdersIntoList(rows.map(r => r && r.payload).filter(Boolean));
+    const rows = await cloudFetchOrderSummaries(`&id=not.like.HIST-*&payload->>date=gte.${s}&payload->>date=lt.${e}&order=payload->>date.asc&limit=500`);
+    if (Array.isArray(rows)) mergeOrderSummariesIntoList(rows);
 }
 function planCalLoad() {
     if (!planCal) return;
@@ -11858,9 +12056,13 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
    */
   async function generateMaintenancePDF(orderId, reportType, options = {}) {
     const currentOrders = getWorkOrders();
-    const order = (Array.isArray(currentOrders) ? currentOrders : [])
+    let order = (Array.isArray(currentOrders) ? currentOrders : [])
       .find(item => String(item.id) === String(orderId));
     if (!order) throw new Error(`No se encontró la orden ${orderId} en workOrders.`);
+    if (order._hvacSummaryOnly && typeof window.hvacEnsureFullOrder === 'function') {
+      order = await window.hvacEnsureFullOrder(orderId);
+    }
+    if (!order) throw new Error(`No se pudo descargar el detalle de la orden ${orderId}.`);
 
     const typeKey = normalizeRoutine(reportType || getOrderType(order));
     if (!typeKey || !REPORTS[typeKey]) throw new Error('Tipo de informe inválido. Usa REVISION, PREVENTIVO o CORRECTIVO.');
@@ -11987,6 +12189,10 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     try {
       if (typeof window.generateMaintenancePDF !== 'function') {
         throw new Error('El generador de informes no está disponible. Recarga la página.');
+      }
+      if (typeof window.hvacEnsureFullOrder === 'function') {
+        const fullOrder = await window.hvacEnsureFullOrder(orderId);
+        if (!fullOrder) throw new Error('No se pudo cargar el detalle de la orden para generar el PDF.');
       }
       let typeKey = window.hvacNormalizeReportType(reportType);
       if (!typeKey) {

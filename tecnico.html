@@ -1962,7 +1962,18 @@ async function authPedirNuevaClave() {
                 let body = payload;
                 if (table === 'hvac_orders') {      // fusiona con la nube: conserva lo que cambió el administrador y lo que guardaron otros técnicos
                     const remote = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=payload`, 'GET', null, null, { quiet: true });
-                    if (Array.isArray(remote) && remote[0] && remote[0].payload) { body = mergeSharedOrder(payload, remote[0].payload); applyMergedToLocal(cleanId, body); }
+                    const hasRemote = Array.isArray(remote) && remote[0] && remote[0].payload;
+                    if (hvacHasLite(payload)) {
+                        // La copia local viene de un listado liviano (sin fotos): jamás se sube recortada.
+                        if (!Array.isArray(remote)) return null;                     // sin lectura confiable: queda en la bandeja de salida
+                        if (hasRemote) hvacRestoreHeavy(payload, remote[0].payload);
+                        hvacStripLiteFlags(payload);
+                    }
+                    if (hasRemote) {
+                        body = mergeSharedOrder(payload, remote[0].payload); applyMergedToLocal(cleanId, body);
+                        const lo = workOrders.find(o => o && (o.id === cleanId || cloudCleanId(o.id) === cleanId));
+                        if (lo && hvacHasLite(lo)) { if (lo.clientSignature && lo.clientSignature._lite && body.clientSignature) lo.clientSignature = body.clientSignature; hvacStripLiteFlags(lo); }
+                    }
                 }
                 // Plan A: upsert atómico (1 petición)
                 let r = await supabaseFetch(`${table}?on_conflict=id`, 'POST', { id: cleanId, payload: body }, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, { quiet: true });
@@ -1972,7 +1983,10 @@ async function authPedirNuevaClave() {
                     if (check && check.length > 0) r = await supabaseFetch(`${table}?id=eq.${enc}`, 'PATCH', { payload: body }, { 'Prefer': 'return=minimal' }, { quiet: true });
                     else if (check) r = await supabaseFetch(table, 'POST', { id: cleanId, payload: body }, null, { quiet: true });
                 }
-                if (r) cloudOutboxClear(table, cleanId, queuedEntry.ts);
+                if (r) {
+                    cloudOutboxClear(table, cleanId, queuedEntry.ts);
+                    if (table === 'hvac_orders') { try { egressSet('full:' + cleanId, JSON.stringify(body)); } catch (_) {} }   // lo recién guardado ya es la copia completa más reciente
+                }
                 return r || null;
             });
         }
@@ -2305,7 +2319,7 @@ async function authPedirNuevaClave() {
                     if (cloudIds !== localIds) { adopted.clientSignature = cloudOrder.clientSignature || null; if (String(cloudOrder.status || '').toUpperCase() === 'PENDING') adopted.status = 'PENDING'; }
                     return adopted;
                 }
-                return cloudOrder;
+                return hvacMergeLiteWithLocal(cloudOrder, localOrder);   // listado liviano: conserva lo completo que ya hay aquí
             });
         }
 
@@ -2331,25 +2345,206 @@ async function authPedirNuevaClave() {
             return activeUser ? systemUsers.find(x => String(x.id) === String(activeUser)) : null;
         }
 
-        async function fetchMyActiveOrders() {
-            const u = techCurrentUserRecord();
-            if (!u) return null; // sin sesión todavía: no se piden órdenes
+        // =========================================================================
+        // EGRESS: caché en memoria + listados livianos + carga bajo demanda
+        //  - El listado NUNCA trae fotos ni firmas: solo lo necesario para pintar las tarjetas.
+        //    Usa la vista `hvac_orders_lite` (ver supabase_hvac_orders_lite.sql). Si la vista aún
+        //    no existe, usa un respaldo que lee solo campos escalares de hvac_orders.
+        //  - El payload completo (fotos) se descarga solo al abrir un equipo con fotos previas.
+        //  - Toda lectura repetida dentro de su TTL se responde desde memoria (sin red).
+        // =========================================================================
+        const EGRESS = {
+            LIST_TTL_MS: 3 * 60 * 1000,      // listado de rutinas del técnico
+            USERS_TTL_MS: 10 * 60 * 1000,    // usuarios
+            STATE_TTL_MS: 3 * 60 * 1000,     // agenda / formularios compartidos
+            FULL_TTL_MS: 10 * 60 * 1000,     // payload completo de una orden
+            HIST_TTL_MS: 10 * 60 * 1000,     // historial de un equipo
+            EQ_TTL_MS: 10 * 60 * 1000,       // equipos de una rutina
+            CLIENTS_TTL_MS: 10 * 60 * 1000,  // lista de clientes (marcación GPS)
+            MAX_FULL: 3,                     // máx. de órdenes completas guardadas en memoria
+            LITE_VIEW: 'hvac_orders_lite',
+            liteViewMissing: false,
+            mem: new Map(),
+            inflight: new Map(),
+            stats: { hits: 0, net: 0 }
+        };
+        function egressGet(key, ttl) {
+            const e = EGRESS.mem.get(key);
+            if (e && (Date.now() - e.t) < ttl) { EGRESS.stats.hits++; return e.v; }
+            return undefined;
+        }
+        function egressSet(key, v) {
+            EGRESS.mem.set(key, { t: Date.now(), v });
+            const fulls = [...EGRESS.mem.entries()].filter(([k]) => k.startsWith('full:')).sort((a, b) => a[1].t - b[1].t);
+            while (fulls.length > EGRESS.MAX_FULL) EGRESS.mem.delete(fulls.shift()[0]);
+            if (EGRESS.mem.size > 60) {
+                const oldest = [...EGRESS.mem.entries()].sort((a, b) => a[1].t - b[1].t)[0];
+                if (oldest) EGRESS.mem.delete(oldest[0]);
+            }
+            return v;
+        }
+        function egressInvalidate(prefix) { [...EGRESS.mem.keys()].forEach(k => { if (k.startsWith(prefix)) EGRESS.mem.delete(k); }); }
+        function egressOnce(key, fn) {     // evita peticiones idénticas simultáneas
+            if (EGRESS.inflight.has(key)) return EGRESS.inflight.get(key);
+            const p = Promise.resolve().then(fn).finally(() => EGRESS.inflight.delete(key));
+            EGRESS.inflight.set(key, p);
+            return p;
+        }
+        window.egressStats = () => ({ ...EGRESS.stats, entradas: EGRESS.mem.size, vistaLite: !EGRESS.liteViewMissing });
+
+        // ---- Órdenes "livianas": marcas _lite indican que faltan partes pesadas (fotos / imagen de firma) ----
+        function hvacHasLite(o) {
+            if (!o) return false;
+            if (o._lite) return true;
+            if (o.clientSignature && o.clientSignature._lite) return true;
+            return Object.values(o.executions || {}).some(e => e && e._lite);
+        }
+        function hvacStripLiteFlags(o) {
+            if (!o) return o;
+            delete o._lite;
+            if (o.clientSignature && o.clientSignature._lite) delete o.clientSignature._lite;
+            Object.values(o.executions || {}).forEach(e => { if (e && e._lite) delete e._lite; });
+            return o;
+        }
+        // Reemplaza los sub-objetos recortados por los completos de la nube.
+        function hvacRestoreHeavy(local, remote) {
+            if (!local || !remote) return local;
+            const rex = remote.executions || {};
+            Object.keys(local.executions || {}).forEach(k => {
+                const v = local.executions[k];
+                if (v && v._lite) { if (rex[k]) local.executions[k] = rex[k]; else delete v._lite; }
+            });
+            const cs = local.clientSignature;
+            if (cs && cs._lite) { if (remote.clientSignature) local.clientSignature = remote.clientSignature; else delete cs._lite; }
+            return local;
+        }
+        // Cuando el listado de la nube es más nuevo, conserva lo completo que ya hay en el dispositivo.
+        function hvacMergeLiteWithLocal(cloud, local) {
+            if (!cloud || !hvacHasLite(cloud) || !local || typeof local !== 'object') return cloud;
+            const out = Object.assign({}, cloud);
+            out.executions = Object.assign({}, cloud.executions || {});
+            Object.entries(local.executions || {}).forEach(([k, v]) => {
+                if (!v || v._lite) return;
+                const c = out.executions[k];
+                if (!c || (c._lite && execTs(v) >= execTs(c))) out.executions[k] = v;
+            });
+            const lcs = local.clientSignature, ccs = out.clientSignature;
+            if (ccs && ccs._lite && lcs && !lcs._lite && String(lcs.timestamp || '') === String(ccs.timestamp || '')) out.clientSignature = lcs;
+            return out;
+        }
+
+        // ---- Listado del técnico ----
+        const EGRESS_SCALAR_SELECT = [
+            'id', 'status:payload->>status', 'date:payload->>date', 'client:payload->>client',
+            'technician:payload->>technician', 'technicians:payload->technicians', 'equipmentIds:payload->equipmentIds',
+            'maintenanceType:payload->>maintenanceType', 'type:payload->>type', 'tipoRutina:payload->>tipoRutina',
+            'zoneName:payload->>zoneName', 'zoneId:payload->>zoneId', 'periodicity:payload->>periodicity',
+            'technicianFinished:payload->>technicianFinished', 'technicianFinishedAt:payload->>technicianFinishedAt',
+            'updatedAt:payload->>updatedAt', 'sigName:payload->clientSignature->>name', 'sigTs:payload->clientSignature->>timestamp'
+        ].join(',');
+        function egressScalarToOrder(r) {
+            if (!r || r.id == null) return null;
+            const o = { id: r.id, executions: {}, _lite: 'scalar' };
+            ['status', 'date', 'client', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'updatedAt']
+                .forEach(k => { if (r[k] != null) o[k] = r[k]; });
+            if (Array.isArray(r.technicians)) o.technicians = r.technicians;
+            o.equipmentIds = Array.isArray(r.equipmentIds) ? r.equipmentIds : [];
+            o.technicianFinished = String(r.technicianFinished) === 'true';
+            if (r.sigTs || r.sigName) o.clientSignature = { name: r.sigName || '', timestamp: r.sigTs || '', _lite: true };
+            return o;
+        }
+        async function egressFetchOrdersFromNet(u) {
             const names = [...new Set([u.name, u.username].filter(Boolean))];
             if (!names.length) return [];
-            // eq = rutina de un solo técnico · ilike = rutinas con varios técnicos ("Ana, Luis"); luego se filtra exacto en el cliente
-            const techOr = names.map(n => 'payload->>technician.eq.' + pgQuote(n)).concat(names.map(n => 'payload->>technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
-            const base = 'hvac_orders?select=payload&id=not.like.HIST-*&order=payload->>date.desc';
-            // 1) Pendientes + completadas que el técnico aún no ha terminado
-            let rows = await supabaseFetch(
-                base + '&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')') + '&limit=200',
-                'GET', null, null, { quiet: true });
-            // 2) Plan B: sin ordenar por JSON (por si el servidor no lo soporta)
-            if (!Array.isArray(rows)) {
-                rows = await supabaseFetch(
-                    'hvac_orders?select=payload&id=not.like.HIST-*&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')') + '&limit=200',
-                    'GET', null, null, { quiet: true });
+            EGRESS.stats.net++;
+            const q = { quiet: true };
+            // 1) Vista liviana (sin fotos). Los filtros se aplican sobre columnas simples de la vista.
+            if (!EGRESS.liteViewMissing) {
+                const techOrV = names.map(n => 'technician.eq.' + pgQuote(n)).concat(names.map(n => 'technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
+                const baseV = EGRESS.LITE_VIEW + '?select=id,payload&id=not.like.HIST-*&status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOrV + ')');
+                let rows = await supabaseFetch(baseV + '&tech_open=is.true&order=date.desc&limit=200', 'GET', null, null, q);
+                if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
+                if (!Array.isArray(rows) && !EGRESS.liteViewMissing) rows = await supabaseFetch(baseV + '&limit=200', 'GET', null, null, q);
+                if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
+                if (Array.isArray(rows)) return rows.map(r => r && r.payload).filter(Boolean);
+                if (!EGRESS.liteViewMissing) return null;       // error de red u otro: no se cae al camino pesado
             }
-            return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(o => o && techMatches(o, u)) : null;
+            // 2) Respaldo sin la vista: solo campos escalares de hvac_orders (nunca el payload completo)
+            console.info('[Egress] Falta la vista hvac_orders_lite: se usa el respaldo de campos escalares. Ejecuta supabase_hvac_orders_lite.sql para ver el avance real de cada rutina.');
+            const techOr = names.map(n => 'payload->>technician.eq.' + pgQuote(n)).concat(names.map(n => 'payload->>technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
+            const base = 'hvac_orders?select=' + EGRESS_SCALAR_SELECT + '&id=not.like.HIST-*&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')');
+            // (las rutinas ya terminadas por el técnico se descartan en el cliente: un filtro "not.eq.true" ocultaría las que no tienen ese campo)
+            let rows = await supabaseFetch(base + '&order=payload->>date.desc&limit=200', 'GET', null, null, q);
+            if (!Array.isArray(rows)) rows = await supabaseFetch(base + '&limit=200', 'GET', null, null, q);
+            return Array.isArray(rows) ? rows.map(egressScalarToOrder).filter(Boolean) : null;
+        }
+        // opts.force: ignora la caché (sincronización manual) · opts.maxAge: antigüedad máxima aceptada en ms
+        async function fetchMyActiveOrders(opts) {
+            opts = opts || {};
+            const u = techCurrentUserRecord();
+            if (!u) return null; // sin sesión todavía: no se piden órdenes
+            const uid = String(u.id);
+            const ckey = 'orders:' + uid;
+            const ttl = opts.maxAge || EGRESS.LIST_TTL_MS;
+            const finish = list => (Array.isArray(list) ? list.filter(o => o && techMatches(o, u)) : null);
+            if (!opts.force) {
+                const hit = egressGet(ckey, ttl);
+                if (hit) return finish(JSON.parse(hit));
+                // Tras recargar la app: si el listado se descargó hace pocos minutos, el respaldo local sirve igual.
+                let last = 0; try { last = Number(localStorage.getItem('HVAC_LIST_AT_' + uid)) || 0; } catch (_) {}
+                if (last && (Date.now() - last) < ttl && Array.isArray(workOrders) && workOrders.length) { EGRESS.stats.hits++; return finish(workOrders.slice()); }
+            }
+            return egressOnce(ckey + ':net', async () => {
+                const list = await egressFetchOrdersFromNet(u);
+                if (!Array.isArray(list)) return null;
+                egressSet(ckey, JSON.stringify(list));
+                try { localStorage.setItem('HVAC_LIST_AT_' + uid, String(Date.now())); } catch (_) {}
+                return finish(list);
+            });
+        }
+
+        // ---- Payload completo de UNA orden (bajo demanda) ----
+        async function egressFetchFullPayload(orderId, force) {
+            const id = cloudCleanId(orderId);
+            const key = 'full:' + id;
+            if (!force) { const hit = egressGet(key, EGRESS.FULL_TTL_MS); if (hit) return JSON.parse(hit); }
+            return egressOnce(key + ':net', async () => {
+                EGRESS.stats.net++;
+                const rows = await supabaseFetch('hvac_orders?id=eq.' + encodeURIComponent(id) + '&select=payload', 'GET', null, null, { quiet: true });
+                const payload = Array.isArray(rows) && rows[0] && rows[0].payload;
+                if (!payload) return null;
+                egressSet(key, JSON.stringify(payload));
+                return JSON.parse(JSON.stringify(payload));
+            });
+        }
+        // Completa en el mismo objeto (los modales conservan su referencia) lo que el listado no traía.
+        async function hvacEnsureFullOrder(orderId, force) {
+            const find = () => workOrders.find(o => o && String(o.id) === String(orderId));
+            let cur = find();
+            if (!cur) return false;
+            if (!hvacHasLite(cur)) return true;
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+            const remote = await egressFetchFullPayload(orderId, force);
+            if (!remote) return false;
+            cur = find(); if (!cur) return false;
+            hvacRestoreHeavy(cur, remote);
+            Object.keys(remote).forEach(k => { if (cur[k] === undefined) cur[k] = remote[k]; });
+            cur.executions = cur.executions || {};
+            Object.entries(remote.executions || {}).forEach(([k, v]) => {
+                const l = cur.executions[k];
+                if (!l || l._lite || execTs(v) > execTs(l)) cur.executions[k] = v;
+            });
+            hvacStripLiteFlags(cur);
+            try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (_) {}
+            return true;
+        }
+        // ¿Abrir este equipo exige las fotos que el listado no trajo?
+        function hvacExecNeedsHeavy(order, eqId) {
+            if (!order || !hvacHasLite(order)) return false;
+            const eq = techFindEq(eqId) || {};
+            const ex = order.executions && (order.executions[eqId] || (eq.code && order.executions[eq.code]));
+            if (ex && ex._lite) return Number(ex.photosCount) > 0;
+            return order._lite === 'scalar';
         }
 
         // Pide a Supabase SOLO los equipos de la rutina indicada y los fusiona en memoria.
@@ -2357,6 +2552,8 @@ async function authPedirNuevaClave() {
             if (!order) return false;
             const ids = [...new Set((order.equipmentIds || []).map(String).filter(Boolean))];
             if (!ids.length) return true;
+            // Si los equipos de esta rutina ya se leyeron hace poco y siguen en memoria, no se vuelve a pedir nada.
+            if (ids.every(id => techFindEq(id)) && egressGet('eqs:' + order.id, EGRESS.EQ_TTL_MS)) return true;
             const keys = [...new Set(ids.concat(ids.map(cloudCleanId)))];
             let ok = true;
             for (let i = 0; i < keys.length; i += 40) {
@@ -2370,6 +2567,7 @@ async function authPedirNuevaClave() {
                 });
             }
             try { localStorage.setItem('HVAC_EQUIPMENTS_BACKUP', JSON.stringify(equipmentCatalog)); } catch (_) {}
+            if (ok) egressSet('eqs:' + order.id, '1');
             return ok;
         }
 
@@ -2379,13 +2577,18 @@ async function authPedirNuevaClave() {
                 refreshAppFromCurrentData();
 
                 // Usuarios: tabla liviana y SIN administradores (sus credenciales nunca llegan al teléfono)
-                const usrData = await supabaseFetch('hvac_users?select=payload&payload->>role=neq.ADMIN', 'GET', null, null, { quiet: true })
-                    || await supabaseFetch('hvac_users?select=payload', 'GET');
+                let usrData = null;
+                if (!forceSync && Array.isArray(systemUsers) && systemUsers.length) { const hit = egressGet('users', EGRESS.USERS_TTL_MS); if (hit) usrData = JSON.parse(hit); }
+                if (!usrData) {
+                    usrData = await supabaseFetch('hvac_users?select=payload&payload->>role=neq.ADMIN', 'GET', null, null, { quiet: true })
+                        || await supabaseFetch('hvac_users?select=payload', 'GET');
+                    if (Array.isArray(usrData) && usrData.length) egressSet('users', JSON.stringify(usrData));
+                }
                 if (Array.isArray(usrData) && usrData.length > 0) systemUsers = usrData.map(r => r.payload).filter(Boolean);
                 techStripAdminUsers();
 
                 // Rutinas del técnico (solo las suyas y activas)
-                const myOrders = await fetchMyActiveOrders();
+                const myOrders = await fetchMyActiveOrders({ force: !!forceSync });
                 const cloudReadComplete = Array.isArray(usrData) && (myOrders !== null);
                 if (Array.isArray(myOrders)) {
                     const localOrders = readLocalBackup('HVAC_ORDERS_BACKUP', workOrders);
@@ -2435,7 +2638,9 @@ async function authPedirNuevaClave() {
                 if (force && queueStatus.pending) {
                     cloudSetBadge('syncing', queueStatus.pending + ' cambio(s) local(es) pendientes; se reintentará automáticamente.');
                 }
-                try { await cloudHydrateState(); } catch (e) { console.warn('hydrateState', e); }
+                if (force || egressGet('state', EGRESS.STATE_TTL_MS) === undefined) {
+                    try { await cloudHydrateState(); egressSet('state', '1'); } catch (e) { console.warn('hydrateState', e); }
+                }
                 cloudStateCtl.muted = true;
                 try { return await original(force); } finally { cloudStateCtl.muted = false; }
             };
@@ -2721,7 +2926,7 @@ async function authPedirNuevaClave() {
             const checks = exec.checklist || {};
             const paramFilled = params.filter((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim()).length;
             const checksDone = checklist.filter((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true).length;
-            const hasAny = paramFilled > 0 || checksDone > 0 || !!String(exec.obs || '').trim() || !!(exec.photos && exec.photos.length) || !!exec.corrective;
+            const hasAny = paramFilled > 0 || checksDone > 0 || !!String(exec.obs || '').trim() || !!(exec.photos && exec.photos.length) || Number(exec.photosCount) > 0 || !!exec.corrective;
             if (!hasAny) return 'pending';
             return paramFilled === params.length && checksDone === checklist.length ? 'done' : 'progress';
         }
@@ -3993,7 +4198,7 @@ function mxGetPosition() {
 const mxFold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 async function mxLoadAllClients() {
   const KEY = 'HVAC_CLIENTS_ALL'; let all = null;
-  if (navigator.onLine) {
+  if (navigator.onLine && egressGet('clients', EGRESS.CLIENTS_TTL_MS) === undefined) {   // si se leyó hace poco, se usa la copia local
     all = [];
     for (let off = 0; ; off += 1000) {                       // sin filtros ni límite fijo: pagina de 1000 en 1000
       const rows = await supabaseFetch('hvac_clients?select=payload&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true });
@@ -4001,6 +4206,7 @@ async function mxLoadAllClients() {
       all.push(...rows.map(r => r && r.payload).filter(c => c && c.name));
       if (rows.length < 1000) break;
     }
+    if (all) egressSet('clients', '1');
     if (all && all.length) { try { localStorage.setItem(KEY, JSON.stringify(all.map(c => ({ id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, latitud: c.latitud, longitud: c.longitud, geoRadius: c.geoRadius })))); } catch (e) {} }
   }
   if (!all || !all.length) { try { all = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { all = []; } }   // sin señal: última lista descargada
@@ -4135,7 +4341,7 @@ setTimeout(mxFlushQueue, 4000);
 /* ---------------- Rutinas compartidas: refresco en vivo cada 30 s ---------------- */
 async function mxPullShared() {
   if (!navigator.onLine || document.hidden || !techCurrentUserRecord()) return;
-  const remote = await fetchMyActiveOrders(); if (!Array.isArray(remote)) return;
+  const remote = await fetchMyActiveOrders({ maxAge: 120000 }); if (!Array.isArray(remote)) return;   // como máximo 1 petición cada 2 min
   let changed = false;
   remote.filter(r => orderTechs(r).length > 1).forEach(r => {
     const lo = workOrders.find(o => o && o.id === r.id);
@@ -4262,10 +4468,24 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
     (workOrders || []).forEach(add);                                  // copia local (sirve sin señal)
     if (navigator.onLine) {
       for (const k of keys.slice(0, 3)) {
-        const cs = encodeURIComponent(JSON.stringify([k]));
-        let rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=10', 'GET', null, null, { quiet: true });
-        if (!Array.isArray(rows)) rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&limit=30', 'GET', null, null, { quiet: true });
-        if (Array.isArray(rows)) rows.forEach(r => add(r && r.payload));
+        const hkey = 'hist:' + k;
+        let list; const hit = egressGet(hkey, EGRESS.HIST_TTL_MS);
+        if (hit) list = JSON.parse(hit);
+        else {
+          const cs = encodeURIComponent(JSON.stringify([k]));
+          let rows = null;
+          if (!EGRESS.liteViewMissing) {          // vista liviana: trae parámetros y checklist, sin fotos
+            rows = await supabaseFetch(EGRESS.LITE_VIEW + '?select=payload&equipment_ids=cs.' + cs + '&order=date.desc&limit=10', 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
+          }
+          if (!Array.isArray(rows) && EGRESS.liteViewMissing) {   // respaldo sin la vista: pocas filas
+            rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=3', 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows)) rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&limit=3', 'GET', null, null, { quiet: true });
+          }
+          list = Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
+          if (list) egressSet(hkey, JSON.stringify(list));
+        }
+        if (Array.isArray(list)) list.forEach(add);
       }
     }
     const cands = [...found.values()].map(o => ({ o, ex: execOf(o, keys) }))
@@ -4307,7 +4527,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
 
     h += '<div class="lm-sec">Novedades / observaciones</div><div class="lm-note">' + esc(ex.obs && String(ex.obs).trim() ? ex.obs : 'Sin observaciones.') + '</div>';
     if (ex.corrective) h += '<div class="lm-sec">Correctivo reportado</div><div class="lm-note warn">' + esc(ex.correctiveDesc || 'Se reportó un correctivo sin descripción.') + '</div>';
-    const nPh = Array.isArray(ex.photos) ? ex.photos.length : 0;
+    const nPh = Array.isArray(ex.photos) ? ex.photos.length : (Number(ex.photosCount) || 0);
     if (nPh) h += '<div class="lm-meta" style="margin-top:10px"><span><i class="fa-solid fa-camera"></i> ' + nPh + ' foto(s) en ese registro</span></div>';
     return h;
   }
@@ -4391,6 +4611,32 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   window.addEventListener('load', init);
+})();
+</script>
+<script>
+/* Carga bajo demanda: al abrir un equipo cuya ejecución previa tenía fotos, recién ahí se descarga el payload completo de la orden. */
+(function () {
+  var base = window.openEquipmentExecutionModal;
+  if (typeof base !== 'function' || base.__lazyFull) return;
+  var wrapped = function (orderId, eqId) {
+    var self = this, args = arguments;
+    var order = workOrders.find(function (o) { return o && String(o.id) === String(orderId); });
+    if (!order || !hvacExecNeedsHeavy(order, eqId)) return base.apply(self, args);
+    var cached = egressGet('full:' + cloudCleanId(orderId), EGRESS.FULL_TTL_MS) !== undefined;
+    if (!cached) showToast('Cargando fotos del equipo…');
+    return hvacEnsureFullOrder(orderId).then(function (ok) {
+      if (!ok && hvacExecNeedsHeavy(order, eqId)) {
+        showToast('Sin conexión: no se pueden cargar las fotos ya registradas de este equipo. Conéctate para abrirlo y no perderlas.', 'error');
+        return;
+      }
+      return base.apply(self, args);
+    }).catch(function (e) {
+      console.warn('[Egress] No se pudo completar la orden:', e);
+      showToast('No se pudo cargar el detalle del equipo. Intenta de nuevo.', 'error');
+    });
+  };
+  wrapped.__lazyFull = true;
+  window.openEquipmentExecutionModal = wrapped;
 })();
 </script>
 </body>
