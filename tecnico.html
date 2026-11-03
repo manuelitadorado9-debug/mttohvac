@@ -723,8 +723,11 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <span class="chk-box"><i class="fa-solid fa-check"></i></span>
                             <span class="chk-text">¿Requiere correctivo?</span>
                         </label>
-                        <div id="corrective-details-box" class="hidden" style="display:none" aria-hidden="true">
-                            <textarea id="exec-corrective-desc" rows="1" tabindex="-1"></textarea>
+                        <div id="corrective-details-box" class="hidden">
+                            <label class="field">
+                                <span>Descripción de la novedad o correctivo *</span>
+                                <textarea id="exec-corrective-desc" rows="3" class="input" placeholder="Explica la falla o el trabajo requerido…"></textarea>
+                            </label>
                         </div>
                     </div>
 
@@ -741,7 +744,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <span id="dictado-texto">Escuchando…</span>
                             <button type="button" id="dictado-parar" class="parar">Detener</button>
                         </div>
-                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar notas</button>
+                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar con IA</button>
                         <label class="field" style="margin-top:10px">
                             <span>Observaciones técnicas (puedes editarlas)</span>
                             <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el párrafo técnico redactado a partir de tus notas…"></textarea>
@@ -3090,13 +3093,7 @@ async function authPedirNuevaClave() {
             });
 
             const corrective = document.getElementById('exec-chk-correctivo').checked;
-            let correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
-            if (corrective && !correctiveDesc) {
-                const formal = (document.getElementById('exec-f-notas-analiticas').value || '').replace(/^Durante[^.]*se registró lo siguiente\.\s*/i, '').replace(/\s+/g, ' ').trim();
-                const base = formal || String(document.getElementById('exec-f-obs').value || '').replace(/\s+/g, ' ').trim();
-                const cut = base.length > 260 ? base.slice(0, 260).replace(/[^.]*$/, '').trim() || base.slice(0, 260) + '…' : base;
-                correctiveDesc = cut;
-            }
+            const correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
 
             const eq = techFindEq(currentExecEqId);
             const typeKey = (eq && eq.type ? eq.type : 'EXTRACTOR').trim().toUpperCase();
@@ -3316,7 +3313,7 @@ async function authPedirNuevaClave() {
         /* =====================================================================
            DICTADO POR VOZ + PROCESAMIENTO DE NOTAS (100 % gratis)
            - Voz a texto: API nativa de Chrome (SpeechRecognition), sin costo ni claves.
-           - Redacción: función /api/ia/redactar-notas (Gemini, capa gratuita). Si falla o
+           - Redacción: función /api/ia/procesar-notas (Gemini, capa gratuita). Si falla o
              no hay internet, se usa un procesador local básico que NO necesita IA ni claves.
            ===================================================================== */
         const DICT = { rec: null, active: false, base: '', finals: [], interim: '', timer: null, finishing: false };
@@ -3471,24 +3468,12 @@ async function authPedirNuevaClave() {
             if (data.requiere_correctivo === true) {
                 const chk = dEl('exec-chk-correctivo');
                 if (chk && !chk.checked) { chk.checked = true; toggleCorrectiveSection(); }
-                const d = dEl('exec-corrective-desc');                   // oculto: solo guarda la frase formal de la IA
-                if (d) d.value = (data.fuente === 'ia' && data.descripcion_correctivo) ? String(data.descripcion_correctivo).slice(0, 600) : '';
+                const d = dEl('exec-corrective-desc');
+                if (d && !d.value.trim() && data.descripcion_correctivo) d.value = String(data.descripcion_correctivo).slice(0, 600);
                 extra = ' Marqué “¿Requiere correctivo?”: verifícalo.';
             }
             if (typeof updateExecProgress === 'function') updateExecProgress();
             return extra;
-        }
-
-        // Intenta la IA del servidor; si no responde (sin clave, sin cupo, sin internet) usa el procesador local.
-        // Tras un fallo se pausa 10 minutos para no hacer esperar al técnico.
-        // Redacción con IA gratuita (Cloudflare Workers AI) a través del servidor. Si falla, se usa el procesador local.
-        // Para apagarla: IA_ACTIVA = false.
-        const IA_ACTIVA = true;
-        let iaPausaHasta = 0;
-        async function iaFetch(body) {
-            const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 40000);
-            try { return await fetch('/api/ia/redactar-cf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctl.signal }); }
-            finally { clearTimeout(timer); }
         }
 
         async function ordenOptimizarNotas(opts) {
@@ -3499,32 +3484,29 @@ async function authPedirNuevaClave() {
             if (!notas) { if (!auto) showToast('Escribe o dicta primero las notas del técnico.', 'error'); return; }
             const editado = (out.dataset.edited === '1' && out.value.trim()) || (con.dataset.edited === '1' && con.value.trim());
             if (editado) {
-                if (auto) return showToast('Dictado listo. Toca “Procesar notas” para actualizar tus textos editados.');
+                if (auto) return showToast('Dictado listo. Toca “Procesar con IA” para actualizar tus textos editados.');
                 if (!confirm('Ya editaste las observaciones o las conclusiones. ¿Reemplazarlas con el nuevo resultado?')) return;
             }
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…';
-            let data = null, motivoIA = '';
+            let data = null;
             try {
-                if (!IA_ACTIVA || !navigator.onLine || Date.now() < iaPausaHasta) throw new Error('local');   // sin IA: procesamiento local, instantáneo y sin internet
-                const r = await iaFetch(JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() }));
+                if (!navigator.onLine) throw new Error('offline');
+                const r = await fetch('/api/ia/procesar-notas', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() })
+                });
                 const j = await r.json().catch(() => ({}));
-                if (!r.ok || !j.notas_analiticas) throw new Error(r.status + ': ' + (j.error || 'respuesta vacía del servidor'));
+                if (!r.ok || !j.notas_analiticas) throw new Error(j.error || 'Respuesta vacía');
                 data = j;
             } catch (e) {
                 console.warn('[IA] Se usa el procesador básico:', e && e.message);
-                if (!(e && e.message === 'local')) {
-                    const raw = String(e && e.message || '');
-                    // El cupo diario agotado y los errores de configuración se recuerdan 10 minutos; las demoras puntuales solo 1 minuto.
-                    iaPausaHasta = Date.now() + (/abort|tard/i.test(raw) ? 60 * 1000 : 10 * 60 * 1000);
-                    motivoIA = /abort|tard/i.test(raw) ? 'la IA tardó demasiado' : raw.replace(/^\d+:\s*/, '').slice(0, 90);
-                }
                 data = dictLocalProcess(notas, ordenTipoActual());
             }
             try {
                 const extra = dictApply(data);
-                if (data.fuente === 'local') showToast((motivoIA ? 'IA no disponible (' + motivoIA + '): se usó el modo básico. ' : 'Observaciones y conclusiones generadas. ') + 'Revísalas antes de guardar.' + extra);
+                if (data.fuente === 'local') showToast('Texto estructurado en modo básico (sin IA). Revísalo antes de guardar.' + extra);
                 else if (data.advertencia_numeros && data.advertencia_numeros.length) showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
                 else showToast('Observaciones y conclusiones generadas. Revísalas antes de guardar.' + extra);
             } finally { btn.disabled = false; btn.innerHTML = original; }
