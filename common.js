@@ -7,8 +7,8 @@
 
   /* ---------- Configuración ---------- */
   HVAC.cfg = {
-    url: () => 'https://edmsbznmboctzkxivypa.supabase.co',
-    key: () => 'sb_publishable_S3nfcj-MEb41o0JZI7uW6g_ePDz7g8L',
+    url: () => 'https://ahmicbkxpudqafbiuiav.supabase.co',
+    key: () => 'sb_publishable_WnOre9gtrRztesRXatpRdA_v302zi48',
     bucket: 'hvac-archivos',
     letterhead: { header: 'membrete/encabezado.jpg', footer: 'membrete/pie.jpg' }   // rutas dentro del bucket (público)
   };
