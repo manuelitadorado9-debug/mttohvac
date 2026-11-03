@@ -4414,11 +4414,50 @@ async function authPedirNuevaClave() {
             };
         }
 
+        // ===== Avance por equipo calculado EN EL SERVIDOR (RPC hvac_orders_progress) =====
+        // Devuelve 3 números por orden (total/finalizados/iniciados) en vez de descargar executions con fotos.
+        // Solo se consulta para las filas visibles que no estén completadas; TTL 60 s. Si la función SQL no
+        // existe todavía (404) se desactiva sola y el histórico se comporta como antes.
+        const HVAC_PROGRESS_TTL = 60 * 1000;
+        const hvacProgressCache = new Map();   // id -> { at, ok, total, done, started }
+        const hvacProgressPending = new Set();
+        let hvacProgressDisabled = false;
+        async function hvacRefreshProgress(list) {
+            if (hvacProgressDisabled || !navigator.onLine || !Array.isArray(list)) return false;
+            const now = Date.now();
+            const ids = [...new Set(list.filter(o => o && o._hvacSummaryOnly && !['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase())).map(o => String(o.id)))]
+                .filter(id => { const c = hvacProgressCache.get(id); return !hvacProgressPending.has(id) && (!c || now - c.at > HVAC_PROGRESS_TTL); });
+            let changed = false;
+            for (let i = 0; i < ids.length; i += 100) {
+                const chunk = ids.slice(i, i + 100);
+                chunk.forEach(id => hvacProgressPending.add(id));
+                try {
+                    const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: chunk }, null, { quiet: true });
+                    if (!Array.isArray(rows)) {
+                        if (cloudCtl.lastStatus === 404) { hvacProgressDisabled = true; console.info('[Avance] Falta la función SQL hvac_orders_progress: ejecuta hvac_orders_progress.sql en Supabase. Mientras tanto el avance se ve solo al revisar la orden.'); }
+                        chunk.forEach(id => hvacProgressCache.set(id, { at: Date.now(), ok: false }));
+                        continue;
+                    }
+                    const seen = new Set();
+                    rows.forEach(r => {
+                        if (!r || r.id == null) return;
+                        const id = String(r.id); seen.add(id);
+                        const prev = hvacProgressCache.get(id);
+                        const nx = { at: Date.now(), ok: true, total: Number(r.total) || 0, done: Number(r.done) || 0, started: Number(r.started) || 0 };
+                        if (!prev || !prev.ok || prev.done !== nx.done || prev.started !== nx.started || prev.total !== nx.total) changed = true;
+                        hvacProgressCache.set(id, nx);
+                    });
+                    chunk.forEach(id => { if (!seen.has(id)) hvacProgressCache.set(id, { at: Date.now(), ok: false }); });
+                } finally { chunk.forEach(id => hvacProgressPending.delete(id)); }
+            }
+            return changed;
+        }
+
         // Caché por consulta: alternar pestañas/filtros repetidos no vuelve a llamar a Supabase dentro del TTL.
         // Se invalida entera al guardar/borrar una orden y se salta con { force: true } (botón Actualizar).
         const hvacOrderQueryCache = new Map();   // query -> { at, rows }
         const hvacOrderQueryInFlight = new Map(); // query -> Promise
-        function hvacInvalidateOrderQueries() { hvacOrderQueryCache.clear(); }
+        function hvacInvalidateOrderQueries() { hvacOrderQueryCache.clear(); hvacProgressCache.clear(); }
         window.hvacInvalidateOrderQueries = hvacInvalidateOrderQueries;
         async function cloudFetchOrderSummaries(query = '&order=payload->>date.desc&limit=1000', opts) {
             const force = !!(opts && opts.force);
@@ -4701,6 +4740,7 @@ async function authPedirNuevaClave() {
             const st = historyState;
             const f = historyServerFilters();
             if (reset) { st.offset = 0; st.hasMore = true; }
+            if (force) hvacProgressCache.clear();   // botón Sincronizar: avance también se refresca
             st.sig = f.text + '|' + f.clientKey;
             const token = ++st.token;
             st.loading = true;
@@ -9048,7 +9088,12 @@ async function authPedirNuevaClave() {
             if (s === 'BILLED') return 'BILLED';
             // En una fila resumen no existe executions (se carga solo al revisar/PDF).
             // status COMPLETED ya es el estado persistido y se respeta sin bajar las fotos.
-            if (o && o._hvacSummaryOnly) return s === 'COMPLETED' ? 'COMPLETED' : s === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'PENDING';
+            if (o && o._hvacSummaryOnly) {
+                if (s === 'COMPLETED') return 'COMPLETED';
+                if (s === 'IN_PROGRESS') return 'IN_PROGRESS';
+                const pc = hvacProgressCache.get(String(o.id));
+                return (pc && pc.ok && (pc.done > 0 || pc.started > 0)) ? 'IN_PROGRESS' : 'PENDING';
+            }
             const p = hvacOrderProgress(o);
             if (s === 'COMPLETED' && p.complete) return 'COMPLETED';
             return (p.done > 0 || hvacOrderHasExecution(o)) ? 'IN_PROGRESS' : 'PENDING';
@@ -9254,7 +9299,9 @@ async function authPedirNuevaClave() {
                 let doneCount = 0, percent = 0;
                 let progressTitle = 'Progreso detallado disponible al revisar la orden.';
                 if (o._hvacSummaryOnly) {
-                    doneCount = String(o.status || '').toUpperCase() === 'COMPLETED' ? eqIds.length : 0;
+                    const pc = hvacProgressCache.get(String(o.id));
+                    if (String(o.status || '').toUpperCase() === 'COMPLETED') doneCount = eqIds.length;
+                    else if (pc && pc.ok) { doneCount = Math.min(pc.done, eqIds.length); progressTitle = 'Avance actualizado desde la nube.'; }
                     percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
                 } else {
                     const executions = o.executions || {};
@@ -9304,7 +9351,21 @@ async function authPedirNuevaClave() {
                     </td>
                 </tr>`);
             });
+            // Avance real de las filas visibles (una llamada diminuta; solo repinta si algo cambió)
+            historyState.lastPage = pageList;
+            hvacRefreshProgress(pageList).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
         }
+        function hvacHistoryVisible() {
+            const sec = document.getElementById('view-admin-history');
+            return !!(sec && !sec.classList.contains('hidden'));
+        }
+        // Mientras el histórico esté a la vista y la pestaña activa: revisa el avance cada 60 s (≈1 KB) y al volver a la pestaña.
+        function hvacHistoryProgressTick() {
+            if (document.hidden || !navigator.onLine || !hvacHistoryVisible() || !historyState.lastPage) return;
+            hvacRefreshProgress(historyState.lastPage).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
+        }
+        setInterval(hvacHistoryProgressTick, HVAC_PROGRESS_TTL);
+        document.addEventListener('visibilitychange', hvacHistoryProgressTick);
 
         let appBusyCount = 0;
         let appBusyTimer = null;
