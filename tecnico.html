@@ -385,8 +385,6 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 
 /* ===== Orden de servicio: rutina, lecturas y fotos Antes/Después ===== */
-.ia-estado{margin-top:6px;font-size:11.5px;line-height:1.35;color:var(--muted);word-break:break-word}
-.ia-link{border:0;background:none;padding:0;font-size:11.5px;font-weight:800;color:#10b981;text-decoration:underline;cursor:pointer}
 .obs-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .mic-btn{width:46px;height:46px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:#10b981;font-size:18px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto;transition:background .15s,color .15s}
 .mic-btn.on{background:#ef4444;color:#fff;border-color:#ef4444;animation:micPulse 1.4s infinite}
@@ -743,8 +741,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                             <span id="dictado-texto">Escuchando…</span>
                             <button type="button" id="dictado-parar" class="parar">Detener</button>
                         </div>
-                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar con IA</button>
-                        <div id="ia-estado" class="ia-estado" role="status">Estado de la IA: sin probar. <button type="button" id="ia-probar" class="ia-link">Probar conexión</button></div>
+                        <button type="button" id="exec-btn-ia" class="btn btn-ghost btn-block" style="margin-top:8px">✨ Procesar notas</button>
                         <label class="field" style="margin-top:10px">
                             <span>Observaciones técnicas (puedes editarlas)</span>
                             <textarea id="exec-f-notas-analiticas" rows="5" class="input" placeholder="Aquí aparecerá el párrafo técnico redactado a partir de tus notas…"></textarea>
@@ -3482,39 +3479,16 @@ async function authPedirNuevaClave() {
             return extra;
         }
 
-        // El archivo del servidor puede quedar en distintas carpetas según cómo se subió a GitHub:
-        // se prueban las rutas posibles y se recuerda la que responda.
-        const IA_ENDPOINTS = ['/api/ia/asistente-notas', '/api/ia/redactar-notas', '/api/redactar-notas'];
-        let iaEndpointOk = null;
-        function iaEstado(texto, ok) {
-            const el = dEl('ia-estado'); if (!el) return;
-            el.innerHTML = (ok ? '✅ ' : '⚠️ ') + String(texto).replace(/</g, '&lt;') + ' <button type="button" id="ia-probar" class="ia-link">Probar conexión</button>';
-            dEl('ia-probar').addEventListener('click', iaProbar);
-        }
-        async function iaProbar() {
-            const lineas = [];
-            iaEstado('Probando conexión…', true);
-            for (const url of IA_ENDPOINTS) {
-                try {
-                    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ping: true }) });
-                    const t = await r.text();
-                    let resumen = t.slice(0, 220);
-                    try { const j = JSON.parse(t); resumen = j.resultado || j.error || resumen; if (j.pruebas && j.pruebas.length) resumen += ' | ' + j.pruebas.map(p => p.modelo + ': ' + p.estado + ' ' + p.detalle).join(' ; '); } catch (e) { /* texto plano */ }
-                    lineas.push(url + ' → ' + r.status + ' → ' + resumen);
-                } catch (e) { lineas.push(url + ' → sin respuesta (' + e.message + ')'); }
-            }
-            iaEstado('Prueba terminada.', true);
-            alert('Prueba de la IA:\n\n' + lineas.join('\n\n'));
-        }
+        // Intenta la IA del servidor; si no responde (sin clave, sin cupo, sin internet) usa el procesador local.
+        // Tras un fallo se pausa 10 minutos para no hacer esperar al técnico.
+        // Redacción con IA gratuita (Cloudflare Workers AI) a través del servidor. Si falla, se usa el procesador local.
+        // Para apagarla: IA_ACTIVA = false.
+        const IA_ACTIVA = true;
+        let iaPausaHasta = 0;
         async function iaFetch(body) {
-            for (const url of (iaEndpointOk ? [iaEndpointOk] : IA_ENDPOINTS)) {
-                const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-                if (r.status === 404) continue;
-                iaEndpointOk = url;
-                console.info('[IA] Endpoint activo:', url);
-                return r;
-            }
-            throw new Error('IA no desplegada (404): el archivo api/ia/asistente-notas.mjs no está en esa ruta');
+            const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 40000);
+            try { return await fetch('/api/ia/redactar-cf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctl.signal }); }
+            finally { clearTimeout(timer); }
         }
 
         async function ordenOptimizarNotas(opts) {
@@ -3525,36 +3499,37 @@ async function authPedirNuevaClave() {
             if (!notas) { if (!auto) showToast('Escribe o dicta primero las notas del técnico.', 'error'); return; }
             const editado = (out.dataset.edited === '1' && out.value.trim()) || (con.dataset.edited === '1' && con.value.trim());
             if (editado) {
-                if (auto) return showToast('Dictado listo. Toca “Procesar con IA” para actualizar tus textos editados.');
+                if (auto) return showToast('Dictado listo. Toca “Procesar notas” para actualizar tus textos editados.');
                 if (!confirm('Ya editaste las observaciones o las conclusiones. ¿Reemplazarlas con el nuevo resultado?')) return;
             }
             const original = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…';
-            let data = null, motivo = '';
+            let data = null, motivoIA = '';
             try {
-                if (!navigator.onLine) throw new Error('offline');
+                if (!IA_ACTIVA || !navigator.onLine || Date.now() < iaPausaHasta) throw new Error('local');   // sin IA: procesamiento local, instantáneo y sin internet
                 const r = await iaFetch(JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() }));
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok || !j.notas_analiticas) throw new Error(r.status + ': ' + (j.error || 'respuesta vacía del servidor'));
                 data = j;
-                iaEstado('IA conectada (' + iaEndpointOk + ').', true);
             } catch (e) {
                 console.warn('[IA] Se usa el procesador básico:', e && e.message);
-                const raw = String(e && e.message || '');
-                motivo = raw === 'offline' ? 'sin conexión' : /404|no desplegada/i.test(raw) ? 'archivo de IA no encontrado en Vercel' : /GEMINI_API_KEY|Falta/i.test(raw) ? 'falta la clave en Vercel' : /inv[aá]lida|permiso|key/i.test(raw) ? 'clave inválida' : /l[ií]mite/i.test(raw) ? 'límite gratuito alcanzado' : raw.slice(0, 80);
+                if (!(e && e.message === 'local')) {
+                    const raw = String(e && e.message || '');
+                    // El cupo diario agotado y los errores de configuración se recuerdan 10 minutos; las demoras puntuales solo 1 minuto.
+                    iaPausaHasta = Date.now() + (/abort|tard/i.test(raw) ? 60 * 1000 : 10 * 60 * 1000);
+                    motivoIA = /abort|tard/i.test(raw) ? 'la IA tardó demasiado' : raw.replace(/^\d+:\s*/, '').slice(0, 90);
+                }
                 data = dictLocalProcess(notas, ordenTipoActual());
-                iaEstado('Modo básico. Motivo: ' + (raw === 'offline' ? 'sin conexión' : raw) + '.', false);
             }
             try {
                 const extra = dictApply(data);
-                if (data.fuente === 'local') showToast('Modo básico' + (motivo ? ' (IA no disponible: ' + motivo + ')' : '') + '. Revisa el texto antes de guardar.' + extra);
+                if (data.fuente === 'local') showToast((motivoIA ? 'IA no disponible (' + motivoIA + '): se usó el modo básico. ' : 'Observaciones y conclusiones generadas. ') + 'Revísalas antes de guardar.' + extra);
                 else if (data.advertencia_numeros && data.advertencia_numeros.length) showToast('Verifica estas cifras en el texto: ' + data.advertencia_numeros.join(', '), 'error');
                 else showToast('Observaciones y conclusiones generadas. Revísalas antes de guardar.' + extra);
             } finally { btn.disabled = false; btn.innerHTML = original; }
         }
         dEl('exec-btn-ia').addEventListener('click', () => ordenOptimizarNotas());
-        dEl('ia-probar').addEventListener('click', iaProbar);
 
         function ordenRenderFotos() {
             ['antes', 'despues'].forEach(cat => {
