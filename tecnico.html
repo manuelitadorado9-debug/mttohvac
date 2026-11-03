@@ -3657,8 +3657,12 @@ async function authPedirNuevaClave() {
                     e.formConfigSnapshot = { ...(e.formConfigSnapshot || {}), params: '', checklist: '' };
                     e.paramsValues = {};
                     e.checklist = {};
+                    e.partial = missing.length > 0;
+                } else {
+                    // En preventivo las lecturas adicionales están ocultas y NO son obligatorias.
+                    // Se conserva únicamente el resultado calculado por los campos clásicos.
+                    e.partial = !!e.partial;
                 }
-                e.partial = missing.length > 0 || (e.tipoRutina === 'PREVENTIVO' && e.partial);
                 order.tipoRutina = e.tipoRutina;
             }
             return ordenPersistOriginal.apply(this, arguments);
@@ -3686,8 +3690,10 @@ async function authPedirNuevaClave() {
         const ordenMetricsOriginal = getTechChecklistMetrics;
         getTechChecklistMetrics = function(eq, exec) {
             if (!exec || !exec.tipoRutina) return ordenMetricsOriginal.apply(this, arguments);
-            const isPreventivo = exec.tipoRutina === 'PREVENTIVO';
-            const normalized = isPreventivo ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
+            // El preventivo utiliza exclusivamente los parámetros y el checklist clásicos.
+            // No sumar Voltaje/Amperaje/Presión porque esos campos no aparecen en su formulario.
+            if (exec.tipoRutina === 'PREVENTIVO') return ordenMetricsOriginal(eq, exec);
+            const normalized = { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
             const m = ordenMetricsOriginal(eq, normalized);
             const missing = ordenLecturas.filter(([k]) => !String(exec[k] || '').trim()).map(([, label]) => label);
             const total = m.total + ordenLecturas.length;
@@ -3697,11 +3703,13 @@ async function authPedirNuevaClave() {
         const ordenStatusOriginal = getEquipmentExecutionStatus;
         getEquipmentExecutionStatus = function(eq, eqId, exec) {
             if (!exec || !exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
-            const normalized = exec.tipoRutina === 'PREVENTIVO' ? exec : { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
+            // Para preventivo, el estado depende solo de sus parámetros y checklist originales.
+            if (exec.tipoRutina === 'PREVENTIVO') return ordenStatusOriginal(eq, eqId, exec);
+            const normalized = { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };
             const base = ordenStatusOriginal(eq, eqId, normalized);
             const missing = ordenLecturas.some(([k]) => !String(exec[k] || '').trim());
             if (base === 'pending' && ordenLecturas.every(([k]) => !String(exec[k] || '').trim())) return 'pending';
-            return !missing && (exec.tipoRutina !== 'PREVENTIVO' || base === 'done') ? 'done' : 'progress';
+            return !missing ? 'done' : 'progress';
         };
 
         // Firma de cliente: conserva el modal existente y adapta el canvas a pantallas HiDPI y Pointer Events.
