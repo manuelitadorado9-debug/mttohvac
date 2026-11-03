@@ -7438,17 +7438,36 @@ async function authPedirNuevaClave() {
                 showToast("Solo el perfil de administrador puede quitar equipos de una rutina.", "error");
                 return;
             }
-            const order = workOrders.find(o => o.id === currentExecOrderId);
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
             if (!order) return;
 
-            order.equipmentIds = (order.equipmentIds || []).filter(id => id !== eqId);
-            if (order.executions && order.executions[eqId]) delete order.executions[eqId];
-
-            await cloudSaveOrder(order);
-            registrarAuditoria('EDITAR', 'hvac_orders', order.id);
+            // Quitar por id, código o cualquier alias (sin depender del tipo string/número)
+            const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId));
+            const alias = new Set([eqId, eq && eq.id, eq && eq.code].filter(Boolean).map(String));
+            order.equipmentIds = (order.equipmentIds || []).filter(id => !alias.has(String(id)));
+            Object.keys(order.executions || {}).forEach(k => { if (alias.has(String(k))) delete order.executions[k]; });
+            order.updatedAt = new Date().toISOString();
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             renderOrderHubEquipments(order);
-            showToast("Equipo removido de la orden (el catálogo general no fue modificado).");
+
+            // Guardar y VERIFICAR en la nube (incluye filas duplicadas de la misma orden)
+            const saved = await cloudSaveOrder(order);
+            let verified = false;
+            if (saved) {
+                const mine = cloudCleanId(order.id);
+                const rows = await supabaseFetch('hvac_orders?select=id&limit=20&payload->>id=eq.' + encodeURIComponent(order.id), 'GET', null, null, { quiet: true });
+                if (Array.isArray(rows)) {
+                    for (const r of rows) {
+                        if (String(r.id) === mine) continue;
+                        console.warn('[Rutina] Fila duplicada de la orden, se actualiza:', r.id);
+                        await supabaseFetch('hvac_orders?id=eq.' + encodeURIComponent(r.id), 'PATCH', { payload: order }, { 'Prefer': 'return=minimal' }, { quiet: true });
+                    }
+                }
+                const own = await supabaseFetch('hvac_orders?select=payload&id=eq.' + encodeURIComponent(mine), 'GET', null, null, { quiet: true });
+                verified = Array.isArray(own) && !!own[0] && ((own[0].payload || {}).equipmentIds || []).length === order.equipmentIds.length;
+            }
+            registrarAuditoria('EDITAR', 'hvac_orders', order.id);
+            showToast(verified ? "Equipo removido y confirmado en la nube." : "Se quitó aquí, pero la nube NO confirmó el cambio. Revisa la consola (F12).", verified ? 'success' : 'error');
         }
 
         function renderOrderHubEquipments(order) {
