@@ -3306,10 +3306,10 @@ async function authPedirNuevaClave() {
 
                 let r;
                 if (!s) {                                     // INSERT (si ya existe, se ignora y se revisa el conflicto)
-                    r = await supabaseFetch(`${tabla}?on_conflict=id`, 'POST', [{ id, payload: item, updated_by: user }],
+                    r = await supabaseFetch(`${tabla}?on_conflict=id&select=id,version`, 'POST', [{ id, payload: item, updated_by: user }],
                         { 'Prefer': 'resolution=ignore-duplicates,return=representation' }, { quiet: true });
                 } else {                                      // UPDATE solo si la versión sigue siendo la que leímos
-                    r = await supabaseFetch(`${tabla}?id=eq.${encodeURIComponent(id)}&version=eq.${s.v}`, 'PATCH',
+                    r = await supabaseFetch(`${tabla}?id=eq.${encodeURIComponent(id)}&version=eq.${s.v}&select=id,version`, 'PATCH',
                         { payload: item, updated_by: user }, { 'Prefer': 'return=representation' }, { quiet: true });
                 }
                 if (!Array.isArray(r)) {                      // fallo de red / permisos / tabla inexistente
@@ -4052,6 +4052,7 @@ async function authPedirNuevaClave() {
 
         function cloudUpsert(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
+            if (table === 'hvac_orders' && typeof hvacInvalidateOrderQueries === 'function') hvacInvalidateOrderQueries();
             tombClearIfOld(table, cleanId);
             const payload = JSON.parse(JSON.stringify(obj));
             cloudGuardSize(table, cleanId, payload);
@@ -4069,7 +4070,7 @@ async function authPedirNuevaClave() {
                     // Plan B: verificar y actualizar / insertar
                     const check = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'GET');
                     if (check && check.length > 0) r = await supabaseFetch(`${table}?id=eq.${enc}`, 'PATCH', { payload }, { 'Prefer': 'return=minimal' });
-                    else if (check) r = await supabaseFetch(table, 'POST', { id: cleanId, payload });
+                    else if (check) r = await supabaseFetch(table, 'POST', { id: cleanId, payload }, { 'Prefer': 'return=minimal' });
                 }
                 if (r) cloudOutboxClear(table, cleanId);
                 return r || null;
@@ -4081,12 +4082,13 @@ async function authPedirNuevaClave() {
         // La operación solo sale de la bandeja cuando se CONFIRMA que la fila ya no existe en la nube.
         function cloudDeleteGeneric(table, rawId) {
             const cleanId = cloudCleanId(rawId);
+            if (table === 'hvac_orders' && typeof hvacInvalidateOrderQueries === 'function') hvacInvalidateOrderQueries();
             tombMark(table, cleanId);                                   // desde ya, ninguna carga lo vuelve a mostrar
             const durable = cloudOutboxAdd(table, cleanId, 'delete');
             return cloudEnqueue(table + ':' + cleanId, async () => {
                 await durable;
                 const enc = encodeURIComponent(cleanId), q = { quiet: true };
-                const del = await supabaseFetch(`${table}?id=eq.${enc}`, 'DELETE', null, { 'Prefer': 'return=representation' }, q);
+                const del = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'DELETE', null, { 'Prefer': 'return=representation' }, q); // &select=id: no devuelve el payload borrado
                 if (!del) return null;                                  // sin red / error HTTP: queda pendiente y se reintenta
                 const still = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'GET', null, null, q);
                 if (!Array.isArray(still)) return null;                 // no se pudo verificar: sigue pendiente
@@ -4268,7 +4270,12 @@ async function authPedirNuevaClave() {
         // =====================================================================
         const cloudSectionsLoaded = new Set();
         const cloudSectionsInFlight = Object.create(null);
-        const cloudTableFetchedAt = Object.create(null); // caché compartida entre secciones
+        const HVAC_FETCHED_AT_KEY = 'HVAC_TABLE_FETCHED_AT_V1';
+        const cloudTableFetchedAt = (() => {  // caché compartida entre secciones y persistente entre recargas
+            let base = {};
+            try { const raw = JSON.parse(localStorage.getItem(HVAC_FETCHED_AT_KEY) || '{}'); if (raw && typeof raw === 'object' && !Array.isArray(raw)) base = raw; } catch (_) {}
+            return new Proxy(base, { set(t, k, v) { t[k] = v; try { localStorage.setItem(HVAC_FETCHED_AT_KEY, JSON.stringify(t)); } catch (_) {} return true; } });
+        })();
         const cloudTableInFlight = Object.create(null);  // evita dos descargas simultáneas de la misma tabla
         const CLOUD_TABLE_TTL = 5 * 60 * 1000;            // 5 min; la recarga manual sigue forzando sincronización
         const CLOUD_SECTION_CONFIG = {
@@ -4284,6 +4291,12 @@ async function authPedirNuevaClave() {
             'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
             'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] }
         };
+        // Vencida = pasó el TTL, o no hay copia local con la que pintar (p. ej. tras limpiar el almacenamiento).
+        function cloudTableStale(table) {
+            if (Date.now() - (cloudTableFetchedAt[table] || 0) > CLOUD_TABLE_TTL) return true;
+            try { const t = CLOUD_TABLE_TARGETS[table]; if (t && !(t.get() || []).length) return true; } catch (_) {}
+            return false;
+        }
         const CLOUD_TABLE_TARGETS = {
             hvac_equipments: { get: () => equipmentCatalog, set: v => { equipmentCatalog = v; }, backup: 'HVAC_EQUIPMENTS_BACKUP' },
             hvac_orders: { get: () => workOrders, set: v => { workOrders = v; }, backup: 'HVAC_ORDERS_BACKUP' },
@@ -4401,15 +4414,37 @@ async function authPedirNuevaClave() {
             };
         }
 
-        async function cloudFetchOrderSummaries(query = '&order=payload->>date.desc&limit=1000') {
-            const rows = await supabaseFetch('hvac_orders?select=' + HVAC_ORDER_SUMMARY_SELECT + query, 'GET', null, null, { quiet: true });
-            return Array.isArray(rows) ? rows.map(hvacOrderSummaryFromRow).filter(Boolean) : null;
+        // Caché por consulta: alternar pestañas/filtros repetidos no vuelve a llamar a Supabase dentro del TTL.
+        // Se invalida entera al guardar/borrar una orden y se salta con { force: true } (botón Actualizar).
+        const hvacOrderQueryCache = new Map();   // query -> { at, rows }
+        const hvacOrderQueryInFlight = new Map(); // query -> Promise
+        function hvacInvalidateOrderQueries() { hvacOrderQueryCache.clear(); }
+        window.hvacInvalidateOrderQueries = hvacInvalidateOrderQueries;
+        async function cloudFetchOrderSummaries(query = '&order=payload->>date.desc&limit=1000', opts) {
+            const force = !!(opts && opts.force);
+            const clone = rows => JSON.parse(JSON.stringify(rows));
+            if (!force) {
+                const hit = hvacOrderQueryCache.get(query);
+                if (hit && Date.now() - hit.at < CLOUD_TABLE_TTL) return clone(hit.rows);
+                if (hvacOrderQueryInFlight.has(query)) { const r = await hvacOrderQueryInFlight.get(query); return r ? clone(r) : r; }
+            }
+            const task = (async () => {
+                const rows = await supabaseFetch('hvac_orders?select=' + HVAC_ORDER_SUMMARY_SELECT + query, 'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return null;
+                const list = rows.map(hvacOrderSummaryFromRow).filter(Boolean);
+                hvacOrderQueryCache.set(query, { at: Date.now(), rows: list });
+                if (hvacOrderQueryCache.size > 60) hvacOrderQueryCache.delete(hvacOrderQueryCache.keys().next().value);
+                return list;
+            })();
+            hvacOrderQueryInFlight.set(query, task);
+            try { const r = await task; return r ? clone(r) : r; }
+            finally { hvacOrderQueryInFlight.delete(query); }
         }
 
-        async function cloudFetchTable(table) {
+        async function cloudFetchTable(table, force) {
             if (cloudTableInFlight[table]) return cloudTableInFlight[table];
             const task = (async () => {
-                if (table === 'hvac_orders') return cloudFetchOrderSummaries();
+                if (table === 'hvac_orders') return cloudFetchOrderSummaries(undefined, { force: !!force });
                 const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true });
                 return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
             })();
@@ -4520,7 +4555,19 @@ async function authPedirNuevaClave() {
             if (!key) return null;
             let current = workOrders.find(o => String(o && o.id) === key);
             if (!current) return null;
-            if (current._hvacSummaryOnly !== true) return current;
+            if (current._hvacSummaryOnly !== true) {
+                // Ya hay detalle en memoria. Dentro del TTL (o sin red, o con cambios locales pendientes) se reutiliza.
+                const fetchedAt = Number(current._hvacDetailFetchedAt || 0);
+                if (!fetchedAt || Date.now() - fetchedAt < CLOUD_TABLE_TTL || !navigator.onLine) return current;
+                let pending = false;
+                try { pending = cloudOutboxRead().some(e => e && e.table === 'hvac_orders' && String(e.id) === cloudCleanId(key)); } catch (_) {}
+                if (pending) return current;
+                if (hvacOrderDetailInFlight[key]) return hvacOrderDetailInFlight[key];
+                // Revalidación de ~100 bytes: solo se re-descarga el payload si la orden cambió en la nube.
+                const light = await supabaseFetch('hvac_orders?select=u:payload->>updatedAt&id=eq.' + encodeURIComponent(cloudCleanId(key)) + '&limit=1', 'GET', null, null, { quiet: true });
+                if (!Array.isArray(light) || !light.length) return current;
+                if (String(light[0].u || '') === String(current._hvacDetailUpdatedAt || '')) { current._hvacDetailFetchedAt = Date.now(); return current; }
+            }
             if (hvacOrderDetailInFlight[key]) return hvacOrderDetailInFlight[key];
             const task = (async () => {
                 const cleanId = cloudCleanId(key);
@@ -4540,6 +4587,7 @@ async function authPedirNuevaClave() {
                 full.executions = payload.executions || current.executions || {};
                 delete full._hvacSummaryOnly;
                 full._hvacDetailFetchedAt = Date.now();
+                full._hvacDetailUpdatedAt = String(payload.updatedAt || '');
                 const idx = workOrders.findIndex(o => String(o && o.id) === key);
                 if (idx >= 0) workOrders[idx] = full; else workOrders.push(full);
                 return full;
@@ -4648,7 +4696,7 @@ async function authPedirNuevaClave() {
             const label = clientKey !== 'ALL' && sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
             return { text, clientKey, label };
         }
-        async function fetchHistoryPage(reset) {
+        async function fetchHistoryPage(reset, force) {
             if (!navigator.onLine) return false;
             const st = historyState;
             const f = historyServerFilters();
@@ -4663,11 +4711,11 @@ async function authPedirNuevaClave() {
             }
             if (f.label) filters += '&payload->>client=ilike.' + encodeURIComponent(pgLikePattern(clientRootLabel(f.label)));
             // Paginación liviana: no descarga fotos, ejecuciones ni firmas en base64.
-            let rows = await cloudFetchOrderSummaries(`&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`);
+            let rows = await cloudFetchOrderSummaries(`&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`, { force: !!force });
             let paged = true;
             if (!Array.isArray(rows)) {
                 // Plan B acotado: conserva el límite y ordena por la PK, nunca descarga todo el payload.
-                rows = await cloudFetchOrderSummaries(`&order=id.desc&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`);
+                rows = await cloudFetchOrderSummaries(`&order=id.desc&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`, { force: !!force });
                 paged = false;
             }
             if (token !== st.token) return false; // llegó una consulta más nueva
@@ -4762,7 +4810,7 @@ async function authPedirNuevaClave() {
             const cfg = CLOUD_SECTION_CONFIG[tabId];
             if (!cfg) return;
             if (!force && cloudSectionsLoaded.has(tabId)) {
-                const stale = (cfg.tables || []).some(table => Date.now() - (cloudTableFetchedAt[table] || 0) > CLOUD_TABLE_TTL);
+                const stale = (cfg.tables || []).some(table => cloudTableStale(table));
                 if (!stale) return;
                 cloudSectionsLoaded.delete(tabId);
             }
@@ -4777,8 +4825,8 @@ async function authPedirNuevaClave() {
                     await hvacStorageReady;
                     if (navigator.onLine) {
                         if (cloudOutboxRead().length) await cloudFlushOutbox(); // primero se envían los cambios pendientes
-                        const stale = cfg.tables.filter(table => force || Date.now() - (cloudTableFetchedAt[table] || 0) > CLOUD_TABLE_TTL);
-                        const results = await Promise.all(stale.map(async table => ({ table, records: await cloudFetchTable(table) })));
+                        const stale = cfg.tables.filter(table => force || cloudTableStale(table));
+                        const results = await Promise.all(stale.map(async table => ({ table, records: await cloudFetchTable(table, force) })));
                         results.forEach(({ table, records }) => {
                             if (!records) { failed.push(table); return; }
                             cloudTableFetchedAt[table] = Date.now();
@@ -4794,10 +4842,10 @@ async function authPedirNuevaClave() {
                             localStorage.setItem(t.backup, JSON.stringify(t.get()));
                         });
                         if (await loadCloudStateKeys(cfg.state)) restoreLocalAppData();
-                        if (cfg.equipmentsProgressive && (force || Date.now() - (cloudTableFetchedAt.hvac_equipments || 0) > CLOUD_TABLE_TTL)) {
+                        if (cfg.equipmentsProgressive && (force || cloudTableStale('hvac_equipments'))) {
                             if (!(await loadEquipmentsProgressive(tabId))) failed.push('hvac_equipments');
                         }
-                        if (cfg.historyPage && !(await fetchHistoryPage(true))) failed.push('hvac_orders');
+                        if (cfg.historyPage && !(await fetchHistoryPage(true, force))) failed.push('hvac_orders');
                         fetched = true;
                     }
                     if (section.isConnected && !section.classList.contains('hidden')) renderSection(tabId);
