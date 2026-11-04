@@ -1176,7 +1176,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             </div>
         </div>
         <div class="tb-right">
-            <button onclick="window.loadCloudSection && window.loadCloudSection((document.querySelector('main > section:not(.hidden)') || {}).id?.replace('view-',''), true)" class="tb-btn">
+            <button type="button" onclick="window.hvacAdminManualSync && window.hvacAdminManualSync(this)" class="tb-btn" id="admin-manual-sync-btn">
                 <i class="fa-solid fa-rotate"></i> <span>Sincronizar</span>
             </button>
             <div class="tb-user">
@@ -4677,11 +4677,17 @@ async function authPedirNuevaClave() {
             })();
             hvacOrderQueryInFlight.set(query, task);
             try { const r = await task; return r ? clone(r) : r; }
-            finally { hvacOrderQueryInFlight.delete(query); }
+            finally { if (hvacOrderQueryInFlight.get(query) === task) hvacOrderQueryInFlight.delete(query); }
         }
 
         async function cloudFetchTable(table, force) {
-            if (cloudTableInFlight[table]) return cloudTableInFlight[table];
+            // Una petición antigua en curso no debe satisfacer un clic explícito en Sincronizar.
+            if (cloudTableInFlight[table]) {
+                const running = cloudTableInFlight[table];
+                if (!force) return running;
+                try { await running; } catch (_) {}
+                if (cloudTableInFlight[table] === running) delete cloudTableInFlight[table];
+            }
             const task = (async () => {
                 if (table === 'hvac_orders') return cloudFetchOrderSummaries(undefined, { force: !!force });
                 const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true });
@@ -4689,7 +4695,7 @@ async function authPedirNuevaClave() {
             })();
             cloudTableInFlight[table] = task;
             try { return await task; }
-            finally { delete cloudTableInFlight[table]; }
+            finally { if (cloudTableInFlight[table] === task) delete cloudTableInFlight[table]; }
         }
 
 
@@ -5062,7 +5068,13 @@ async function authPedirNuevaClave() {
                 if (!stale) return;
                 cloudSectionsLoaded.delete(tabId);
             }
-            if (cloudSectionsInFlight[tabId]) return cloudSectionsInFlight[tabId];
+            if (cloudSectionsInFlight[tabId]) {
+                const running = cloudSectionsInFlight[tabId];
+                if (!force) return running;
+                // Esperar la carga anterior y ejecutar después la revalidación forzada.
+                try { await running; } catch (_) {}
+                if (cloudSectionsInFlight[tabId] === running) delete cloudSectionsInFlight[tabId];
+            }
             const section = document.getElementById('view-' + tabId);
             if (!section || section.classList.contains('hidden')) return;
             sectionLoadingUI(tabId, 'loading', 'Cargando datos de esta sección…');
@@ -5113,6 +5125,53 @@ async function authPedirNuevaClave() {
             })();
             cloudSectionsInFlight[tabId] = task;
             return task;
+        };
+
+        // Sincronización explícita del administrador: fuerza la consulta remota de la sección
+        // visible, invalida resúmenes y avance, y repinta la vista al terminar.
+        window.hvacAdminManualSync = async function (button) {
+            if (!restoreActiveSession()) return;
+            if (!navigator.onLine) {
+                showToast('No hay conexión a internet. Los cambios locales se conservarán para sincronizar después.', 'error');
+                return;
+            }
+            const active = document.querySelector('main > section[id^="view-"]:not(.hidden)');
+            const tabId = active && active.id ? active.id.replace(/^view-/, '') : 'admin-dashboard';
+            const cfg = CLOUD_SECTION_CONFIG[tabId];
+            if (!cfg) { showToast('No se pudo identificar la sección que deseas actualizar.', 'error'); return; }
+
+            const btn = button || document.getElementById('admin-manual-sync-btn');
+            const original = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> <span>Actualizando…</span>'; }
+            sectionLoadingUI(tabId, 'loading', 'Sincronizando órdenes y datos con Supabase…');
+            try {
+                await hvacStorageReady;
+                // Primero se envían operaciones locales pendientes; luego se leen los datos confirmados.
+                if (cloudOutboxRead().length) await cloudFlushOutbox();
+                hvacInvalidateOrderQueries();
+                hvacProgressAttempt.clear();
+                cloudSectionsLoaded.delete(tabId);
+
+                await window.loadCloudSection(tabId, true);
+
+                // El módulo histórico calcula el avance de las órdenes visibles aparte del listado.
+                if (tabId === 'admin-history' && typeof hvacRefreshProgress === 'function') {
+                    const visible = (historyState.lastPage || []).filter(Boolean);
+                    if (visible.length) {
+                        visible.forEach(o => hvacProgressCache.delete(String(o.id)));
+                        const changed = await hvacRefreshProgress(visible);
+                        if (changed) renderHistoryModule();
+                    }
+                }
+                localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+                showToast('Sincronización finalizada. Las órdenes se actualizaron desde Supabase.', 'success');
+            } catch (error) {
+                console.error('[Admin] Sincronización manual fallida:', error);
+                showToast('No se pudieron actualizar las órdenes. Se conservan los datos locales; revisa la conexión y vuelve a intentar.', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = original || '<i class="fa-solid fa-rotate"></i> <span>Sincronizar</span>'; }
+                cloudBadgeSchedule();
+            }
         };
 
         window.addEventListener('offline', () => cloudBadgeSchedule());
@@ -12166,7 +12225,7 @@ body{font-family:Arial,Helvetica,sans-serif;color:#1a2433;background:#e9edf2;-we
 .ord{display:flex;justify-content:space-between;font-size:11px;margin:8px 0 14px}
 .ord b{color:#1e3a5f}.ord span{color:#6b7a8d}
 .ftr{margin-top:auto;border-top:3px solid #555;padding-top:8px;display:flex;justify-content:space-between;font:9px "Courier New",monospace;color:#444}
-@media print{body{background:#fff}.page{margin:0}}
+@media print{html,body{margin:0!important;padding:0!important;background:#fff!important}.page{margin:0!important;break-after:page;page-break-after:always}.page:last-child{break-after:auto;page-break-after:auto}}
 .title{background:#1e3a5f;color:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px}
 .title small{font-size:10px;letter-spacing:2px;opacity:.7}.title h1{font-size:20px;margin:4px 0 6px}.title p{font-size:11px;line-height:1.5;opacity:.9}
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
@@ -12428,9 +12487,12 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 
     const frame = document.createElement('iframe');
     frame.title = `Informe ${order.id}`;
+    // El iframe queda visible como vista previa antes de imprimir. No se oculta
+    // con opacity:0 porque algunos motores de impresión heredan esa transparencia.
     Object.assign(frame.style, {
-      position: 'fixed', left: '-10000px', top: '0', width: '900px',
-      height: '700px', border: '0', opacity: '0', pointerEvents: 'none'
+      position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
+      border: '0', opacity: '1', pointerEvents: 'auto', zIndex: '30000',
+      background: '#ffffff'
     });
     frame.setAttribute('aria-hidden', 'true');
     document.body.appendChild(frame);
@@ -12451,29 +12513,23 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       await waitForImages(doc);
       if (options.autoPrint !== false) {
         const printDialog = () => {
-          frame.contentWindow.focus();
-          frame.contentWindow.print();
+          if (!frame.contentWindow || typeof frame.contentWindow.print !== 'function') {
+            throw new Error('Este navegador no permite imprimir el informe. Abre el archivo desde un navegador compatible.');
+          }
           if (options.removeAfterPrint !== false) {
             frame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
-            setTimeout(cleanup, 120000);   // algunos navegadores móviles no emiten afterprint
+            // Respaldo para navegadores móviles que no emiten afterprint.
+            setTimeout(cleanup, 15 * 60 * 1000);
           }
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
         };
-        if (options.print === true) {
-          printDialog();                   // modo antiguo: abrir el diálogo de impresión
-        } else {
-          const fileName = `Informe_${typeKey.charAt(0) + typeKey.slice(1).toLowerCase()}_${String(order.id).replace(/[^\w.-]+/g, '_')}${Array.isArray(options.only) && options.only.length ? '_' + String(options.only[0]).replace(/[^\w.-]+/g, '_') : ''}.pdf`;
-          notify('Generando PDF…', 'info');
-          try {
-            await exportFramePdf(frame, fileName);
-            notify('Informe listo. Si no se descargó solo, toca “Descargar PDF”.');
-            cleanup();
-          } catch (exportError) {
-            console.error('No se pudo exportar el PDF directo:', exportError);
-            showPdfError(String(exportError && exportError.message ? exportError.message : exportError),
-              () => { cleanup(); generateMaintenancePDF(orderId, reportType, options).catch(e => notify(String(e.message || e), 'error')); },
-              printDialog, cleanup);
-          }
-        }
+        // Exportación nativa: el navegador compone el PDF desde el DOM/HTML.
+        // Así, textos, valores y tablas se guardan como texto/vector, no como
+        // capturas JPEG de cada página. Las fotografías, logotipo, pie y firmas
+        // siguen siendo imágenes, que es el formato correcto para esos recursos.
+        notify('Informe listo para imprimir. En el destino selecciona “Guardar como PDF” para conservar el texto editable.', 'info');
+        printDialog();
       }
       return { orderId: order.id, reportType: typeKey, iframe: frame, close: cleanup };
     } catch (error) {
