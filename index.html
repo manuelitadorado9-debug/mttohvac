@@ -3979,7 +3979,12 @@ async function authPedirNuevaClave() {
             const cola = cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && String(e.id) === cloudCleanId(id)).length;
             console.log('[Diag ' + id + '] filas en el servidor: ' + (srv ? srv.length : 'error de lectura') + (srv && srv.length > 1 ? '  ⚠️ DUPLICADAS' : ''));
             if (srv) console.table(srv); console.log('Local:', loc, '| cambios pendientes en cola:', cola);
-            return { servidor: srv, local: loc, cola };
+            let reintento = null;
+            if (cola) {   // hay un guardado atascado: se reintenta ahora y se muestra el motivo exacto del servidor
+                reintento = await cloudFlushOutbox();
+                console.log('Reintento de la cola →', reintento, '| último error:', cloudCtl.lastStatus, cloudCtl.lastEndpoint || '', cloudCtl.lastDetail || '');
+            }
+            return { servidor: srv, local: loc, cola, reintento, ultimoError: { status: cloudCtl.lastStatus, endpoint: cloudCtl.lastEndpoint, detalle: cloudCtl.lastDetail } };
         };
 
         // ===== Medidor de consumo (egress REST) — validar con datos reales =====
@@ -4029,6 +4034,8 @@ async function authPedirNuevaClave() {
             const quiet = !!(opts && opts.quiet);
             const fail = (status, detail) => {
                 cloudCtl.lastStatus = status;
+                cloudCtl.lastDetail = String(detail || '').slice(0, 300);
+                cloudCtl.lastEndpoint = String(method) + ' ' + String(endpoint).split('?')[0];
                 if (quiet) cloudNoteResult(false, status, true, endpoint);
                 else cloudReport(false, status, detail, method, endpoint);
                 return null;
@@ -4681,10 +4688,13 @@ async function authPedirNuevaClave() {
             }
             const previous = new Map((workOrders || []).map(o => [String(o && o.id), o]));
             const merged = replaceAll ? new Map() : new Map(previous);
+            let pendingSave = new Set();
+            try { pendingSave = new Set(cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && e.op !== 'delete').map(e => String(e.id))); } catch (_) {}
             list.forEach(summary => {
                 if (!summary || !summary.id || deletedOrderIdHas(summary.id)) return;
                 const key = String(summary.id), old = previous.get(key);
                 if (!old) { merged.set(key, summary); return; }
+                if (pendingSave.has(cloudCleanId(key))) { merged.set(key, old); return; }   // cambio local aún sin confirmar en la nube: no se pisa con la copia vieja del servidor
                 const hadDetails = old._hvacSummaryOnly !== true;
                 const next = Object.assign({}, hadDetails ? old : {}, summary);
                 if (hadDetails) {
@@ -7079,14 +7089,16 @@ async function authPedirNuevaClave() {
                 proj.equipmentIds = equipmentIds.slice();
             }
 
-            await cloudSaveOrder(order, { dup: true });
+            let savedCloud = null;
+            try { savedCloud = await cloudSaveOrder(order, { dup: true }); } catch (e) { console.warn('[Rutina] Error al guardar en la nube:', e); }
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
 
             closeNewRoutineModal();
             [renderAdminDashboard, renderPlanningModule, renderHistoryModule, renderBillingModule].forEach(fn => { try { fn(); } catch (e) { console.warn(e); } });
-            showToast(`Rutina ${order.id} actualizada correctamente.`);
+            if (savedCloud) showToast(`Rutina ${order.id} actualizada y confirmada en la nube.`);
+            else showToast(`Rutina ${order.id}: cambio guardado SOLO en este equipo; la nube NO lo confirmó (${cloudCtl.lastStatus || 'sin respuesta'}${cloudCtl.lastDetail ? ' · ' + cloudCtl.lastDetail.slice(0, 120) : ''}). Quedó en cola y se reintentará.`, 'error');
         }
 
         async function renderAvailableEquipmentForNewRoutine() {
@@ -7863,7 +7875,7 @@ async function authPedirNuevaClave() {
                 verified = Array.isArray(own) && !!own[0] && (own[0].equipment_ids || []).length === order.equipmentIds.length;
             }
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
-            showToast(verified ? "Equipo removido y confirmado en la nube." : "Se quitó aquí, pero la nube NO confirmó el cambio. Revisa la consola (F12).", verified ? 'success' : 'error');
+            showToast(verified ? "Equipo removido y confirmado en la nube." : "Se quitó aquí, pero la nube NO confirmó el cambio (" + (cloudCtl.lastStatus || 'sin respuesta') + (cloudCtl.lastDetail ? ' · ' + cloudCtl.lastDetail.slice(0, 120) : '') + "). Quedó en cola y se reintentará.", verified ? 'success' : 'error');
         }
 
         function renderOrderHubEquipments(order) {
