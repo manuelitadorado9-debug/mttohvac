@@ -12280,7 +12280,17 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 .page.cover .box{margin-bottom:10px}
 .page.cover .g div{padding:6px 12px}
 .page.cover td{font-size:10.5px}
-.page.cover ul{padding:8px 12px 8px 26px;font-size:10.5px;line-height:1.5}`;
+.page.cover ul{padding:8px 12px 8px 26px;font-size:10.5px;line-height:1.5}
+/* Portada: las cadenas largas no pueden invadir la siguiente columna */
+.page.cover .t{table-layout:fixed;font-size:9px}
+.page.cover .t th:nth-child(1),.page.cover .t td:nth-child(1){width:34%;overflow-wrap:anywhere;word-break:break-word}
+.page.cover .t th:nth-child(2),.page.cover .t td:nth-child(2){width:38%;overflow-wrap:anywhere}
+.page.cover .t th:nth-child(3),.page.cover .t td:nth-child(3){width:12%;overflow-wrap:anywhere}
+.page.cover .t th:nth-child(4),.page.cover .t td:nth-child(4){width:16%;overflow-wrap:anywhere}
+.page.cover .t td{font-size:9px;line-height:1.2;padding:5px 6px}
+.page.cover .t th{font-size:8px;padding:5px 6px}
+.page.cover ul{font-size:9.5px;line-height:1.38}
+.page.cover ul li{margin-bottom:3px;overflow-wrap:anywhere}`;
 
   /* ---------- Descarga directa PDF vectorial (sin diálogo de impresión) ---------- */
   function loadScriptOnce(src, isReady) {
@@ -12423,25 +12433,18 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     const doc = pageEl.ownerDocument;
     const walker = doc.createTreeWalker(pageEl, doc.defaultView.NodeFilter.SHOW_TEXT);
     const bulletDone = new WeakSet();
+    const mm = px => px * pxToMm * scale;
     let node;
+
     while ((node = walker.nextNode())) {
       const parent = node.parentElement;
       if (!parent) continue;
       const raw = node.nodeValue || '';
-      const whiteSpace = cssStyle(parent).whiteSpace;
-      let value = whiteSpace && whiteSpace.includes('pre') ? raw.replace(/\r/g, '') : raw.replace(/\s+/g, ' ');
-      value = value.trim();
-      if (!value) continue;
-      const range = doc.createRange();
-      range.selectNodeContents(node);
-      const rr = range.getBoundingClientRect();
-      if (!rr.width || !rr.height) continue;
-      const block = getTextBlock(parent);
-      const br = block.getBoundingClientRect();
+      if (!raw.trim()) continue;
+
       const cs = cssStyle(parent);
       const fontPx = Math.max(4, cssPx(cs.fontSize, 12));
       const fontPt = Math.max(3.5, fontPx * 0.75 * scale);
-      const linePx = cs.lineHeight === 'normal' ? fontPx * 1.2 : cssPx(cs.lineHeight, fontPx * 1.2);
       const color = pdfColor(cs.color);
       const weight = parseInt(cs.fontWeight, 10);
       const fontStyle = cs.fontStyle === 'italic' ? 'italic' : 'normal';
@@ -12450,33 +12453,62 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       pdf.setFont(fontFace, bold && fontStyle === 'italic' ? 'bolditalic' : bold ? 'bold' : fontStyle);
       pdf.setFontSize(fontPt);
       pdf.setTextColor(color[0], color[1], color[2]);
-      if (cs.textTransform === 'uppercase') value = value.toUpperCase();
-      else if (cs.textTransform === 'lowercase') value = value.toLowerCase();
-      const widthPx = Math.max(8, br.width || rr.width);
-      const widthMm = widthPx * pxToMm * scale;
-      let lines = [];
-      value.split('\n').forEach(part => {
-        if (!part) { lines.push(''); return; }
-        lines.push(...pdf.splitTextToSize(part, Math.max(4, widthMm)));
-      });
+
+      // No se vuelve a envolver el texto con métricas de jsPDF. Se toma cada
+      // carácter en su posición real del navegador y se agrupa por renglón.
+      // Esto evita que las partes después de <b>/<strong> reinicien el ancho
+      // completo del párrafo y terminen encima de otros renglones o columnas.
+      const lines = [];
+      let offset = 0;
+      let pendingSpace = false;
+      for (const ch of Array.from(raw)) {
+        const from = offset;
+        offset += ch.length;
+        if (/\s/.test(ch)) {
+          pendingSpace = true;
+          continue;
+        }
+
+        const range = doc.createRange();
+        range.setStart(node, from);
+        range.setEnd(node, offset);
+        const rects = Array.from(range.getClientRects());
+        const cr = rects.find(r => r.width > 0 || r.height > 0) || range.getBoundingClientRect();
+        if (!cr || !cr.height) continue;
+
+        const top = cr.top;
+        const renderedChar = cs.textTransform === 'uppercase' ? ch.toUpperCase()
+          : cs.textTransform === 'lowercase' ? ch.toLowerCase() : ch;
+        let line = lines.find(item => Math.abs(item.top - top) < 1.25);
+        if (!line) {
+          line = { top, left: cr.left, text: renderedChar };
+          lines.push(line);
+        } else {
+          if (pendingSpace && line.text && !line.text.endsWith(' ')) line.text += ' ';
+          line.text += renderedChar;
+        }
+        pendingSpace = false;
+      }
+
       if (!lines.length) continue;
-      const left = (rr.left - pageRect.left) * pxToMm * scale;
-      const top = (rr.top - pageRect.top) * pxToMm * scale;
-      const align = cs.textAlign === 'center' ? 'center' : (cs.textAlign === 'right' ? 'right' : 'left');
-      const anchorX = align === 'center'
-        ? (br.left - pageRect.left + br.width / 2) * pxToMm * scale
-        : align === 'right'
-          ? (br.right - pageRect.left) * pxToMm * scale
-          : left;
-      const baseline = top + fontPt * 0.82 * 0.352778;
-      const lineStep = Math.max(fontPt * 0.9, linePx * pxToMm * scale);
+      lines.sort((a, b) => a.top - b.top || a.left - b.left);
       const li = parent.closest ? parent.closest('li') : null;
       if (li && !bulletDone.has(li)) {
         bulletDone.add(li);
+        const firstLine = lines[0];
+        const bulletX = mm(firstLine.left - pageRect.left) - 1.4;
+        const bulletY = mm(firstLine.top - pageRect.top) + fontPt * 0.82 * 0.352778 - fontPt * 0.12;
         pdf.setFillColor(color[0], color[1], color[2]);
-        pdf.circle(Math.max(1, left - 1.4), baseline - fontPt * 0.12, 0.45, 'F');
+        pdf.circle(Math.max(1, bulletX), bulletY, 0.45, 'F');
       }
-      pdf.text(lines, anchorX, baseline, { align, lineHeightFactor: lineStep / Math.max(1, fontPt * 0.352778) });
+
+      lines.forEach(line => {
+        const x = mm(line.left - pageRect.left);
+        const baseline = mm(line.top - pageRect.top) + fontPt * 0.82 * 0.352778;
+        // Cada fragmento se dibuja en la posición en la que el navegador lo
+        // distribuyó. No se usa splitTextToSize: el ajuste ya lo hizo el HTML.
+        pdf.text(line.text, x, baseline, { baseline: 'alphabetic' });
+      });
     }
   }
 
