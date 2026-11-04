@@ -642,10 +642,10 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 <div class="stack" id="hub-equipments-list"></div>
                 <div id="hub-finalize-container" class="finalize hidden">
                     <div>
-                        <h4>¡Todos los equipos intervenidos!</h4>
-                        <p>Recolecta la firma del cliente para dar por completada la orden.</p>
+                        <h4 id="hub-finalize-title">¡Todos los equipos intervenidos!</h4>
+                        <p id="hub-finalize-text">La orden sigue pendiente. Recaba la firma o elige expresamente finalizar sin ella.</p>
                     </div>
-                    <button onclick="openGlobalSignatureModal()" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-file-signature"></i> Finalizar rutina y recabar firma</button>
+                    <button onclick="openGlobalSignatureModal()" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-file-signature"></i> Resolver firma y finalizar orden</button>
                 </div>
             </div>
 
@@ -657,7 +657,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
         <div class="sheet full">
             <div class="sheet-head">
                 <button class="icon-btn" onclick="closeGlobalSignatureModal()" aria-label="Volver"><i class="fa-solid fa-chevron-left"></i></button>
-                <div class="sheet-title"><h3>Cierre de rutina y firma</h3><p>Recibe a satisfacción de los trabajos realizados por Smart Maintenance System.</p></div>
+                <div class="sheet-title"><h3>Cierre de rutina y firma</h3><p>La orden no se cerrará hasta recabar la firma o elegir expresamente finalizar sin firma. Puedes salir y volver después: la orden seguirá pendiente.</p></div>
             </div>
             <div class="sheet-body">
                 <label class="field">
@@ -671,7 +671,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                 </div>
             </div>
             <div class="sheet-foot">
-                <button type="button" onclick="finalizeRoutineWithoutSignature()" class="btn btn-ghost">Finalizar sin firma</button>
+                <button type="button" onclick="finalizeRoutineWithoutSignature()" class="btn btn-ghost">No recabar firma y finalizar orden</button>
                 <button type="button" onclick="submitGlobalSignature()" class="btn btn-ok"><i class="fa-solid fa-check-double"></i> Confirmar y cerrar</button>
             </div>
         </div>
@@ -717,7 +717,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         <div id="exec-checklist-container" class="checks"></div>
                     </div>
 
-                    <div class="corr-box">
+                    <div class="corr-box" id="exec-correctivo-flag-section">
                         <label class="chk-row warn">
                             <input type="checkbox" id="exec-chk-correctivo" onchange="toggleCorrectiveSection()">
                             <span class="chk-box"><i class="fa-solid fa-check"></i></span>
@@ -2036,23 +2036,59 @@ async function authPedirNuevaClave() {
         }
         function mergeSharedOrder(local, remote) {
             const out = Object.assign({}, remote, local), ex = Object.assign({}, remote.executions || {});
+            // La resolución de firma se decide por su propia fecha, no por el timestamp
+            // de una edición posterior de cualquier equipo.
+            const decisionTime = value => {
+                const v = value && (value.signatureDecisionAt || (value.clientSignature && value.clientSignature.timestamp));
+                const n = Date.parse(v || '');
+                return Number.isFinite(n) ? n : 0;
+            };
+            if (decisionTime(remote) > decisionTime(local)) {
+                ['signatureDecision', 'signatureDecisionAt', 'signatureDecisionBy', 'signatureDecisionReason', 'clientSignature']
+                    .forEach(k => { if (remote[k] !== undefined) out[k] = remote[k]; });
+            }
             Object.entries(local.executions || {}).forEach(([k, v]) => { if (!ex[k] || execTs(v) >= execTs(ex[k])) ex[k] = v; });
             out.executions = ex;
             if (remote.technicianFinished) { out.technicianFinished = true; out.technicianFinishedAt = remote.technicianFinishedAt; }
             adoptAdminFields(out, remote);
             const ids = [...new Set((Array.isArray(out.equipmentIds) ? out.equipmentIds : (Array.isArray(local.equipmentIds) ? local.equipmentIds : [])).map(String))];
             out.equipmentIds = ids;
-            if (Array.isArray(remote.equipmentIds) && ids.length !== (Array.isArray(local.equipmentIds) ? local.equipmentIds.length : 0)) { out.clientSignature = remote.clientSignature || null; }   // el admin cambió los equipos: la firma anterior ya no aplica
+            const remoteIds = [...new Set((Array.isArray(remote.equipmentIds) ? remote.equipmentIds : []).map(String))].sort();
+            const localIds = [...new Set((Array.isArray(local.equipmentIds) ? local.equipmentIds : []).map(String))].sort();
+            const assignmentChanged = remoteIds.length && (remoteIds.length !== localIds.length || remoteIds.some((id, i) => id !== localIds[i]));
+            if (assignmentChanged) { // si el administrador cambia los equipos, la firma y la decisión anteriores ya no cubren la nueva orden
+                out.clientSignature = null;
+                out.signatureDecision = 'PENDING';
+                out.signatureDecisionAt = null;
+                out.signatureDecisionBy = null;
+                out.signatureDecisionReason = '';
+                out.technicianFinished = false;
+                out.technicianFinishedAt = null;
+            }
             const allDone = ids.length > 0 && ids.every(id => { const e = ex[id]; return !!e && !e.partial && String(e.status || '').toLowerCase() !== 'pending' && String(e.status || '').toLowerCase() !== 'in progress'; });
-            if (!allDone) { out.status = 'PENDING'; out.technicianFinished = false; }
-            else if (String(remote.status).toUpperCase() === 'COMPLETED' || String(local.status).toUpperCase() === 'COMPLETED') out.status = 'COMPLETED';
+            const signatureDecision = techSignatureDecision(out);
+            if (!allDone || signatureDecision === 'PENDING') {
+                out.status = 'PENDING';
+                out.technicianFinished = false;
+                out.technicianFinishedAt = null;
+            } else {
+                out.status = 'COMPLETED';
+                out.technicianFinished = true;
+                out.technicianFinishedAt = out.technicianFinishedAt || out.signatureDecisionAt || (out.clientSignature && out.clientSignature.timestamp) || null;
+            }
             return out;
         }
         function applyMergedToLocal(id, merged) {
             const lo = (typeof workOrders !== 'undefined') && workOrders.find(o => o && o.id === id); if (!lo) return;
             lo.executions = Object.assign({}, merged.executions); adoptAdminFields(lo, merged); lo.equipmentIds = [...new Set((merged.equipmentIds || lo.equipmentIds || []).map(String))]; lo.status = merged.status;
+            ['signatureDecision', 'signatureDecisionAt', 'signatureDecisionBy', 'signatureDecisionReason'].forEach(k => {
+                if (merged[k] !== undefined) lo[k] = merged[k];
+            });
             if (merged.clientSignature === null) lo.clientSignature = null;
-            if (merged.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = merged.technicianFinishedAt; }
+            else if (merged.clientSignature && (!merged.clientSignature._lite || !lo.clientSignature)) lo.clientSignature = merged.clientSignature;
+            lo.technicianFinished = !!merged.technicianFinished;
+            if (merged.technicianFinishedAt) lo.technicianFinishedAt = merged.technicianFinishedAt;
+            else delete lo.technicianFinishedAt;
         }
         // id de orden -> sync_ts (sello que pone un trigger de la base en cada escritura) la última vez que nuestra copia quedó al día
         const ORDER_SEEN_TS = new Map();
@@ -2424,7 +2460,7 @@ async function authPedirNuevaClave() {
             const times = [
                 order.updatedAt, order.modifiedAt, order.lastModifiedAt,
                 order.timestamp, order.clientSignature && order.clientSignature.timestamp,
-                order.technicianFinishedAt
+                order.signatureDecisionAt, order.technicianFinishedAt
             ].map(toMillis);
             Object.values(order.executions || {}).forEach(exec => {
                 if (exec) times.push(toMillis(exec.timestamp), toMillis(exec.updatedAt));
@@ -2444,9 +2480,17 @@ async function authPedirNuevaClave() {
                 if (orderTimestamp(localOrder) >= orderTimestamp(cloudOrder) && orderTimestamp(localOrder) > 0) {
                     const adopted = Object.assign({}, localOrder);
                     adoptAdminFields(adopted, cloudOrder);                       // el progreso local se conserva, la asignación manda la nube
-                    const cloudIds = Array.isArray(cloudOrder.equipmentIds) ? cloudOrder.equipmentIds.length : 0;
-                    const localIds = Array.isArray(localOrder.equipmentIds) ? localOrder.equipmentIds.length : 0;
-                    if (cloudIds !== localIds) { adopted.clientSignature = cloudOrder.clientSignature || null; if (String(cloudOrder.status || '').toUpperCase() === 'PENDING') adopted.status = 'PENDING'; }
+                    const cloudIds = [...new Set((cloudOrder.equipmentIds || []).map(String))].sort();
+                    const localIds = [...new Set((localOrder.equipmentIds || []).map(String))].sort();
+                    if (cloudIds.length !== localIds.length || cloudIds.some((id, i) => id !== localIds[i])) {
+                        adopted.clientSignature = cloudOrder.clientSignature || null;
+                        adopted.signatureDecision = cloudOrder.signatureDecision || 'PENDING';
+                        adopted.signatureDecisionAt = cloudOrder.signatureDecisionAt || null;
+                        adopted.signatureDecisionBy = cloudOrder.signatureDecisionBy || null;
+                        adopted.technicianFinished = false;
+                        adopted.technicianFinishedAt = null;
+                        adopted.status = 'PENDING';
+                    }
                     return adopted;
                 }
                 return hvacMergeLiteWithLocal(cloudOrder, localOrder);   // listado liviano: conserva lo completo que ya hay aquí
@@ -2571,12 +2615,14 @@ async function authPedirNuevaClave() {
             'maintenanceType:payload->>maintenanceType', 'type:payload->>type', 'tipoRutina:payload->>tipoRutina',
             'zoneName:payload->>zoneName', 'zoneId:payload->>zoneId', 'periodicity:payload->>periodicity',
             'technicianFinished:payload->>technicianFinished', 'technicianFinishedAt:payload->>technicianFinishedAt',
+            'signatureDecision:payload->>signatureDecision', 'signatureDecisionAt:payload->>signatureDecisionAt',
+            'signatureDecisionBy:payload->>signatureDecisionBy', 'signatureDecisionReason:payload->>signatureDecisionReason',
             'updatedAt:payload->>updatedAt', 'sigName:payload->clientSignature->>name', 'sigTs:payload->clientSignature->>timestamp'
         ].join(',');
         function egressScalarToOrder(r) {
             if (!r || r.id == null) return null;
             const o = { id: r.id, executions: {}, _lite: 'scalar' };
-            ['status', 'date', 'client', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'updatedAt']
+            ['status', 'date', 'client', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'signatureDecision', 'signatureDecisionAt', 'signatureDecisionBy', 'signatureDecisionReason', 'updatedAt']
                 .forEach(k => { if (r[k] != null) o[k] = r[k]; });
             if (Array.isArray(r.technicians)) o.technicians = r.technicians;
             o.equipmentIds = Array.isArray(r.equipmentIds) ? r.equipmentIds : [];
@@ -2600,6 +2646,9 @@ async function authPedirNuevaClave() {
                     'type:payload->>type', 'tipoRutina:payload->>tipoRutina', 'zoneName:payload->>zoneName',
                     'zoneId:payload->>zoneId', 'periodicity:payload->>periodicity',
                     'technicianFinished:payload->>technicianFinished', 'technicianFinishedAt:payload->>technicianFinishedAt',
+                    'signatureDecision:payload->>signatureDecision', 'signatureDecisionAt:payload->>signatureDecisionAt',
+                    'signatureDecisionBy:payload->>signatureDecisionBy', 'signatureDecisionReason:payload->>signatureDecisionReason',
+                    'sigName:payload->clientSignature->>name', 'sigTs:payload->clientSignature->>timestamp',
                     'updatedAt:payload->>updatedAt', 'executions:payload->executions'
                 ].join(',');
                 const baseV = EGRESS.LITE_VIEW + '?select=' + liteSelect + '&id=not.like.HIST-*&status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOrV + ')');
@@ -2610,11 +2659,12 @@ async function authPedirNuevaClave() {
                     const id = r.orderId || r.id;
                     if (id == null) return null;
                     const o = { id: String(id), _lite: 'view' };
-                    ['client', 'date', 'status', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'updatedAt']
+                    ['client', 'date', 'status', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'signatureDecision', 'signatureDecisionAt', 'signatureDecisionBy', 'signatureDecisionReason', 'updatedAt']
                         .forEach(k => { if (r[k] != null) o[k] = r[k]; });
                     if (Array.isArray(r.technicians)) o.technicians = r.technicians;
                     o.equipmentIds = Array.isArray(r.equipmentIds) ? r.equipmentIds : [];
                     o.technicianFinished = String(r.technicianFinished) === 'true';
+                    if (r.sigTs || r.sigName) o.clientSignature = { name: r.sigName || '', timestamp: r.sigTs || '', _lite: true };
                     o.executions = r.executions && typeof r.executions === 'object' ? r.executions : {};
                     Object.values(o.executions).forEach(ex => { if (ex && typeof ex === 'object') ex._lite = ex._lite || true; });
                     return o;
@@ -3066,13 +3116,38 @@ async function authPedirNuevaClave() {
             const allDone = total > 0 && done === total;
             return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone, known: true, source: 'local' };
         }
+        // La orden solo queda cerrada cuando todos los equipos están completos Y existe
+        // una decisión explícita sobre la firma. También reconoce órdenes antiguas:
+        // una firma normal o el rótulo "Completado sin firma" representan una decisión guardada.
+        function techSignatureDecision(order) {
+            if (!order) return 'PENDING';
+            const declared = String(order.signatureDecision || '').trim().toUpperCase();
+            if (declared === 'SIGNED' || declared === 'DECLINED') return declared;
+            const sig = order.clientSignature;
+            if (!sig) return 'PENDING';
+            const name = String(sig.name || '').trim();
+            if (/completad[oa]\s+sin\s+firma|sin\s+firma/i.test(name)) return 'DECLINED';
+            // En listados livianos la imagen se omite (_lite), pero nombre + timestamp
+            // permiten reconocer que la firma sí existe sin descargar el archivo base64.
+            if (sig.signatureImg || sig.image || (sig.timestamp && name)) return 'SIGNED';
+            return 'PENDING';
+        }
         function techOrderNeedsWork(order) {
             const p = techOrderProgress(order);
-            return p.total === 0 || !p.allDone;
+            return p.total === 0 || !p.allDone || techSignatureDecision(order) === 'PENDING';
         }
         function techEffectiveStatus(order) {
             if (String(order && order.status || '').toUpperCase() === 'BILLED') return 'BILLED';
             return techOrderNeedsWork(order) ? 'PENDING' : 'COMPLETED';
+        }
+        function keepOrderPendingForSignature(order) {
+            if (!order || !techOrderProgress(order).allDone || techSignatureDecision(order) !== 'PENDING') return false;
+            const changed = String(order.status || '').toUpperCase() !== 'PENDING' || !!order.technicianFinished || !!order.technicianFinishedAt;
+            order.status = 'PENDING';
+            order.technicianFinished = false;
+            delete order.technicianFinishedAt;
+            if (changed) persistOrderLocallyAndSync(order);
+            return true;
         }
 
         // Zona / piso de una orden (con respaldo en la zona de sus equipos para órdenes antiguas)
@@ -3110,12 +3185,13 @@ async function authPedirNuevaClave() {
 
             container.innerHTML = visible.map(o => {
                 const progress = techOrderProgress(o);
+                const awaitingSignature = progress.known && progress.allDone && techSignatureDecision(o) === 'PENDING';
                 const isCompleted = techEffectiveStatus(o) === 'COMPLETED';
                 const eqIds = o.equipmentIds || [];
                 return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
                     <div class="r-top">
                         <span class="r-id">${esc(o.id)}</span>
-                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Todos los equipos finalizados' : 'Pendiente · continuar rutina'}</span>
+                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Rutina cerrada' : (awaitingSignature ? 'Equipos listos · firma pendiente' : 'Pendiente · continuar rutina')}</span>
                     </div>
                     <h3 class="r-client">${esc(o.client)}</h3>
                     ${techOrderZone(o) ? `<span class="zone-chip"><i class="fa-solid fa-layer-group"></i>${esc(techOrderZone(o))}</span>` : ''}
@@ -3124,9 +3200,11 @@ async function authPedirNuevaClave() {
                         <span><i class="fa-solid fa-snowflake"></i>${progress.known ? progress.done + ' de ' + progress.total + ' equipos finalizados' : 'Avance pendiente de consulta detallada'}</span>
                     </div>
                     <div class="r-progress"><div class="bar"><i style="width:${progress.known ? progress.percent : 0}%"></i></div><span>${progress.known ? progress.percent + '%' : '—'}</span></div>
-                    ${isCompleted
-                        ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
-                        : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Continuar ejecutando rutina</button>`}
+                    ${awaitingSignature
+                        ? `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-file-signature"></i> Recabar firma o elegir finalizar sin firma</button>`
+                        : (isCompleted
+                            ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
+                            : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Continuar ejecutando rutina</button>`)}
                 </article>`;
             }).join('');
         }
@@ -3245,9 +3323,13 @@ async function authPedirNuevaClave() {
             if (progressBar) progressBar.style.width = `${routineProgress.known ? routineProgress.percent : 0}%`;
             if (progressText) progressText.innerText = routineProgress.known ? `${routineProgress.done} / ${routineProgress.total} Equipos (${routineProgress.percent}%)` : `Avance no disponible / ${routineProgress.total} Equipos (—)`;
             const finalizeBox = document.getElementById('hub-finalize-container');
-            // La finalización usa exactamente el mismo conteo done/total que el histórico.
-            if (routineProgress.total > 0 && routineProgress.allDone && String(order.status).toUpperCase() !== 'BILLED') finalizeBox.classList.remove('hidden');
-            else finalizeBox.classList.add('hidden');
+            const signaturePending = techSignatureDecision(order) === 'PENDING';
+            const canResolveSignature = routineProgress.total > 0 && routineProgress.allDone && signaturePending && String(order.status).toUpperCase() !== 'BILLED';
+            if (finalizeBox) finalizeBox.classList.toggle('hidden', !canResolveSignature);
+            const finalizeTitle = document.getElementById('hub-finalize-title');
+            const finalizeText = document.getElementById('hub-finalize-text');
+            if (finalizeTitle) finalizeTitle.textContent = '¡Todos los equipos intervenidos!';
+            if (finalizeText) finalizeText.textContent = 'La orden permanece pendiente hasta que recabes la firma o elijas expresamente finalizar sin firma. Puedes salir y volver a esta orden para resolverlo.';
         }
 
         // =========================================================================
@@ -3405,6 +3487,7 @@ async function authPedirNuevaClave() {
             currentExecOrderId = orderId;
             let order = workOrders.find(o => String(o.id) === String(orderId));
             if (!order) return;
+            keepOrderPendingForSignature(order);
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
             document.getElementById('hub-order-title').innerText = `Orden ${order.id} - ${order.client}`;
@@ -3424,6 +3507,7 @@ async function authPedirNuevaClave() {
             order = workOrders.find(o => String(o.id) === String(orderId)) || order;
             const eqOk = await ensureOrderEquipments(order);
             if (String(currentExecOrderId) !== String(orderId)) return;
+            keepOrderPendingForSignature(order); // también cubre órdenes antiguas cargadas completas desde Supabase
             renderOrderHubEquipments(order);
             if (!fullOk && navigator.onLine !== false && hvacHasLite(order)) showToast('No se pudo cargar el detalle completo; se conserva la versión ligera disponible.', 'error');
             if (!eqOk && (order.equipmentIds || []).some(id => !techFindEq(id))) showToast('No se pudieron cargar todos los equipos. Revisa tu conexión y vuelve a abrir la rutina.', 'error');
@@ -3461,6 +3545,17 @@ async function authPedirNuevaClave() {
         }
 
         function openGlobalSignatureModal() {
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+            if (!order || !techOrderProgress(order).allDone) {
+                showToast('Primero debes completar todos los equipos de la orden.', 'error');
+                return;
+            }
+            if (techSignatureDecision(order) !== 'PENDING') {
+                showToast('Esta orden ya tiene una decisión de firma registrada.', 'error');
+                return;
+            }
+            const nameInput = document.getElementById('sig-client-name');
+            if (nameInput) nameInput.value = '';
             document.getElementById('global-signature-modal-backdrop').classList.remove('hidden');
             setTimeout(initSignatureCanvas, 100);
         }
@@ -3524,8 +3619,10 @@ async function authPedirNuevaClave() {
                 checklist[chk.getAttribute('data-chk-key')] = chk.checked;
             });
 
-            const corrective = document.getElementById('exec-chk-correctivo').checked;
-            let correctiveDesc = document.getElementById('exec-corrective-desc').value.trim();
+            const routineType = typeof ordenTipoActual === 'function' ? ordenTipoActual() : 'PREVENTIVO';
+            const isCorrectiveRoutine = routineType === 'CORRECTIVO';
+            const corrective = !isCorrectiveRoutine && document.getElementById('exec-chk-correctivo').checked;
+            let correctiveDesc = isCorrectiveRoutine ? '' : document.getElementById('exec-corrective-desc').value.trim();
             if (corrective && !correctiveDesc) {
                 const formal = (document.getElementById('exec-f-notas-analiticas').value || '').replace(/^Durante[^.]*se registró lo siguiente\.\s*/i, '').replace(/\s+/g, ' ').trim();
                 const base = formal || String(document.getElementById('exec-f-obs').value || '').replace(/\s+/g, ' ').trim();
@@ -3545,8 +3642,9 @@ async function authPedirNuevaClave() {
                 paramsValues,
                 checklist,
                 obs: document.getElementById('exec-f-obs').value,
-                // Campo general que alimenta la sección 4 del informe técnico.
-                observaciones_tecnicas: String(
+                tipoRutina: routineType,
+                // En correctivos, las labores ejecutadas se documentan en Notas del técnico.
+                observaciones_tecnicas: isCorrectiveRoutine ? '' : String(
                     document.getElementById('exec-f-observaciones-tecnicas')?.value || ''
                 ).trim(),
                 corrective,
@@ -3593,11 +3691,19 @@ async function authPedirNuevaClave() {
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
             if (!techOrderProgress(order).allDone) { showToast('No puedes cerrar la orden: todavía hay equipos pendientes o informes incompletos.', 'error'); order.status = 'PENDING'; return; }
+            if (techSignatureDecision(order) !== 'PENDING') { showToast('Esta orden ya tiene una decisión de firma registrada.', 'error'); return; }
             const clientName = document.getElementById('sig-client-name').value.trim();
             const sigData = await r2keep(sigCanvas.toDataURL('image/png'), 'firmas');
+            const decisionAt = new Date().toISOString();
 
-            order.clientSignature = { name: clientName || order.client, signatureImg: sigData, timestamp: new Date().toISOString() };
+            order.clientSignature = { name: clientName || order.client, signatureImg: sigData, timestamp: decisionAt };
+            order.signatureDecision = 'SIGNED';
+            order.signatureDecisionAt = decisionAt;
+            order.signatureDecisionBy = String(activeUser || '');
+            order.signatureDecisionReason = 'Firma recabada';
             order.status = 'COMPLETED';
+            order.technicianFinished = true;
+            order.technicianFinishedAt = decisionAt;
 
             persistOrderLocallyAndSync(order);
             closeGlobalSignatureModal();
@@ -3610,9 +3716,18 @@ async function authPedirNuevaClave() {
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
             if (!techOrderProgress(order).allDone) { showToast('No puedes cerrar la orden: todavía hay equipos pendientes o informes incompletos.', 'error'); order.status = 'PENDING'; return; }
-
-            order.clientSignature = { name: 'Completado sin firma', signatureImg: null, timestamp: new Date().toISOString() };
+            if (techSignatureDecision(order) !== 'PENDING') { showToast('Esta orden ya tiene una decisión de firma registrada.', 'error'); return; }
+            const confirmed = window.confirm('¿Confirmas que NO se recabará la firma y que deseas finalizar la orden? Esta decisión quedará registrada en el informe.');
+            if (!confirmed) return;
+            const decisionAt = new Date().toISOString();
+            order.clientSignature = { name: 'Completado sin firma', signatureImg: null, timestamp: decisionAt };
+            order.signatureDecision = 'DECLINED';
+            order.signatureDecisionAt = decisionAt;
+            order.signatureDecisionBy = String(activeUser || '');
+            order.signatureDecisionReason = 'El técnico eligió expresamente finalizar sin recabar firma';
             order.status = 'COMPLETED';
+            order.technicianFinished = true;
+            order.technicianFinishedAt = decisionAt;
 
             persistOrderLocallyAndSync(order);
             closeGlobalSignatureModal();
@@ -3626,6 +3741,14 @@ async function authPedirNuevaClave() {
             if (!order || !techOrderProgress(order).allDone) {
                 showToast("Aún hay equipos pendientes o con informes incompletos. Continúa la rutina antes de terminarla.", "error");
                 if (order) { order.status = 'PENDING'; order.technicianFinished = false; renderTechAgenda(); }
+                return;
+            }
+            if (techSignatureDecision(order) === 'PENDING') {
+                order.status = 'PENDING';
+                order.technicianFinished = false;
+                persistOrderLocallyAndSync(order);
+                openOrderHub(orderId);
+                showToast('Falta resolver la firma. Recábala o selecciona expresamente finalizar sin firma.', 'error');
                 return;
             }
             order.status = 'COMPLETED';
@@ -3912,7 +4035,7 @@ async function authPedirNuevaClave() {
             const pr = dEl('exec-f-presion'), pv = String(data.presion || '').trim();
             if (pr && !pr.value.trim() && pv && pv.length <= 80) pr.value = pv;
             let extra = '';
-            if (data.requiere_correctivo === true) {
+            if (data.requiere_correctivo === true && ordenTipoActual() !== 'CORRECTIVO') {
                 const chk = dEl('exec-chk-correctivo');
                 if (chk && !chk.checked) { chk.checked = true; toggleCorrectiveSection(); }
                 const d = dEl('exec-corrective-desc');                   // oculto: solo guarda la frase formal de la IA
@@ -4089,7 +4212,13 @@ async function authPedirNuevaClave() {
             const order = workOrders.find(o => o.id === orderId);
             const eq = techFindEq(eqId) || { code: eqId };
             const exec = (order && order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
-            const plannedType = order && ['PREVENTIVO', 'CORRECTIVO', 'REVISION'].includes(String(order.maintenanceType || '').toUpperCase()) ? String(order.maintenanceType).toUpperCase() : 'PREVENTIVO';
+            const routineRaw = String(
+                order?.tipoRutina || order?.maintenanceType || order?.routineType || order?.type || exec?.tipoRutina || 'PREVENTIVO'
+            ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+            const plannedType = ['COR', 'CORRECTIVO', 'CORRECTIVA'].includes(routineRaw) ? 'CORRECTIVO'
+                : ['REV', 'REVISION'].includes(routineRaw) ? 'REVISION'
+                : 'PREVENTIVO';
+            const isCorrectiveRoutine = plannedType === 'CORRECTIVO';
             const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${plannedType}"]`);
             if (radio) radio.checked = true;
             const typeNames = { PREVENTIVO: 'Preventivo', CORRECTIVO: 'Correctivo', REVISION: 'Revisión' };
@@ -4107,6 +4236,20 @@ async function authPedirNuevaClave() {
             // En preventivo se conserva la experiencia clásica: un solo bloque de evidencia (máx. 5 fotos).
             const isPreventivo = plannedType === 'PREVENTIVO';
             const show = (id, visible) => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !visible); };
+            // En una rutina CORRECTIVA, la necesidad del correctivo ya está definida por la orden.
+            // También se oculta el campo independiente: el técnico describe lo ejecutado en "Notas del técnico".
+            show('exec-correctivo-flag-section', !isCorrectiveRoutine);
+            show('exec-observaciones-tecnicas-field', !isCorrectiveRoutine);
+            if (isCorrectiveRoutine) {
+                const correctiveFlag = document.getElementById('exec-chk-correctivo');
+                const correctiveDescription = document.getElementById('exec-corrective-desc');
+                const correctiveDetails = document.getElementById('corrective-details-box');
+                if (correctiveFlag) correctiveFlag.checked = false;
+                if (correctiveDescription) correctiveDescription.value = '';
+                if (correctiveDetails) correctiveDetails.classList.add('hidden');
+                const technicalObs = document.getElementById('exec-f-observaciones-tecnicas');
+                if (technicalObs) technicalObs.value = '';
+            }
             show('exec-tipo-rutina-extra', !isPreventivo);
             show('exec-lecturas-extra', !isPreventivo);
             show('exec-notas-extra', !isPreventivo);
@@ -4136,7 +4279,12 @@ async function authPedirNuevaClave() {
                 e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
                 e.conclusion = document.getElementById('exec-f-conclusion').value.trim();
                 const technicalObsInput = document.getElementById('exec-f-observaciones-tecnicas');
-                if (technicalObsInput) {
+                if (e.tipoRutina === 'CORRECTIVO') {
+                    if (technicalObsInput) technicalObsInput.value = '';
+                    e.observaciones_tecnicas = '';
+                    e.corrective = false;
+                    e.correctiveDesc = '';
+                } else if (technicalObsInput) {
                     e.observaciones_tecnicas = String(technicalObsInput.value || '').trim();
                 }
                 e.fotosAntes = [...ordenFotos.antes];
@@ -4638,6 +4786,13 @@ async function mxPullShared() {
     Object.entries(r.executions || {}).forEach(([k, v]) => { if (!lo.executions[k] || execTs(v) > execTs(lo.executions[k])) { lo.executions[k] = v; changed = true; } });
     const mergedIds = [...new Set([...(lo.equipmentIds || []), ...(r.equipmentIds || [])].map(String))];
     if (mergedIds.length !== (lo.equipmentIds || []).length) { lo.equipmentIds = mergedIds; changed = true; }
+    const remoteDecisionTs = Date.parse(r.signatureDecisionAt || (r.clientSignature && r.clientSignature.timestamp) || '') || 0;
+    const localDecisionTs = Date.parse(lo.signatureDecisionAt || (lo.clientSignature && lo.clientSignature.timestamp) || '') || 0;
+    if (remoteDecisionTs > localDecisionTs && techSignatureDecision(r) !== 'PENDING') {
+      ['signatureDecision', 'signatureDecisionAt', 'signatureDecisionBy', 'signatureDecisionReason'].forEach(k => { if (r[k] !== undefined) lo[k] = r[k]; });
+      if (r.clientSignature && (!r.clientSignature._lite || !lo.clientSignature)) lo.clientSignature = r.clientSignature;
+      changed = true;
+    }
     if (r.technicianFinished && !lo.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = r.technicianFinishedAt; changed = true; }
     const effective = techEffectiveStatus(lo);
     if (effective === 'PENDING' && String(lo.status).toUpperCase() !== 'PENDING') { lo.status = 'PENDING'; lo.technicianFinished = false; changed = true; }
