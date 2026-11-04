@@ -1848,7 +1848,7 @@ async function authPedirNuevaClave() {
                 const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
                 const timer = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null;
                 try {
-                    const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { method, headers, body: payload, signal: ctrl ? ctrl.signal : undefined });
+                    const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { method, headers, body: payload, signal: ctrl ? ctrl.signal : undefined, cache: opts && opts.noStore ? 'no-store' : 'default' });
                     if (res.ok) {
                         cloudCtl.lastStatus = 200;
                         if (!quiet) cloudReport(true);
@@ -2559,42 +2559,61 @@ async function authPedirNuevaClave() {
             const names = [...new Set([u.name, u.username].filter(Boolean))];
             if (!names.length) return [];
             EGRESS.stats.net++;
-            const q = { quiet: true };
-            // 1) Vista liviana (sin fotos). Los filtros se aplican sobre columnas simples de la vista.
+            const q = { quiet: true, noStore: true };
+            // La vista hvac_orders_lite debe retirar fotos/firmas base64. Seleccionamos
+            // columnas concretas (metadatos + executions recortadas), nunca payload completo.
             if (!EGRESS.liteViewMissing) {
-                const techOrV = names.map(n => 'technician.eq.' + pgQuote(n)).concat(names.map(n => 'technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
-                const baseV = EGRESS.LITE_VIEW + '?select=id,payload&id=not.like.HIST-*&status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOrV + ')');
-                let rows = await supabaseFetch(baseV + '&tech_open=is.true&order=date.desc&limit=200', 'GET', null, null, q);
+                const techOrV = names.map(n => 'technician.eq.' + pgQuote(n)).concat(names.map(n => 'technician.ilike.' + pgQuote('*' + n + '*'))).concat(names.map(n => 'technicians.cs.' + JSON.stringify([n]))).join(',');
+                const liteSelect = [
+                    'id', 'orderId:payload->>id', 'client:payload->>client', 'date:payload->>date',
+                    'status:payload->>status', 'technician:payload->>technician', 'technicians:payload->technicians',
+                    'equipmentIds:payload->equipmentIds', 'maintenanceType:payload->>maintenanceType',
+                    'type:payload->>type', 'tipoRutina:payload->>tipoRutina', 'zoneName:payload->>zoneName',
+                    'zoneId:payload->>zoneId', 'periodicity:payload->>periodicity',
+                    'technicianFinished:payload->>technicianFinished', 'technicianFinishedAt:payload->>technicianFinishedAt',
+                    'updatedAt:payload->>updatedAt', 'executions:payload->executions'
+                ].join(',');
+                const baseV = EGRESS.LITE_VIEW + '?select=' + liteSelect + '&id=not.like.HIST-*&status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOrV + ')');
+                const rows = await supabaseFetch(baseV + '&tech_open=is.true&order=date.desc&limit=200', 'GET', null, null, q);
                 if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
-                if (!Array.isArray(rows) && !EGRESS.liteViewMissing) rows = await supabaseFetch(baseV + '&limit=200', 'GET', null, null, q);
-                if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
-                if (Array.isArray(rows)) return rows.map(r => r && r.payload).filter(Boolean);
-                if (!EGRESS.liteViewMissing) return null;       // error de red u otro: no se cae al camino pesado
+                if (Array.isArray(rows)) return rows.map(r => {
+                    if (!r) return null;
+                    const id = r.orderId || r.id;
+                    if (id == null) return null;
+                    const o = { id: String(id), _lite: 'view' };
+                    ['client', 'date', 'status', 'technician', 'maintenanceType', 'type', 'tipoRutina', 'zoneName', 'zoneId', 'periodicity', 'technicianFinishedAt', 'updatedAt']
+                        .forEach(k => { if (r[k] != null) o[k] = r[k]; });
+                    if (Array.isArray(r.technicians)) o.technicians = r.technicians;
+                    o.equipmentIds = Array.isArray(r.equipmentIds) ? r.equipmentIds : [];
+                    o.technicianFinished = String(r.technicianFinished) === 'true';
+                    o.executions = r.executions && typeof r.executions === 'object' ? r.executions : {};
+                    Object.values(o.executions).forEach(ex => { if (ex && typeof ex === 'object') ex._lite = ex._lite || true; });
+                    return o;
+                }).filter(Boolean);
+                if (!EGRESS.liteViewMissing) return null;
             }
-            // 2) Respaldo sin la vista: solo campos escalares de hvac_orders (nunca el payload completo)
-            console.info('[Egress] Falta la vista hvac_orders_lite: se usa el respaldo de campos escalares. Ejecuta supabase_hvac_orders_lite.sql para ver el avance real de cada rutina.');
-            const techOr = names.map(n => 'payload->>technician.eq.' + pgQuote(n)).concat(names.map(n => 'payload->>technician.ilike.' + pgQuote('*' + n + '*'))).join(',');
+            // Respaldo seguro: solo campos escalares (incluye updatedAt), sin executions ni fotos.
+            const techOr = names.map(n => 'payload->>technician.eq.' + pgQuote(n)).concat(names.map(n => 'payload->>technician.ilike.' + pgQuote('*' + n + '*'))).concat(names.map(n => 'payload->technicians.cs.' + JSON.stringify([n]))).join(',');
             const base = 'hvac_orders?select=' + EGRESS_SCALAR_SELECT + '&id=not.like.HIST-*&payload->>status=in.(PENDING,COMPLETED)&or=' + encodeURIComponent('(' + techOr + ')');
-            // (las rutinas ya terminadas por el técnico se descartan en el cliente: un filtro "not.eq.true" ocultaría las que no tienen ese campo)
             let rows = await supabaseFetch(base + '&order=payload->>date.desc&limit=200', 'GET', null, null, q);
             if (!Array.isArray(rows)) rows = await supabaseFetch(base + '&limit=200', 'GET', null, null, q);
             return Array.isArray(rows) ? rows.map(egressScalarToOrder).filter(Boolean) : null;
         }
-        // opts.force: ignora la caché (sincronización manual) · opts.maxAge: antigüedad máxima aceptada en ms
+        // opts.force / opts.revalidate: omite memoria y respaldo reciente; valida siempre con Supabase.
         async function fetchMyActiveOrders(opts) {
             opts = opts || {};
             const u = techCurrentUserRecord();
-            if (!u) return null; // sin sesión todavía: no se piden órdenes
+            if (!u) return null;
             const uid = String(u.id);
             const ckey = 'orders:' + uid;
-            const ttl = opts.maxAge || EGRESS.LIST_TTL_MS;
+            const ttl = Number(opts.maxAge) > 0 ? Number(opts.maxAge) : EGRESS.LIST_TTL_MS;
+            const force = !!(opts.force || opts.revalidate);
             const finish = list => (Array.isArray(list) ? list.filter(o => o && techMatches(o, u)) : null);
-            if (!opts.force) {
+            if (!force) {
                 const hit = egressGet(ckey, ttl);
                 if (hit) return finish(JSON.parse(hit));
-                // Tras recargar la app: si el listado se descargó hace pocos minutos, el respaldo local sirve igual.
                 let last = 0; try { last = Number(localStorage.getItem('HVAC_LIST_AT_' + uid)) || 0; } catch (_) {}
-                let dirty = false; try { dirty = localStorage.getItem('HVAC_LIST_DIRTY') === '1'; } catch (_) {}   // hubo cambios locales: la copia restaurada puede ir atrasada → se revalida
+                let dirty = false; try { dirty = localStorage.getItem('HVAC_LIST_DIRTY') === '1'; } catch (_) {}
                 if (!dirty && last && (Date.now() - last) < ttl && Array.isArray(workOrders) && workOrders.length) { EGRESS.stats.hits++; return finish(workOrders.slice()); }
             }
             return egressOnce(ckey + ':net', async () => {
@@ -2604,6 +2623,72 @@ async function authPedirNuevaClave() {
                 try { localStorage.setItem('HVAC_LIST_AT_' + uid, String(Date.now())); localStorage.removeItem('HVAC_LIST_DIRTY'); } catch (_) {}
                 return finish(list);
             });
+        }
+
+        // Conteos de avance en lote: mismo RPC y contrato que usa index.html.
+        // Solo devuelve números por orden; nunca descarga fotos ni payload.
+        let techProgressRpcDisabled = false;
+        async function techRefreshServerProgress(list, serverList) {
+            if (!navigator.onLine || !Array.isArray(list) || !list.length || techProgressRpcDisabled) return false;
+            const source = Array.isArray(serverList) ? serverList : list;
+            const ids = [...new Set(list.filter(o => {
+                if (!o || o.id == null) return false;
+                // Con la vista ligera se calcula localmente; la RPC solo rescata el respaldo scalar.
+                return o._lite === 'scalar' && (!o.executions || Object.keys(o.executions).length === 0);
+            }).map(o => String(o.id)))];
+            if (!ids.length) return false;
+            let rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: ids }, null, { quiet: true, noStore: true });
+            if (!Array.isArray(rows)) {
+                if (Number(cloudCtl.lastStatus) === 404) techProgressRpcDisabled = true;
+                return false;
+            }
+            let changed = false;
+            rows.forEach(r => {
+                if (!r || r.id == null || r.total == null || r.done == null) return;
+                const order = list.find(o => o && String(o.id) === String(r.id));
+                const serverOrder = source.find(o => o && String(o.id) === String(r.id));
+                if (!order || !serverOrder) return;
+                // Si existe una edición local posterior a la lectura remota, no aplicar un conteo viejo.
+                if (orderTimestamp(order) > orderTimestamp(serverOrder) && orderTimestamp(order) > 0) return;
+                const total = [...new Set((serverOrder.equipmentIds || []).map(String).filter(Boolean))].length;
+                if (Number(r.total) !== total) return; // no mezclar denominadores diferentes
+                const done = Math.min(total, Math.max(0, Number(r.done) || 0));
+                const serverVersion = String(serverOrder.updatedAt || '');
+                const previous = order._serverProgress;
+                if (!previous || Number(previous.done) !== done || Number(previous.total) !== total || String(previous.orderUpdatedAt || '') !== serverVersion) changed = true;
+                order._serverProgress = { done, total, started: Math.max(0, Number(r.started) || 0), at: Date.now(), orderUpdatedAt: serverVersion };
+            });
+            return changed;
+        }
+
+        // Revalida las órdenes activas en cada regreso al primer plano; fusiona sin pisar
+        // ejecuciones locales más nuevas y conserva registros que aún están en la outbox.
+        let techOrdersRefreshInFlight = null;
+        async function refreshMyOrdersFromServer() {
+            if (navigator.onLine === false || document.visibilityState !== 'visible' || !techCurrentUserRecord()) return false;
+            if (techOrdersRefreshInFlight) return techOrdersRefreshInFlight;
+            techOrdersRefreshInFlight = (async () => {
+                const remote = await fetchMyActiveOrders({ force: true, revalidate: true });
+                if (!Array.isArray(remote)) return false;
+                const local = readLocalBackup('HVAC_ORDERS_BACKUP', workOrders);
+                const merged = mergeOrdersByTimestamp(remote, local);
+                const remoteIds = new Set(merged.map(o => String(o && o.id)));
+                let pendingIds = new Set();
+                try { pendingIds = new Set(cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && e.op !== 'delete').map(e => cloudCleanId(e.id))); } catch (_) {}
+                const localPending = (Array.isArray(local) ? local : []).filter(o => o && o.id != null && !remoteIds.has(String(o.id)) && pendingIds.has(cloudCleanId(o.id)));
+                workOrders = merged.concat(localPending);
+                cloudReconcileOutbox();
+                await techRefreshServerProgress(workOrders, remote);
+                try { localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders)); } catch (_) {}
+                renderTechAgenda();
+                const hub = document.getElementById('order-hub-modal-backdrop');
+                if (hub && !hub.classList.contains('hidden')) {
+                    const current = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+                    if (current) renderOrderHubEquipments(current);
+                }
+                return true;
+            })().finally(() => { techOrdersRefreshInFlight = null; });
+            return techOrdersRefreshInFlight;
         }
 
         // ---- Payload completo de UNA orden (bajo demanda) ----
@@ -2691,13 +2776,14 @@ async function authPedirNuevaClave() {
                 techStripAdminUsers();
 
                 // Rutinas del técnico (solo las suyas y activas)
-                const myOrders = await fetchMyActiveOrders({ force: !!forceSync });
+                const myOrders = await fetchMyActiveOrders({ force: navigator.onLine !== false || !!forceSync });
                 const cloudReadComplete = Array.isArray(usrData) && (myOrders !== null);
                 if (Array.isArray(myOrders)) {
                     const localOrders = readLocalBackup('HVAC_ORDERS_BACKUP', workOrders);
                     workOrders = mergeOrdersByTimestamp(myOrders, localOrders);
                 }
                 cloudReconcileOutbox(); // conserva cambios hechos sin conexión
+                if (navigator.onLine !== false) await techRefreshServerProgress(workOrders, myOrders);
 
                 try {
                     const localAgenda = JSON.parse(localStorage.getItem('HVAC_AGENDA_BACKUP') || '[]');
@@ -2932,15 +3018,24 @@ async function authPedirNuevaClave() {
         // Una orden marcada COMPLETED vuelve a estar disponible si se añadieron equipos sin informe completo.
         function techOrderProgress(order) {
             const ids = [...new Set((order && order.equipmentIds || []).map(String).filter(Boolean))];
+            const total = ids.length;
+            const server = order && order._serverProgress;
+            if (server && Number(server.total) === total && (!server.orderUpdatedAt || !order.updatedAt || String(server.orderUpdatedAt) === String(order.updatedAt))) {
+                const done = Math.min(total, Math.max(0, Number(server.done) || 0));
+                return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone: total > 0 && done === total, known: true, source: 'rpc' };
+            }
+            // El respaldo scalar no contiene ejecuciones. No interpretar esa ausencia como 0%.
+            if (order && order._lite === 'scalar' && (!order.executions || Object.keys(order.executions).length === 0)) {
+                return { total, done: null, pending: null, percent: null, allDone: false, known: false, source: 'metadata' };
+            }
             let done = 0;
             ids.forEach(id => {
                 const eq = techFindEq(id) || { id, code: id, type: 'EXTRACTOR' };
                 const exec = techExecFor(order, id);
                 if (getEquipmentExecutionStatus(eq, id, exec) === 'done') done++;
             });
-            const total = ids.length;
             const allDone = total > 0 && done === total;
-            return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone };
+            return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone, known: true, source: 'local' };
         }
         function techOrderNeedsWork(order) {
             const p = techOrderProgress(order);
@@ -2988,15 +3083,6 @@ async function authPedirNuevaClave() {
                 const progress = techOrderProgress(o);
                 const isCompleted = techEffectiveStatus(o) === 'COMPLETED';
                 const eqIds = o.equipmentIds || [];
-                let checklistDone = 0, checklistTotal = 0, done = 0;
-                eqIds.forEach(id => {
-                    const eq = techFindEq(id) || { id, code: id, type: 'EXTRACTOR' };
-                    const exec = techExecFor(o, id);
-                    const metrics = getTechChecklistMetrics(eq, exec);
-                    checklistDone += metrics.done; checklistTotal += metrics.total;
-                    if (getEquipmentExecutionStatus(eq, id, exec) === 'done') done++;
-                });
-                const pct = checklistTotal ? Math.round(checklistDone / checklistTotal * 100) : 0;
                 return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
                     <div class="r-top">
                         <span class="r-id">${esc(o.id)}</span>
@@ -3006,9 +3092,9 @@ async function authPedirNuevaClave() {
                     ${techOrderZone(o) ? `<span class="zone-chip"><i class="fa-solid fa-layer-group"></i>${esc(techOrderZone(o))}</span>` : ''}
                     <div class="r-meta">
                         <span><i class="fa-regular fa-calendar"></i>${esc(o.date)}</span>
-                        <span><i class="fa-solid fa-snowflake"></i>${progress.done} de ${progress.total} equipos finalizados</span>
+                        <span><i class="fa-solid fa-snowflake"></i>${progress.known ? progress.done + ' de ' + progress.total + ' equipos finalizados' : 'Avance pendiente de consulta detallada'}</span>
                     </div>
-                    <div class="r-progress"><div class="bar"><i style="width:${progress.percent}%"></i></div><span>${progress.percent}%</span></div>
+                    <div class="r-progress"><div class="bar"><i style="width:${progress.known ? progress.percent : 0}%"></i></div><span>${progress.known ? progress.percent + '%' : '—'}</span></div>
                     ${isCompleted
                         ? `<button onclick="finishTechnicianRoutine('${escJs(o.id)}')" class="btn btn-ok btn-lg btn-block"><i class="fa-solid fa-check"></i> Terminar</button>`
                         : `<button onclick="openOrderHub('${escJs(o.id)}')" class="btn btn-primary btn-lg btn-block"><i class="fa-solid fa-play"></i> Continuar ejecutando rutina</button>`}
@@ -3020,18 +3106,23 @@ async function authPedirNuevaClave() {
         // El técnico solo trabaja rutinas preventivas: ya no existe la pestaña de correctivos.
         function updateHubTabButtons() { currentHubTab = 'equipos'; }
 
+        // Regla común con index.html: un equipo cuenta como finalizado solo con timestamp
+        // y todos los parámetros/checklist obligatorios, salvo estado FINALIZADO explícito.
         function getEquipmentExecutionStatus(eq, eqId, exec) {
-            if (!exec || typeof exec !== 'object') return 'pending';
-            const cfg = exec.formConfigSnapshot || equipmentFormsConfig[(eq.type || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
+            if (!exec || typeof exec !== 'object' || !exec.timestamp) return 'pending';
+            if (String(exec.status || '').toUpperCase() === 'FINALIZADO') return 'done';
+            const cfg = exec.formConfigSnapshot || equipmentFormsConfig[String(exec.typeKey || (eq && eq.type) || 'EXTRACTOR').trim().toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
             const params = String(cfg.params || '').split(',').map(v => v.trim()).filter(Boolean);
-            const checklist = String(cfg.checklist || '').split(/\n/).map(v => v.trim()).filter(Boolean);
+            const checklist = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
             const values = exec.paramsValues || {};
             const checks = exec.checklist || {};
-            const paramFilled = params.filter((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim()).length;
-            const checksDone = checklist.filter((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true).length;
-            const hasAny = paramFilled > 0 || checksDone > 0 || !!String(exec.obs || '').trim() || !!(exec.photos && exec.photos.length) || Number(exec.photosCount) > 0 || !!exec.corrective;
+            const hasAny = params.some((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim())
+                || checklist.some((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true)
+                || !!String(exec.obs || '').trim() || !!(exec.photos && exec.photos.length) || Number(exec.photosCount) > 0 || !!exec.corrective;
             if (!hasAny) return 'pending';
-            return paramFilled === params.length && checksDone === checklist.length ? 'done' : 'progress';
+            const paramsComplete = params.every((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim() !== '');
+            const checklistComplete = checklist.every((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true);
+            return (params.length + checklist.length) > 0 && paramsComplete && checklistComplete ? 'done' : 'progress';
         }
 
         function getTechChecklistMetrics(eq, exec) {
@@ -3071,19 +3162,12 @@ async function authPedirNuevaClave() {
             const eqIds = order.equipmentIds || [];
             const search = (document.getElementById('hub-equipment-search')?.value || '').trim().toLocaleLowerCase('es');
             const statusFilter = document.getElementById('hub-equipment-status-filter')?.value || 'all';
-            let completedCount = 0;
-            let checklistDoneTotal = 0;
-            let checklistItemsTotal = 0;
             const allItems = [];
 
             eqIds.forEach(eqId => {
                 const eq = techFindEq(eqId) || { id: eqId, code: eqId, name: 'Desconocido', type: 'HVAC' };
                 const exec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
                 const status = getEquipmentExecutionStatus(eq, eqId, exec);
-                if (status === 'done') completedCount++;
-                const metrics = getTechChecklistMetrics(eq, exec);
-                checklistItemsTotal += metrics.total;
-                checklistDoneTotal += metrics.done;
                 allItems.push({ eqId, eq, exec, status });
             });
 
@@ -3126,14 +3210,14 @@ async function authPedirNuevaClave() {
             });
             container.innerHTML = html;
 
-            const percent = checklistItemsTotal > 0 ? Math.round((checklistDoneTotal / checklistItemsTotal) * 100) : 0;
+            const routineProgress = techOrderProgress(order);
             const progressBar = document.getElementById('hub-progress-bar');
             const progressText = document.getElementById('hub-progress-text');
-            if (progressBar) progressBar.style.width = `${percent}%`;
-            if (progressText) progressText.innerText = `${percent}%`;
+            if (progressBar) progressBar.style.width = `${routineProgress.known ? routineProgress.percent : 0}%`;
+            if (progressText) progressText.innerText = routineProgress.known ? `${routineProgress.done} / ${routineProgress.total} Equipos (${routineProgress.percent}%)` : `Avance no disponible / ${routineProgress.total} Equipos (—)`;
             const finalizeBox = document.getElementById('hub-finalize-container');
-            // No permitir finalizar solo porque el checklist esté marcado: cada equipo debe estar realmente completo.
-            if (eqIds.length > 0 && completedCount === eqIds.length && checklistItemsTotal > 0 && checklistDoneTotal === checklistItemsTotal && String(order.status).toUpperCase() !== 'BILLED') finalizeBox.classList.remove('hidden');
+            // La finalización usa exactamente el mismo conteo done/total que el histórico.
+            if (routineProgress.total > 0 && routineProgress.allDone && String(order.status).toUpperCase() !== 'BILLED') finalizeBox.classList.remove('hidden');
             else finalizeBox.classList.add('hidden');
         }
 
@@ -3291,7 +3375,7 @@ async function authPedirNuevaClave() {
 
         async function openOrderHub(orderId) {
             currentExecOrderId = orderId;
-            const order = workOrders.find(o => o.id === orderId);
+            let order = workOrders.find(o => String(o.id) === String(orderId));
             if (!order) return;
 
             document.getElementById('order-hub-modal-backdrop').classList.remove('hidden');
@@ -3304,15 +3388,17 @@ async function authPedirNuevaClave() {
             if (searchInput) searchInput.value = '';
             if (statusSelect) statusSelect.value = 'all';
             updateHubTabButtons();
-            // Primero se pinta lo que ya hay en el dispositivo; luego se piden SOLO los equipos de esta rutina.
+            renderOrderHubEquipments(order); // respuesta inmediata con datos que ya existen localmente
+
+            // El payload pesado (fotos/firmas) se solicita solo para esta orden abierta.
+            const fullOk = await hvacEnsureFullOrder(orderId);
+            if (String(currentExecOrderId) !== String(orderId)) return;
+            order = workOrders.find(o => String(o.id) === String(orderId)) || order;
+            const eqOk = await ensureOrderEquipments(order);
+            if (String(currentExecOrderId) !== String(orderId)) return;
             renderOrderHubEquipments(order);
-            const box = document.getElementById('hub-equipments-list');
-            const missing = (order.equipmentIds || []).some(id => !techFindEq(id));
-            if (missing && box) box.innerHTML = '<div class="empty"><i class="fa-solid fa-spinner fa-spin"></i>Cargando equipos de la rutina…</div>';
-            const ok = await ensureOrderEquipments(order);
-            if (String(currentExecOrderId) !== String(orderId)) return; // el técnico ya salió de la rutina
-            renderOrderHubEquipments(order);
-            if (!ok && (order.equipmentIds || []).some(id => !techFindEq(id))) showToast('No se pudieron cargar todos los equipos. Revisa tu conexión y vuelve a abrir la rutina.', 'error');
+            if (!fullOk && navigator.onLine !== false && hvacHasLite(order)) showToast('No se pudo cargar el detalle completo; se conserva la versión ligera disponible.', 'error');
+            if (!eqOk && (order.equipmentIds || []).some(id => !techFindEq(id))) showToast('No se pudieron cargar todos los equipos. Revisa tu conexión y vuelve a abrir la rutina.', 'error');
         }
 
         function closeOrderHubModal() {
@@ -3598,8 +3684,12 @@ async function authPedirNuevaClave() {
             document.addEventListener('visibilitychange', () => {
                 if (document.visibilityState === 'hidden') {
                     hvacFlushStorageWrites().catch(() => {});
-                } else if (navigator.onLine && cloudOutboxRead().length) {
-                    cloudFlushOutbox().catch(err => console.warn('[Offline] Reintento al volver a la app:', err));
+                } else if (navigator.onLine) {
+                    (async () => {
+                        const refreshPromise = refreshMyOrdersFromServer(); // inicia GET no-store de inmediato
+                        const flushPromise = cloudOutboxRead().length ? cloudFlushOutbox() : Promise.resolve();
+                        await Promise.all([refreshPromise, flushPromise]);
+                    })().catch(err => console.warn('[Supabase] Revalidación automática al volver a la app:', err));
                 }
             });
             window.addEventListener('online', () => {
@@ -4010,7 +4100,8 @@ async function authPedirNuevaClave() {
         };
         const ordenStatusOriginal = getEquipmentExecutionStatus;
         getEquipmentExecutionStatus = function(eq, eqId, exec) {
-            if (!exec || !exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
+            if (!exec || !exec.timestamp) return 'pending';
+            if (!exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
             // Para preventivo, el estado depende solo de sus parámetros y checklist originales.
             if (exec.tipoRutina === 'PREVENTIVO') return ordenStatusOriginal(eq, eqId, exec);
             const normalized = { ...exec, formConfigSnapshot: { ...(exec.formConfigSnapshot || {}), params: '', checklist: '' } };

@@ -4066,7 +4066,7 @@ async function authPedirNuevaClave() {
                     const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
                     const timer = ctrl ? setTimeout(() => ctrl.abort(), 15000) : null;
                     try {
-                        const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { method, headers, body: payload, signal: ctrl ? ctrl.signal : undefined });
+                        const res = await fetch(`${SUPABASE_URL}/rest/v1/${endpoint}`, { method, headers, body: payload, signal: ctrl ? ctrl.signal : undefined, cache: opts && opts.noStore ? 'no-store' : 'default' });
                         if (timer) clearTimeout(timer);
                         if (res.ok) {
                             cloudNoteResult(true, 0, quiet, endpoint);
@@ -4548,41 +4548,107 @@ async function authPedirNuevaClave() {
             };
         }
 
-        // ===== Avance por equipo calculado EN EL SERVIDOR (RPC hvac_orders_progress) =====
-        // Devuelve 3 números por orden (total/finalizados/iniciados) en vez de descargar executions con fotos.
-        // Solo se consulta para las filas visibles que no estén completadas; TTL 60 s. Si la función SQL no
-        // existe todavía (404) se desactiva sola y el histórico se comporta como antes.
-        const HVAC_PROGRESS_TTL = 60 * 1000;
-        const hvacProgressCache = new Map();   // id -> { at, ok, total, done, started }
+        // ===== Avance por equipo: vista ligera como fuente común; RPC como respaldo =====
+        // La lista del histórico nunca descarga payload de hvac_orders; el fallback solo
+        // consulta hvac_orders_lite para las órdenes visibles (sin fotos base64).
+        const HVAC_ORDER_SUMMARY_TTL = 60 * 1000; // metadatos escalares: revalidación ligera cada minuto
+        const HVAC_PROGRESS_TTL = 45 * 1000;
+        const HVAC_PROGRESS_RETRY_MS = 15 * 1000;
+        const hvacProgressCache = new Map();       // id -> { at, ok, total, done, started, source }
         const hvacProgressPending = new Set();
+        const hvacProgressAttempt = new Map();
         let hvacProgressDisabled = false;
-        async function hvacRefreshProgress(list) {
-            if (hvacProgressDisabled || !navigator.onLine || !Array.isArray(list)) return false;
-            const now = Date.now();
-            const ids = [...new Set(list.filter(o => o && o._hvacSummaryOnly && !['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase())).map(o => String(o.id)))]
-                .filter(id => { const c = hvacProgressCache.get(id); return !hvacProgressPending.has(id) && (!c || now - c.at > HVAC_PROGRESS_TTL); });
+        let hvacProgressLiteViewMissing = false;
+
+        async function hvacFetchLiteProgress(ids, sourceList) {
+            if (hvacProgressLiteViewMissing || !ids.length || !navigator.onLine) return false;
+            const query = 'hvac_orders_lite?select=id,order_id:payload->>id,executions:payload->executions&id=in.(' + pgList(ids) + ')';
+            const rows = await supabaseFetch(query, 'GET', null, null, { quiet: true, noStore: true });
+            if (!Array.isArray(rows)) {
+                if (Number(cloudCtl.lastStatus) === 404) hvacProgressLiteViewMissing = true;
+                return false;
+            }
+            const summaryById = new Map((sourceList || []).map(o => [String(o.id), o]));
             let changed = false;
-            for (let i = 0; i < ids.length; i += 100) {
-                const chunk = ids.slice(i, i + 100);
-                chunk.forEach(id => hvacProgressPending.add(id));
+            rows.forEach(row => {
+                if (!row || (!row.order_id && row.id == null)) return;
+                let executions = row.executions == null ? {} : row.executions;
+                if (typeof executions === 'string') { try { executions = JSON.parse(executions); } catch (_) { return; } }
+                // Solo se proyecta executions desde la vista ligera; nunca el payload completo.
+                // La vista debe retirar fotos/firma base64 antes de exponer esta columna.
+                if (!executions || typeof executions !== 'object') return;
+                const id = String(row.order_id || row.id);
+                const summary = summaryById.get(id);
+                if (!summary) return;
+                const progressOrder = Object.assign({}, summary, { id, executions });
+                const p = hvacOrderProgress(progressOrder);
+                const started = Object.values(executions || {}).filter(ex => ex && typeof ex === 'object' && (ex.timestamp || ex.status || ex.partial)).length;
+                const prev = hvacProgressCache.get(id);
+                const next = { at: Date.now(), ok: true, total: p.total, done: p.done, started, source: 'hvac_orders_lite' };
+                if (!prev || !prev.ok || prev.done !== next.done || prev.total !== next.total || prev.started !== next.started) changed = true;
+                hvacProgressCache.set(id, next);
+            });
+            return changed;
+        }
+
+        async function hvacRefreshProgress(list) {
+            if (!navigator.onLine || !Array.isArray(list)) return false;
+            const now = Date.now();
+            const eligible = [...new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)))];
+            const ids = eligible.filter(id => {
+                const c = hvacProgressCache.get(id);
+                const triedAt = hvacProgressAttempt.get(id) || 0;
+                return !hvacProgressPending.has(id) && !(c && c.ok && now - c.at < HVAC_PROGRESS_TTL) && (now - triedAt >= HVAC_PROGRESS_RETRY_MS);
+            });
+            if (!ids.length) return false;
+
+            ids.forEach(id => { hvacProgressPending.add(id); hvacProgressAttempt.set(id, now); });
+            let changed = false;
+            try {
+                // Fuente primaria: ejecuciones proyectadas de hvac_orders_lite, calculadas
+                // con la misma función local que usa el hub del técnico. Solo filas visibles.
+                // Un error/timeout de la vista no debe impedir el respaldo RPC.
+                let viewChanged = false;
                 try {
-                    const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: chunk }, null, { quiet: true });
-                    if (!Array.isArray(rows)) {
-                        if (cloudCtl.lastStatus === 404) { hvacProgressDisabled = true; console.info('[Avance] Falta la función SQL hvac_orders_progress: ejecuta hvac_orders_progress.sql en Supabase. Mientras tanto el avance se ve solo al revisar la orden.'); }
-                        chunk.forEach(id => hvacProgressCache.set(id, { at: Date.now(), ok: false }));
-                        continue;
+                    viewChanged = await hvacFetchLiteProgress(ids, list);
+                } catch (viewError) {
+                    console.warn('[Avance] La vista ligera no respondió; se intentará RPC:', viewError);
+                    if (Number(cloudCtl.lastStatus) === 404) hvacProgressLiteViewMissing = true;
+                }
+                changed = viewChanged || changed;
+                const unresolved = ids.filter(id => {
+                    const c = hvacProgressCache.get(id);
+                    return !(c && c.ok && c.source === 'hvac_orders_lite' && c.at >= now);
+                });
+
+                // Respaldo: RPC numérica. Solo se invoca si la vista no entregó ejecuciones
+                // verificables; una respuesta fallida nunca reemplaza el último valor bueno.
+                if (unresolved.length && !hvacProgressDisabled) {
+                    const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
+                    if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) {
+                        hvacProgressDisabled = true;
+                        console.info('[Avance] RPC no disponible; se conserva el conteo de la vista ligera o se muestra — hasta obtener datos válidos.');
                     }
-                    const seen = new Set();
-                    rows.forEach(r => {
-                        if (!r || r.id == null) return;
-                        const id = String(r.id); seen.add(id);
-                        const prev = hvacProgressCache.get(id);
-                        const nx = { at: Date.now(), ok: true, total: Number(r.total) || 0, done: Number(r.done) || 0, started: Number(r.started) || 0 };
-                        if (!prev || !prev.ok || prev.done !== nx.done || prev.started !== nx.started || prev.total !== nx.total) changed = true;
-                        hvacProgressCache.set(id, nx);
-                    });
-                    chunk.forEach(id => { if (!seen.has(id)) hvacProgressCache.set(id, { at: Date.now(), ok: false }); });
-                } finally { chunk.forEach(id => hvacProgressPending.delete(id)); }
+                    if (Array.isArray(rows)) {
+                        rows.forEach(r => {
+                            if (!r || r.id == null || r.total == null || r.done == null) return;
+                            const id = String(r.id);
+                            if (!unresolved.includes(id)) return;
+                            const summary = list.find(o => o && String(o.id) === id);
+                            const expectedTotal = summary && Array.isArray(summary.equipmentIds) ? new Set(summary.equipmentIds.map(String).filter(Boolean)).size : null;
+                            const total = Math.max(0, Number(r.total) || 0);
+                            if (expectedTotal != null && total !== expectedTotal) return;
+                            const prev = hvacProgressCache.get(id);
+                            const nx = { at: Date.now(), ok: true, total, done: Math.min(total, Math.max(0, Number(r.done) || 0)), started: Math.max(0, Number(r.started) || 0), source: 'rpc' };
+                            if (!prev || !prev.ok || prev.done !== nx.done || prev.started !== nx.started || prev.total !== nx.total) changed = true;
+                            hvacProgressCache.set(id, nx);
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('[Avance] No se pudo actualizar el resumen ligero:', e);
+            } finally {
+                ids.forEach(id => hvacProgressPending.delete(id));
             }
             return changed;
         }
@@ -4598,11 +4664,11 @@ async function authPedirNuevaClave() {
             const clone = rows => JSON.parse(JSON.stringify(rows));
             if (!force) {
                 const hit = hvacOrderQueryCache.get(query);
-                if (hit && Date.now() - hit.at < CLOUD_TABLE_TTL) return clone(hit.rows);
+                if (hit && Date.now() - hit.at < HVAC_ORDER_SUMMARY_TTL) return clone(hit.rows);
                 if (hvacOrderQueryInFlight.has(query)) { const r = await hvacOrderQueryInFlight.get(query); return r ? clone(r) : r; }
             }
             const task = (async () => {
-                const rows = await supabaseFetch('hvac_orders?select=' + HVAC_ORDER_SUMMARY_SELECT + query, 'GET', null, null, { quiet: true });
+                const rows = await supabaseFetch('hvac_orders?select=' + HVAC_ORDER_SUMMARY_SELECT + query, 'GET', null, null, { quiet: true, noStore: true });
                 if (!Array.isArray(rows)) return null;
                 const list = rows.map(hvacOrderSummaryFromRow).filter(Boolean);
                 hvacOrderQueryCache.set(query, { at: Date.now(), rows: list });
@@ -9191,25 +9257,39 @@ async function authPedirNuevaClave() {
 
         // Estado por equipo: una ejecución solo cuenta como finalizada si tiene informe,
         // parámetros completos y checklist completo. Compatibilidad con informes antiguos.
+        // Regla única de finalización por equipo: requiere timestamp y todos los
+        // parámetros/checklist obligatorios; FINALIZADO explícito conserva compatibilidad.
         function hvacExecutionIsFinalized(order, eqId) {
-            const ids = (order && order.equipmentIds) || [];
             const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
             const executions = (order && order.executions) || {};
             const exec = executions[eqId] || executions[eq.id] || executions[eq.code] || executions[String(eq.id)] || executions[String(eq.code)];
             if (!exec || typeof exec !== 'object' || !exec.timestamp) return false;
+
+            // Correctivo/Revisión: el formulario extendido del técnico neutraliza checklist
+            // dinámico y exige estas tres lecturas para marcar el equipo como finalizado.
+            const routine = String(exec.tipoRutina || '').trim().toUpperCase();
+            if (routine && routine !== 'PREVENTIVO') {
+                return ['voltaje', 'amperaje', 'presionOtros'].every(k => String(exec[k] == null ? '' : exec[k]).trim() !== '');
+            }
             if (String(exec.status || '').toUpperCase() === 'FINALIZADO') return true;
-            const metrics = getChecklistProgressMetrics(eq, exec);
+
             const cfg = exec.formConfigSnapshot || equipmentFormsConfig[String(exec.typeKey || eq.type || 'EXTRACTOR').toUpperCase()] || equipmentFormsConfig['EXTRACTOR'] || {};
-            const paramNames = String(cfg.params || '').split(/[,\n]/).map(v => v.trim()).filter(Boolean);
-            const params = exec.paramsValues || {};
-            const paramsComplete = Object.keys(params).length > 0 && Object.values(params).every(v => String(v == null ? '' : v).trim() !== '');
-            return metrics.total > 0 && metrics.done === metrics.total && paramsComplete;
+            const params = String(cfg.params || '').split(',').map(v => v.trim()).filter(Boolean);
+            const checklist = String(cfg.checklist || '').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
+            const values = exec.paramsValues || {};
+            const checks = exec.checklist || {};
+            const paramsComplete = params.every((_, i) => String(values['param_' + i] ?? exec['param_' + i] ?? '').trim() !== '');
+            const checklistComplete = checklist.every((_, i) => checks['chk_' + (i + 1)] === true || checks['check_' + (i + 1)] === true || checks[i] === true);
+            return (params.length + checklist.length) > 0 && paramsComplete && checklistComplete;
         }
 
         function hvacOrderProgress(order) {
-            const ids = (order && order.equipmentIds || []).map(String);
+            const ids = [...new Set((order && order.equipmentIds || []).map(String).filter(Boolean))];
+            const total = ids.length;
             const done = ids.filter(id => hvacExecutionIsFinalized(order, id)).length;
-            return { total: ids.length, done, pending: Math.max(0, ids.length - done), complete: ids.length > 0 && done === ids.length };
+            // Fórmula contractual compartida con tecnico.html: equipos finalizados / asignados.
+            const percent = total ? Math.round(done / total * 100) : 0;
+            return { total, done, pending: Math.max(0, total - done), percent, complete: total > 0 && done === total };
         }
 
         // ===== 3 estados + matriz de facturación =====
@@ -9439,27 +9519,35 @@ async function authPedirNuevaClave() {
             }
 
             pageList.forEach(o => {
-                const eqIds = o.equipmentIds || [];
-                let doneCount = 0, percent = 0;
-                let progressTitle = 'Progreso detallado disponible al revisar la orden.';
+                const eqIds = [...new Set((o.equipmentIds || []).map(String).filter(Boolean))];
+                let doneCount = null, percent = null;
+                let progressTitle = 'Consultando avance real; el listado no descarga fotos ni payload completo.';
                 if (o._hvacSummaryOnly) {
                     const pc = hvacProgressCache.get(String(o.id));
-                    if (String(o.status || '').toUpperCase() === 'COMPLETED') doneCount = eqIds.length;
-                    else if (pc && pc.ok) { doneCount = Math.min(pc.done, eqIds.length); progressTitle = 'Avance actualizado desde la nube.'; }
-                    percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                    if (pc && pc.ok && Number(pc.total) === eqIds.length) {
+                        doneCount = Math.min(Math.max(0, pc.done), eqIds.length);
+                        percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                        progressTitle = pc.source === 'rpc' ? 'Avance actualizado desde RPC.' : 'Avance actualizado desde la vista ligera.';
+                    } else if (o.executions && Object.keys(o.executions).length) {
+                        const localProgress = hvacOrderProgress(o);
+                        doneCount = localProgress.done;
+                        percent = localProgress.percent;
+                        progressTitle = 'Avance calculado desde ejecuciones locales disponibles.';
+                    }
                 } else {
-                    const executions = o.executions || {};
                     const missingByEquipment = [];
                     eqIds.forEach(eqId => {
                         const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
-                        const exec = executions[eqId] || executions[eq.id] || executions[eq.code];
                         if (!hvacExecutionIsFinalized(o, eqId)) missingByEquipment.push(`${eq.code || eqId}: pendiente de finalizar informe`);
                     });
                     const progress = hvacOrderProgress(o);
                     doneCount = progress.done;
-                    percent = progress.total > 0 ? Math.round((doneCount / progress.total) * 100) : 0;
-                    progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los ítems del checklist están completos.';
+                    percent = progress.percent;
+                    progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los equipos están finalizados.';
                 }
+                const percentLabel = percent == null ? '—' : percent + '%';
+                const progressWidth = percent == null ? 0 : percent;
+                const doneLabel = doneCount == null ? '—' : doneCount;
                 const ownState = hvacOrderState(o);
                 const mParts = hvacMatrixParts(o);
                 let statusBadge = hvacStateBadge(ownState) + hvacToolChip(o);
@@ -9478,11 +9566,11 @@ async function authPedirNuevaClave() {
                         <div class="w-44 space-y-1" title="${esc(progressTitle)}">
                             <div class="flex items-center gap-2">
                                 <div class="flex-1 bg-slate-200 rounded-full h-2 overflow-hidden">
-                                    <div class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: ${percent}%;"></div>
+                                    <div class="bg-teal-500 h-2 rounded-full transition-all duration-300" style="width: ${progressWidth}%;"></div>
                                 </div>
-                                <span class="text-[11px] font-bold text-slate-600 w-9 text-right">${percent}%</span>
+                                <span class="text-[11px] font-bold text-slate-600 w-9 text-right">${percentLabel}</span>
                             </div>
-                            <div class="text-[10px] text-slate-500">${doneCount}/${esc(eqIds.length)} equipos completos</div>
+                            <div class="text-[10px] text-slate-500">${doneLabel}/${esc(eqIds.length)} equipos completos</div>
                         </div>
                     </td>
                     <td>${statusBadge}</td>
