@@ -12699,7 +12699,13 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       const fileName = `Informe_${typeKey}_${safeOrderId}.pdf`;
       const result = await exportFramePdf(frame, fileName, setPdfProgress);
       cleanup();
-      notify(`Informe PDF descargado correctamente (${result.pages} páginas).`, 'success');
+      // El aviso de éxito debe usar la función global de la aplicación.
+      // No llamar a notify(): el notify() del módulo de seguridad es privado a otro IIFE.
+      if (typeof window.showToast === 'function') {
+        window.showToast(`Informe PDF descargado correctamente (${result.pages} páginas).`, 'success');
+      } else {
+        console.info(`[PDF] Informe descargado: ${fileName} (${result.pages} páginas).`);
+      }
       return { orderId: order.id, reportType: typeKey, fileName, pages: result.pages };
     } catch (error) {
       cleanup();
