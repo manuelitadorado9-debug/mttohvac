@@ -11680,7 +11680,7 @@ async function attDelete(id) {
 /* Informes HVAC (PREVENTIVO, CORRECTIVO y REVISION) con el diseño oficial de las plantillas
    informe_preventivo_PRE.html, informe_correctivo_COR.html e informe_revision_REV.html.
    Usa los datos de workOrders, equipmentCatalog, equipmentFormsConfig y clientsCatalog.
-   Imprime desde un iframe aislado; el usuario elige "Guardar como PDF" en el diálogo. */
+   Genera PDF descargables directamente con texto vectorial y recursos gráficos embebidos. */
 (() => {
   'use strict';
 
@@ -12282,7 +12282,7 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 .page.cover td{font-size:10.5px}
 .page.cover ul{padding:8px 12px 8px 26px;font-size:10.5px;line-height:1.5}`;
 
-  /* ---------- Descarga directa del PDF (sin diálogo de impresión) ---------- */
+  /* ---------- Descarga directa PDF vectorial (sin diálogo de impresión) ---------- */
   function loadScriptOnce(src, isReady) {
     if (isReady()) return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -12294,101 +12294,218 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     });
   }
 
-  /* Dibuja una página con el propio motor del navegador (SVG + foreignObject). No necesita librerías
-     externas y respeta exactamente el diseño. Si falla, se usa html2canvas como respaldo. */
-  async function renderPageNative(pageEl, scale) {
+  /* Exportación vectorial con jsPDF:
+     - textos y datos se dibujan como texto real del PDF;
+     - fondos, bordes y líneas como vectores;
+     - fotografías, logotipos y firmas conservan su naturaleza de imagen.
+     Cada .page se compone como una sola hoja Carta, evitando que el pie salte a otra hoja. */
+  function pdfColor(value, fallback = [26, 36, 51]) {
+    const m = String(value || '').match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : fallback;
+  }
+
+  function cssPx(value, fallback = 0) {
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function cssStyle(el) {
+    const view = el && el.ownerDocument && el.ownerDocument.defaultView;
+    return (view || window).getComputedStyle(el);
+  }
+
+  function isTransparentColor(value) {
+    return !value || value === 'transparent' || /rgba\([^)]*,\s*0\s*\)$/i.test(value);
+  }
+
+  function pdfImageFormat(src) {
+    const m = String(src || '').match(/^data:image\/(png|jpe?g|webp|gif)/i);
+    if (!m) return 'JPEG';
+    const f = m[1].toUpperCase();
+    return f === 'JPG' ? 'JPEG' : f;
+  }
+
+  function drawPdfImage(pdf, img, pageRect, pxToMm, scale) {
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const r = img.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    let src = img.currentSrc || img.src;
+    let format = pdfImageFormat(src);
+    if (format === 'WEBP' || format === 'GIF') {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        src = canvas.toDataURL('image/jpeg', 0.9); format = 'JPEG';
+      } catch (e) { console.warn('[PDF] No se pudo convertir una imagen:', e); return; }
+    }
+    const x = (r.left - pageRect.left) * pxToMm * scale;
+    const y = (r.top - pageRect.top) * pxToMm * scale;
+    let w = r.width * pxToMm * scale;
+    let h = r.height * pxToMm * scale;
+    const fit = cssStyle(img).objectFit;
+    if (fit === 'contain' && img.naturalWidth && img.naturalHeight) {
+      const ratio = img.naturalWidth / img.naturalHeight;
+      if (w / h > ratio) w = h * ratio;
+      else h = w / ratio;
+      const xx = x + (r.width * pxToMm * scale - w) / 2;
+      const yy = y + (r.height * pxToMm * scale - h) / 2;
+      try { pdf.addImage(src, format, xx, yy, w, h, undefined, 'FAST'); }
+      catch (e) { try { pdf.addImage(img, undefined, xx, yy, w, h, undefined, 'FAST'); } catch (_) { console.warn('[PDF] Imagen omitida:', e); } }
+      return;
+    }
+    try { pdf.addImage(src, format, x, y, w, h, undefined, 'FAST'); }
+    catch (e) { try { pdf.addImage(img, undefined, x, y, w, h, undefined, 'FAST'); } catch (_) { console.warn('[PDF] Imagen omitida:', e); } }
+  }
+
+  function drawPdfBox(pdf, el, pageRect, pxToMm, scale) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const cs = cssStyle(el);
+    const x = (r.left - pageRect.left) * pxToMm * scale;
+    const y = (r.top - pageRect.top) * pxToMm * scale;
+    const w = r.width * pxToMm * scale;
+    const h = r.height * pxToMm * scale;
+    const bg = cs.backgroundColor;
+    if (!isTransparentColor(bg)) {
+      const c = pdfColor(bg);
+      pdf.setFillColor(c[0], c[1], c[2]);
+      const radius = Math.max(0, cssPx(cs.borderTopLeftRadius)) * pxToMm * scale;
+      if (radius > 0.3) pdf.roundedRect(x, y, w, h, Math.min(radius, 3), Math.min(radius, 3), 'F');
+      else pdf.rect(x, y, w, h, 'F');
+    }
+    const sides = [
+      ['Top', x, y, x + w, y], ['Right', x + w, y, x + w, y + h],
+      ['Bottom', x, y + h, x + w, y + h], ['Left', x, y, x, y + h]
+    ];
+    sides.forEach(([side, x1, y1, x2, y2]) => {
+      const width = cssPx(cs['border' + side + 'Width']);
+      const style = cs['border' + side + 'Style'];
+      if (width <= 0 || style === 'none' || style === 'hidden') return;
+      const c = pdfColor(cs['border' + side + 'Color'], [221, 227, 234]);
+      pdf.setDrawColor(c[0], c[1], c[2]);
+      pdf.setLineWidth(Math.max(0.08, width * pxToMm * scale));
+      pdf.line(x1, y1, x2, y2);
+    });
+  }
+
+  function getTextBlock(el) {
+    let node = el;
+    while (node && node.parentElement) {
+      const display = cssStyle(node).display;
+      if (display !== 'inline' && display !== 'contents') return node;
+      node = node.parentElement;
+    }
+    return el;
+  }
+
+  function drawPdfTextNodes(pdf, pageEl, pageRect, pxToMm, scale) {
+    const doc = pageEl.ownerDocument;
+    const walker = doc.createTreeWalker(pageEl, doc.defaultView.NodeFilter.SHOW_TEXT);
+    const bulletDone = new WeakSet();
+    let node;
+    while ((node = walker.nextNode())) {
+      const parent = node.parentElement;
+      if (!parent) continue;
+      const raw = node.nodeValue || '';
+      const whiteSpace = cssStyle(parent).whiteSpace;
+      let value = whiteSpace && whiteSpace.includes('pre') ? raw.replace(/\r/g, '') : raw.replace(/\s+/g, ' ');
+      value = value.trim();
+      if (!value) continue;
+      const range = doc.createRange();
+      range.selectNodeContents(node);
+      const rr = range.getBoundingClientRect();
+      if (!rr.width || !rr.height) continue;
+      const block = getTextBlock(parent);
+      const br = block.getBoundingClientRect();
+      const cs = cssStyle(parent);
+      const fontPx = Math.max(4, cssPx(cs.fontSize, 12));
+      const fontPt = Math.max(3.5, fontPx * 0.75 * scale);
+      const linePx = cs.lineHeight === 'normal' ? fontPx * 1.2 : cssPx(cs.lineHeight, fontPx * 1.2);
+      const color = pdfColor(cs.color);
+      const weight = parseInt(cs.fontWeight, 10);
+      const fontStyle = cs.fontStyle === 'italic' ? 'italic' : 'normal';
+      const fontFace = /courier/i.test(cs.fontFamily) ? 'courier' : /times/i.test(cs.fontFamily) ? 'times' : 'helvetica';
+      const bold = Number.isFinite(weight) ? weight >= 600 : cs.fontWeight === 'bold';
+      pdf.setFont(fontFace, bold && fontStyle === 'italic' ? 'bolditalic' : bold ? 'bold' : fontStyle);
+      pdf.setFontSize(fontPt);
+      pdf.setTextColor(color[0], color[1], color[2]);
+      if (cs.textTransform === 'uppercase') value = value.toUpperCase();
+      else if (cs.textTransform === 'lowercase') value = value.toLowerCase();
+      const widthPx = Math.max(8, br.width || rr.width);
+      const widthMm = widthPx * pxToMm * scale;
+      let lines = [];
+      value.split('\n').forEach(part => {
+        if (!part) { lines.push(''); return; }
+        lines.push(...pdf.splitTextToSize(part, Math.max(4, widthMm)));
+      });
+      if (!lines.length) continue;
+      const left = (rr.left - pageRect.left) * pxToMm * scale;
+      const top = (rr.top - pageRect.top) * pxToMm * scale;
+      const align = cs.textAlign === 'center' ? 'center' : (cs.textAlign === 'right' ? 'right' : 'left');
+      const anchorX = align === 'center'
+        ? (br.left - pageRect.left + br.width / 2) * pxToMm * scale
+        : align === 'right'
+          ? (br.right - pageRect.left) * pxToMm * scale
+          : left;
+      const baseline = top + fontPt * 0.82 * 0.352778;
+      const lineStep = Math.max(fontPt * 0.9, linePx * pxToMm * scale);
+      const li = parent.closest ? parent.closest('li') : null;
+      if (li && !bulletDone.has(li)) {
+        bulletDone.add(li);
+        pdf.setFillColor(color[0], color[1], color[2]);
+        pdf.circle(Math.max(1, left - 1.4), baseline - fontPt * 0.12, 0.45, 'F');
+      }
+      pdf.text(lines, anchorX, baseline, { align, lineHeightFactor: lineStep / Math.max(1, fontPt * 0.352778) });
+    }
+  }
+
+  function renderVectorPage(pdf, pageEl, isFirst) {
     const rect = pageEl.getBoundingClientRect();
-    const w = Math.ceil(rect.width), h = Math.ceil(rect.height);
-    const xhtml = new XMLSerializer().serializeToString(pageEl);
-    const css = REPORT_CSS.replace(/(^|\})(\s*)body\{/g, '$1$2.pdfroot{').replace(/@page\{[^}]*\}/g, '').replace(/@media print\{[^]*?\}\}/g, '');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><foreignObject x="0" y="0" width="${w}" height="${h}"><div xmlns="http://www.w3.org/1999/xhtml" class="pdfroot" style="width:${w}px;margin:0;padding:0;background:#fff"><style><![CDATA[${css}\n.page{margin:0!important;box-shadow:none!important}]]></style>${xhtml}</div></foreignObject></svg>`;
-    // data: URL (no blob:), porque con blob: el navegador marca el lienzo como bloqueado
-    const bytes = new TextEncoder().encode(svg);
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    const url = 'data:image/svg+xml;base64,' + btoa(binary);
-    try {
-      const img = new Image();
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('El navegador no pudo dibujar la página')); img.src = url; });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ctx.getImageData(0, 0, 1, 1);                       // lanza error si el lienzo quedó bloqueado (imagen externa)
-      return canvas;
-    } finally { /* sin recursos que liberar */ }
+    if (!rect.width || !rect.height) throw new Error('Una página del informe no tiene dimensiones válidas.');
+    const pxToMm = 25.4 / 96;
+    const W = pdf.internal.pageSize.getWidth();
+    const H = pdf.internal.pageSize.getHeight();
+    // Ajuste proporcional de toda la composición (incluye pie y encabezado) a Carta.
+    const scale = Math.min(W / (rect.width * pxToMm), H / (rect.height * pxToMm));
+    const offsetX = (W - rect.width * pxToMm * scale) / 2;
+    const offsetY = Math.max(0, (H - rect.height * pxToMm * scale) / 2);
+    const adjustedRect = { left: rect.left - offsetX / (pxToMm * scale), top: rect.top - offsetY / (pxToMm * scale) };
+    const elements = [pageEl, ...pageEl.querySelectorAll('*')];
+    // Fondos y bordes primero; texto e imágenes van encima.
+    elements.forEach(el => { if (el.tagName !== 'IMG') drawPdfBox(pdf, el, adjustedRect, pxToMm, scale); });
+    elements.filter(el => el.tagName === 'IMG').forEach(img => drawPdfImage(pdf, img, adjustedRect, pxToMm, scale));
+    drawPdfTextNodes(pdf, pageEl, adjustedRect, pxToMm, scale);
+    return scale;
   }
 
-  async function ensureHtml2canvas() {
-    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => typeof window.html2canvas === 'function');
+  function setPdfProgress(label) {
+    const el = document.getElementById('app-processing-label');
+    if (el) el.textContent = label;
   }
 
-  async function ensurePdfLibs() {
-    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
-  }
-
-  function notify(message, type) {
-    try { if (typeof showToast === 'function') showToast(message, type || 'success'); } catch (e) { /* sin aviso */ }
-  }
-
-  async function exportFramePdf(frame, fileName) {
+  async function exportFramePdf(frame, fileName, onProgress) {
     await ensurePdfLibs();
     const doc = frame.contentDocument;
     const pages = [...doc.querySelectorAll('.page')];
+    if (!pages.length) throw new Error('La plantilla no produjo páginas para el informe.');
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF('portrait', 'mm', 'letter');
-    const W = pdf.internal.pageSize.getWidth();
-    const H = pdf.internal.pageSize.getHeight();
-    const scale = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) ? 1.5 : 2;
-    let firstSheet = true;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter', compress: true, putOnlyUsedFonts: true });
+    pdf.setProperties({ title: fileName.replace(/\.pdf$/i, ''), subject: 'Informe técnico de mantenimiento', author: 'Alejandro Faccini y Compañía S.A.S.' });
     for (let i = 0; i < pages.length; i++) {
-      const base = {
-        useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: 900,
-        onclone: clonedDoc => { clonedDoc.querySelectorAll('.page').forEach((el, idx) => { if (idx !== i) el.remove(); }); }
-      };
-      let canvas = null, lastError = null;
-      try { canvas = await renderPageNative(pages[i], scale); }                 // 1) método propio del navegador
-      catch (err) { lastError = err; console.warn('Render nativo falló en la página', i + 1, err); canvas = null; }
-      if (!canvas) {                                                            // 2) respaldo: html2canvas con reintentos
-        try { await ensureHtml2canvas(); } catch (err) { lastError = err; }
-        if (typeof window.html2canvas === 'function') {
-          const attempts = [{ scale }, { scale: 1 }, { scale: 1, foreignObjectRendering: true }];
-          for (const attempt of attempts) {
-            try { canvas = await window.html2canvas(pages[i], Object.assign({}, base, attempt)); if (canvas && canvas.width && canvas.height) break; }
-            catch (err) { lastError = err; console.warn('Reintentando captura de página', i + 1, err); }
-            canvas = null;
-          }
-        }
-      }
-      if (!canvas) throw new Error(`Página ${i + 1}: ${lastError && lastError.message ? lastError.message : 'no se pudo capturar'}`);
-      const sheetPx = Math.round(canvas.width * H / W);                       // alto de una hoja carta en px del canvas
-      const tooTallBy = canvas.height / sheetPx;
-      const shrinkToOne = tooTallBy > 1 && tooTallBy <= 1.08;                 // sobra poco: se reduce un poco para que quepa en una hoja
-      const sheets = shrinkToOne ? 1 : Math.max(1, Math.ceil((canvas.height - 40 * scale) / sheetPx));
-      for (let k = 0; k < sheets; k++) {
-        const sy = k * sheetPx;
-        const sh = sheets === 1 ? canvas.height : Math.min(sheetPx, canvas.height - sy);
-        let source = canvas;
-        if (sheets > 1) {                                                     // página más larga que una hoja: se parte en hojas
-          source = document.createElement('canvas');
-          source.width = canvas.width; source.height = sh;
-          const ctx = source.getContext('2d');
-          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, source.width, source.height);
-          ctx.drawImage(canvas, 0, sy, canvas.width, sh, 0, 0, canvas.width, sh);
-        }
-        if (!firstSheet) pdf.addPage('letter', 'portrait');
-        firstSheet = false;
-        const imgH = sh * W / canvas.width;
-        const fit = imgH > H && sheets === 1 ? H / imgH : 1;                  // reducción proporcional (solo si sobra poco)
-        pdf.addImage(source.toDataURL('image/jpeg', 0.88), 'JPEG', (W - W * fit) / 2, 0, W * fit, imgH * fit, undefined, 'FAST');
-      }
-      canvas.width = 0; canvas.height = 0;                                    // libera memoria en el celular
-      if (pages.length > 3 && i % 3 === 2) notify(`Generando PDF… ${i + 1} de ${pages.length} páginas`, 'info');
+      if (i > 0) pdf.addPage('letter', 'portrait');
+      if (onProgress) onProgress(`Preparando PDF… página ${i + 1} de ${pages.length}`);
+      renderVectorPage(pdf, pages[i], i === 0);
+      // Permite que el overlay se actualice entre páginas, incluso en órdenes extensas.
+      if (i % 2 === 1) await new Promise(resolve => setTimeout(resolve, 0));
     }
-    const blob = pdf.output('blob');
-    if (!blob || !blob.size) throw new Error('El PDF quedó vacío.');
-    presentPdf(blob, fileName);
+    if (onProgress) onProgress('Descargando archivo PDF…');
+    const result = pdf.save(fileName, { returnPromise: true });
+    if (result && typeof result.then === 'function') await result;
+    else await new Promise(resolve => setTimeout(resolve, 250));
+    return { pages: pages.length };
   }
 
   function showPdfError(message, onRetry, onPrint, onClose) {
@@ -12461,44 +12578,52 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
   }
 
   /**
-   * Genera el informe en un iframe aislado y abre el diálogo de impresión.
-   * @param {string} orderId ID de orden en workOrders
-   * @param {'REVISION'|'PREVENTIVO'|'CORRECTIVO'|'REV'|'PRE'|'COR'} reportType
-   * @param {{autoPrint?: boolean, removeAfterPrint?: boolean}} options
+   * Genera el informe en un iframe aislado y descarga un PDF vectorial directamente.
+   * Los textos, mediciones y tablas permanecen seleccionables; fotos y firmas son imágenes.
    */
   async function generateMaintenancePDF(orderId, reportType, options = {}) {
-    const currentOrders = getWorkOrders();
-    let order = (Array.isArray(currentOrders) ? currentOrders : [])
-      .find(item => String(item.id) === String(orderId));
-    if (!order) throw new Error(`No se encontró la orden ${orderId} en workOrders.`);
-    if (order._hvacSummaryOnly && typeof window.hvacEnsureFullOrder === 'function') {
-      order = await window.hvacEnsureFullOrder(orderId);
-    }
-    if (!order) throw new Error(`No se pudo descargar el detalle de la orden ${orderId}.`);
-
-    const typeKey = normalizeRoutine(reportType || getOrderType(order));
-    if (!typeKey || !REPORTS[typeKey]) throw new Error('Tipo de informe inválido. Usa REVISION, PREVENTIVO o CORRECTIVO.');
-
-    try { if (typeof ensureOrderEquipments === 'function') await ensureOrderEquipments(order); } catch (e) { /* se usa el catálogo cargado */ }
-    await preloadPhotos(order);
-    RUNTIME_IMG.header = await trimWhiteMargins(getHeaderImage());
-    RUNTIME_IMG.footer = await trimWhiteMargins(getFooterImage());
-    const built = buildReport(order, typeKey, options);
-
-    const frame = document.createElement('iframe');
-    frame.title = `Informe ${order.id}`;
-    // El iframe queda visible como vista previa antes de imprimir. No se oculta
-    // con opacity:0 porque algunos motores de impresión heredan esa transparencia.
-    Object.assign(frame.style, {
-      position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
-      border: '0', opacity: '1', pointerEvents: 'auto', zIndex: '30000',
-      background: '#ffffff'
-    });
-    frame.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(frame);
-
-    const cleanup = () => { if (frame.isConnected) frame.remove(); };
+    let busyStarted = false;
+    let frame = null;
+    const cleanup = () => { if (frame && frame.isConnected) frame.remove(); };
     try {
+      if (typeof appBusyStart === 'function') {
+        appBusyStart('Preparando informe PDF…', true);
+        busyStarted = true;
+      } else {
+        const overlay = document.getElementById('app-processing-overlay');
+        if (overlay) { overlay.classList.add('is-visible'); overlay.setAttribute('aria-hidden', 'false'); }
+      }
+      if (typeof appNextPaint === 'function') await appNextPaint();
+      setPdfProgress('Consultando datos de la orden…');
+
+      const currentOrders = getWorkOrders();
+      let order = (Array.isArray(currentOrders) ? currentOrders : [])
+        .find(item => String(item.id) === String(orderId));
+      if (!order) throw new Error(`No se encontró la orden ${orderId} en workOrders.`);
+      if (order._hvacSummaryOnly && typeof window.hvacEnsureFullOrder === 'function') {
+        order = await window.hvacEnsureFullOrder(orderId);
+      }
+      if (!order) throw new Error(`No se pudo descargar el detalle de la orden ${orderId}.`);
+
+      const typeKey = normalizeRoutine(reportType || getOrderType(order));
+      if (!typeKey || !REPORTS[typeKey]) throw new Error('Tipo de informe inválido. Usa REVISION, PREVENTIVO o CORRECTIVO.');
+
+      setPdfProgress('Cargando equipos, firmas y fotografías…');
+      try { if (typeof ensureOrderEquipments === 'function') await ensureOrderEquipments(order); } catch (e) { console.warn('[PDF] No se pudo ampliar el catálogo de equipos:', e); }
+      await preloadPhotos(order);
+      RUNTIME_IMG.header = await trimWhiteMargins(getHeaderImage());
+      RUNTIME_IMG.footer = await trimWhiteMargins(getFooterImage());
+      const built = buildReport(order, typeKey, options);
+
+      setPdfProgress('Organizando páginas del informe…');
+      frame = document.createElement('iframe');
+      frame.title = `Informe ${order.id}`;
+      Object.assign(frame.style, {
+        position: 'fixed', left: '-12000px', top: '0', width: '840px', height: '1200px',
+        border: '0', opacity: '1', pointerEvents: 'none', zIndex: '30000', background: '#ffffff'
+      });
+      frame.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(frame);
       const doc = frame.contentDocument || frame.contentWindow.document;
       doc.open();
       doc.write(built.html);
@@ -12506,35 +12631,35 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       await new Promise(resolve => {
         if (doc.readyState === 'complete') resolve();
         else frame.onload = resolve;
-        setTimeout(resolve, 1500);
+        setTimeout(resolve, 1800);
       });
-      await waitForImages(doc);          // el encabezado debe tener su altura real antes de medir
+      await waitForImages(doc);
       paginatePhotos(doc, built.jobs);
       await waitForImages(doc);
-      if (options.autoPrint !== false) {
-        const printDialog = () => {
-          if (!frame.contentWindow || typeof frame.contentWindow.print !== 'function') {
-            throw new Error('Este navegador no permite imprimir el informe. Abre el archivo desde un navegador compatible.');
-          }
-          if (options.removeAfterPrint !== false) {
-            frame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
-            // Respaldo para navegadores móviles que no emiten afterprint.
-            setTimeout(cleanup, 15 * 60 * 1000);
-          }
-          frame.contentWindow.focus();
-          frame.contentWindow.print();
-        };
-        // Exportación nativa: el navegador compone el PDF desde el DOM/HTML.
-        // Así, textos, valores y tablas se guardan como texto/vector, no como
-        // capturas JPEG de cada página. Las fotografías, logotipo, pie y firmas
-        // siguen siendo imágenes, que es el formato correcto para esos recursos.
-        notify('Informe listo para imprimir. En el destino selecciona “Guardar como PDF” para conservar el texto editable.', 'info');
-        printDialog();
+
+      // Medición final: se deja que el layout termine antes de traducirlo a coordenadas PDF.
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (options.autoPrint === false) {
+        // Compatibilidad con la API de vista previa: no descarga, solo muestra el iframe.
+        Object.assign(frame.style, { left: '0', top: '0', width: '100%', height: '100%', pointerEvents: 'auto', zIndex: '30000' });
+        frame.removeAttribute('aria-hidden');
+        return { orderId: order.id, reportType: typeKey, iframe: frame, close: cleanup };
       }
-      return { orderId: order.id, reportType: typeKey, iframe: frame, close: cleanup };
+      const safeOrderId = String(order.id || orderId).replace(/[^\w-]+/g, '_');
+      const fileName = `Informe_${typeKey}_${safeOrderId}.pdf`;
+      const result = await exportFramePdf(frame, fileName, setPdfProgress);
+      cleanup();
+      notify(`Informe PDF descargado correctamente (${result.pages} páginas).`, 'success');
+      return { orderId: order.id, reportType: typeKey, fileName, pages: result.pages };
     } catch (error) {
       cleanup();
       throw error;
+    } finally {
+      if (busyStarted && typeof appBusyEnd === 'function') appBusyEnd();
+      else {
+        const overlay = document.getElementById('app-processing-overlay');
+        if (overlay) { overlay.classList.remove('is-visible'); overlay.setAttribute('aria-hidden', 'true'); }
+      }
     }
   }
 
