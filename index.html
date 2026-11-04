@@ -5138,6 +5138,40 @@ async function authPedirNuevaClave() {
             const active = document.querySelector('main > section[id^="view-"]:not(.hidden)');
             const tabId = active && active.id ? active.id.replace(/^view-/, '') : 'admin-dashboard';
             const cfg = CLOUD_SECTION_CONFIG[tabId];
+
+            // Asistencia y GPS usa su propia consulta a la tabla `asistencia`;
+            // no forma parte del cargador modular CLOUD_SECTION_CONFIG.
+            // Por eso se sincroniza directamente mediante attLoad(), respetando filtros.
+            if (tabId === 'admin-attendance') {
+                const btn = button || document.getElementById('admin-manual-sync-btn');
+                const original = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> <span>Actualizando…</span>';
+                }
+                try {
+                    await hvacStorageReady;
+                    if (cloudOutboxRead().length) await cloudFlushOutbox();
+                    if (typeof attLoad !== 'function') throw new Error('No está disponible el módulo de Asistencia y GPS.');
+                    const refreshed = await attLoad();
+                    if (refreshed === false) {
+                        showToast('No se pudieron consultar las marcaciones en Supabase. Se conservan los datos locales.', 'error');
+                    } else {
+                        showToast('Asistencia y GPS se actualizaron desde Supabase.', 'success');
+                    }
+                } catch (error) {
+                    console.error('[Admin] Sincronización de Asistencia y GPS fallida:', error);
+                    showToast('No se pudo actualizar Asistencia y GPS. Revisa la conexión y vuelve a intentar.', 'error');
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = original || '<i class="fa-solid fa-rotate"></i> <span>Sincronizar</span>';
+                    }
+                    cloudBadgeSchedule();
+                }
+                return;
+            }
+
             if (!cfg) { showToast('No se pudo identificar la sección que deseas actualizar.', 'error'); return; }
 
             const btn = button || document.getElementById('admin-manual-sync-btn');
@@ -10009,10 +10043,11 @@ async function attLoad() {
     const body = document.getElementById('att-table-body'), empty = document.getElementById('att-empty');
     empty.style.display = 'block'; empty.textContent = 'Consultando…';
     const rows = await supabaseFetch(q, 'GET');
-    if (!Array.isArray(rows)) { empty.textContent = 'No se pudo consultar. ¿Ejecutaste el SQL de la tabla "asistencia" en Supabase?'; body.innerHTML = ''; return; }
+    if (!Array.isArray(rows)) { empty.textContent = 'No se pudo consultar. ¿Ejecutaste el SQL de la tabla "asistencia" en Supabase?'; body.innerHTML = ''; return false; }
     const st = v('att-f-state');
     attRows = rows.map(attFix).filter(r => !st || (st === 'in' && r.dentro_rango === true) || (st === 'out' && r.dentro_rango === false) || (st === 'none' && r.dentro_rango == null));
     attRender();
+    return true;
 }
 function attRender() {
     const body = document.getElementById('att-table-body'), empty = document.getElementById('att-empty');
