@@ -3186,7 +3186,7 @@ async function authPedirNuevaClave() {
             HVAC_LEGALIZATIONS_BACKUP: 'hvac_legalizaciones'
         };
         const ESTADO_PAGINA = 200;
-        const ESTADO_TTL_MS = 20000;   // plan free: no se vuelve a descargar una tabla consultada hace menos de 20 s
+        const ESTADO_TTL_MS = 60000;   // no se vuelve a consultar una tabla consultada hace menos de 60 s (antes 20 s)
         const estadoCtl = { disabled: false, running: {}, again: {}, retry: {}, ultimo: {} };
 
         // ---------- utilidades ----------
@@ -3369,16 +3369,51 @@ async function authPedirNuevaClave() {
         }
 
         // ---------- LECTURA: trae filas remotas y las mezcla sin perder cambios locales ----------
-        async function estadoDescargar(tabla) {
-            const todas = [];
-            for (let offset = 0; ; offset += ESTADO_PAGINA) {
+        // Descarga INCREMENTAL: primero un índice diminuto (id + version) y luego el payload SOLO de las filas
+        // nuevas o cuya versión cambió respecto a la última sincronización. Antes se bajaban todas las filas
+        // completas cada vez que se cambiaba de sección (≈ cada 20 s). Si algo no cuadra, cae a la descarga completa.
+        async function estadoDescargar(tabla, key) {
+            const completa = async () => {
+                const todas = [];
+                for (let offset = 0; ; offset += ESTADO_PAGINA) {
+                    const rows = await supabaseFetch(
+                        `${tabla}?select=id,payload,version&order=created_at.asc,id.asc&limit=${ESTADO_PAGINA}&offset=${offset}`,
+                        'GET', null, null, { quiet: true });
+                    if (!Array.isArray(rows)) return null;
+                    todas.push(...rows);
+                    if (rows.length < ESTADO_PAGINA) return todas;
+                }
+            };
+            if (!key) return completa();
+            const indice = [];
+            for (let offset = 0; ; offset += 1000) {
                 const rows = await supabaseFetch(
-                    `${tabla}?select=id,payload,version&order=created_at.asc,id.asc&limit=${ESTADO_PAGINA}&offset=${offset}`,
+                    `${tabla}?select=id,version&order=created_at.asc,id.asc&limit=1000&offset=${offset}`,
                     'GET', null, null, { quiet: true });
                 if (!Array.isArray(rows)) return null;
-                todas.push(...rows);
-                if (rows.length < ESTADO_PAGINA) return todas;
+                indice.push(...rows);
+                if (rows.length < 1000) break;
             }
+            const snap = estadoLeerSnap(key), local = estadoLeerLocal(key);
+            const localPorId = new Map();
+            local.forEach(it => { if (it && it.id !== undefined && it.id !== null) localPorId.set(String(it.id), it); });
+            const faltan = indice.map(r => String(r.id)).filter((id, i) => { const s = snap[id]; return !(s && String(s.v) === String(indice[i].version)); });
+            const bajados = new Map();
+            for (let i = 0; i < faltan.length; i += 25) {
+                const lote = faltan.slice(i, i + 25);
+                const rows = await supabaseFetch(
+                    `${tabla}?select=id,payload,version&id=in.(${lote.map(encodeURIComponent).join(',')})`,
+                    'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return completa();
+                rows.forEach(r => bajados.set(String(r.id), r));
+            }
+            if (faltan.some(id => !bajados.has(id))) return completa();      // algo no cuadró (p. ej. id con coma): no se adivina
+            return indice.map(r => {
+                const id = String(r.id);
+                if (bajados.has(id)) return bajados.get(id);
+                const loc = localPorId.get(id);                                // versión sin cambios: el payload remoto == el snapshot local
+                return { id: r.id, version: r.version, payload: loc !== undefined ? loc : null };
+            });
         }
 
         function estadoMezclar(key, rows) {
@@ -3426,7 +3461,7 @@ async function authPedirNuevaClave() {
                 if (usarTtl && Date.now() - (estadoCtl.ultimo[key] || 0) < ESTADO_TTL_MS) continue;
                 await estadoPush(key);                                        // 1) primero se envía lo local
                 if (estadoCtl.disabled) continue;
-                const rows = await estadoDescargar(tabla);                    // 2) luego se descarga
+                const rows = await estadoDescargar(tabla, key);               // 2) luego se descarga (solo lo que cambió)
                 if (!rows) { estadoSinTabla(); continue; }
                 if (estadoCtl.running[key]) await estadoCtl.running[key];
                 estadoCtl.ultimo[key] = Date.now();
@@ -3934,6 +3969,48 @@ async function authPedirNuevaClave() {
             if (t && t !== '_') supabaseFetch(t + '?select=id&limit=1', 'GET', null, null, { quiet: true });
         }
 
+        // ===== Medidor de consumo (egress REST) — validar con datos reales =====
+        // Consola: hvacEgressReport()  ·  Atajo: Ctrl+Alt+Shift+E  ·  Reiniciar: hvacEgress.reset()
+        // Cuenta los bytes de texto descargados por endpoint (cota superior; el tráfico real va comprimido).
+        // Avisa en consola cuando UNA respuesta supera 400 KB: así se detecta cualquier fuga nueva.
+        const hvacEgress = (() => {
+            const KEY = 'HVAC_EGRESS_SESSION';
+            let data = { since: Date.now(), total: 0, rows: {} };
+            try { const s = JSON.parse(sessionStorage.getItem(KEY) || 'null'); if (s && s.rows) data = s; } catch (_) {}
+            let timer = null;
+            const persist = () => { clearTimeout(timer); timer = setTimeout(() => { try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch (_) {} }, 1000); };
+            const fmt = b => b > 1048576 ? (b / 1048576).toFixed(2) + ' MB' : b > 1024 ? (b / 1024).toFixed(1) + ' KB' : b + ' B';
+            function note(endpoint, method, bytes) {
+                bytes = Number(bytes) || 0;
+                const k = method + ' ' + String(endpoint).split('?')[0];
+                const r = data.rows[k] || (data.rows[k] = { n: 0, bytes: 0, max: 0 });
+                r.n++; r.bytes += bytes; if (bytes > r.max) r.max = bytes;
+                data.total += bytes; persist();
+                if (bytes > 400 * 1024) console.warn('[Egress] Respuesta pesada: ' + fmt(bytes) + ' ← ' + method + ' ' + String(endpoint).slice(0, 140));
+            }
+            function report() {
+                const list = Object.entries(data.rows)
+                    .map(([k, r]) => ({ endpoint: k, llamadas: r.n, total: fmt(r.bytes), promedio: fmt(Math.round(r.bytes / r.n)), maximo: fmt(r.max), _b: r.bytes }))
+                    .sort((a, b) => b._b - a._b);
+                const minutos = Math.max(1, Math.round((Date.now() - data.since) / 60000));
+                const detalle = list.map(x => ({ endpoint: x.endpoint, llamadas: x.llamadas, total: x.total, promedio: x.promedio, maximo: x.maximo }));
+                console.log('[Egress] Últimos ' + minutos + ' min: ' + fmt(data.total) + ' descargados de Supabase (REST).');
+                console.table(detalle);
+                return { total: fmt(data.total), minutos, detalle };
+            }
+            function reset() { data = { since: Date.now(), total: 0, rows: {} }; persist(); }
+            return { note, report, reset, fmt };
+        })();
+        window.hvacEgress = hvacEgress;
+        window.hvacEgressReport = hvacEgress.report;
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && e.altKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+                const r = hvacEgress.report();
+                alert('Consumo REST de esta sesión: ' + r.total + ' en ' + r.minutos + ' min\n\n' +
+                    (r.detalle.slice(0, 8).map(x => x.total + ' · ' + x.llamadas + '× · ' + x.endpoint).join('\n') || '(sin datos todavía)'));
+            }
+        });
+
         // opts: { quiet: true } no reporta errores (se usa en intentos con plan B)
         async function supabaseFetch(endpoint, method = 'GET', body = null, extraHeaders = null, opts = null) {
             const quiet = !!(opts && opts.quiet);
@@ -3976,9 +4053,11 @@ async function authPedirNuevaClave() {
                             if (method === 'DELETE') {
                                 if (!(extraHeaders && /return=representation/i.test(String(extraHeaders.Prefer || '')))) return true;
                                 const dt = await res.text().catch(() => '');           // filas que el servidor eliminó de verdad
+                                hvacEgress.note(endpoint, method, dt.length);
                                 try { return dt ? JSON.parse(dt) : []; } catch (e) { return []; }
                             }
                             const txt = await res.text().catch(() => '');
+                            hvacEgress.note(endpoint, method, txt.length);
                             if (!txt) return true;
                             try { return JSON.parse(txt); } catch (e) { return true; }
                         }
@@ -4292,8 +4371,10 @@ async function authPedirNuevaClave() {
             'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] }
         };
         // Vencida = pasó el TTL, o no hay copia local con la que pintar (p. ej. tras limpiar el almacenamiento).
+        const CLOUD_CATALOG_TTL = 10 * 60 * 1000;   // catálogos cambian poco; "Sincronizar" siempre fuerza
         function cloudTableStale(table) {
-            if (Date.now() - (cloudTableFetchedAt[table] || 0) > CLOUD_TABLE_TTL) return true;
+            const ttl = table === 'hvac_orders' ? CLOUD_TABLE_TTL : CLOUD_CATALOG_TTL;
+            if (Date.now() - (cloudTableFetchedAt[table] || 0) > ttl) return true;
             try { const t = CLOUD_TABLE_TARGETS[table]; if (t && !(t.get() || []).length) return true; } catch (_) {}
             return false;
         }
