@@ -4152,6 +4152,7 @@ async function authPedirNuevaClave() {
         function cloudUpsert(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
             if (table === 'hvac_orders' && typeof hvacInvalidateOrderQueries === 'function') hvacInvalidateOrderQueries();
+            if (table !== 'hvac_app_state') cloudMarkDirty(table);
             tombClearIfOld(table, cleanId);
             const payload = JSON.parse(JSON.stringify(obj));
             cloudGuardSize(table, cleanId, payload);
@@ -4182,6 +4183,7 @@ async function authPedirNuevaClave() {
         function cloudDeleteGeneric(table, rawId) {
             const cleanId = cloudCleanId(rawId);
             if (table === 'hvac_orders' && typeof hvacInvalidateOrderQueries === 'function') hvacInvalidateOrderQueries();
+            cloudMarkDirty(table);
             tombMark(table, cleanId);                                   // desde ya, ninguna carga lo vuelve a mostrar
             const durable = cloudOutboxAdd(table, cleanId, 'delete');
             return cloudEnqueue(table + ':' + cleanId, async () => {
@@ -4387,10 +4389,24 @@ async function authPedirNuevaClave() {
         const cloudSectionsLoaded = new Set();
         const cloudSectionsInFlight = Object.create(null);
         const HVAC_FETCHED_AT_KEY = 'HVAC_TABLE_FETCHED_AT_V1';
+        const HVAC_DIRTY_KEY = 'HVAC_TABLES_DIRTY_V1';
+        // Una tabla con cambios locales (guardados/borrados) NO puede darse por "fresca" tras una recarga: la copia local que
+        // se restaura puede ir por detrás del último cambio, así que la primera carga debe revalidar contra el servidor.
+        function cloudMarkDirty(table) {
+            try { const d = JSON.parse(localStorage.getItem(HVAC_DIRTY_KEY) || '{}'); if (!d[table]) { d[table] = 1; localStorage.setItem(HVAC_DIRTY_KEY, JSON.stringify(d)); } } catch (_) {}
+        }
         const cloudTableFetchedAt = (() => {  // caché compartida entre secciones y persistente entre recargas
             let base = {};
             try { const raw = JSON.parse(localStorage.getItem(HVAC_FETCHED_AT_KEY) || '{}'); if (raw && typeof raw === 'object' && !Array.isArray(raw)) base = raw; } catch (_) {}
-            return new Proxy(base, { set(t, k, v) { t[k] = v; try { localStorage.setItem(HVAC_FETCHED_AT_KEY, JSON.stringify(t)); } catch (_) {} return true; } });
+            try { Object.keys(JSON.parse(localStorage.getItem(HVAC_DIRTY_KEY) || '{}')).forEach(t => { delete base[t]; }); } catch (_) {}
+            return new Proxy(base, { set(t, k, v) {
+                t[k] = v;
+                try {
+                    localStorage.setItem(HVAC_FETCHED_AT_KEY, JSON.stringify(t));
+                    if (v) { const d = JSON.parse(localStorage.getItem(HVAC_DIRTY_KEY) || '{}'); if (d[k]) { delete d[k]; localStorage.setItem(HVAC_DIRTY_KEY, JSON.stringify(d)); } }   // ya se revalidó con el servidor
+                } catch (_) {}
+                return true;
+            } });
         })();
         const cloudTableInFlight = Object.create(null);  // evita dos descargas simultáneas de la misma tabla
         const CLOUD_TABLE_TTL = 5 * 60 * 1000;            // 5 min; la recarga manual sigue forzando sincronización

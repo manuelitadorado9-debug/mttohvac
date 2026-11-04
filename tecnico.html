@@ -2029,6 +2029,7 @@ async function authPedirNuevaClave() {
         const ORDER_SEEN_TS = new Map();
         function cloudUpsert(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
+            if (table === 'hvac_orders') { try { localStorage.setItem('HVAC_LIST_DIRTY', '1'); } catch (_) {} }
             const payload = JSON.parse(JSON.stringify(obj));
             cloudGuardSize(table, cleanId, payload);
             const durable = cloudOutboxAdd(table, cleanId, 'save', table === 'hvac_app_state' ? undefined : payload); // pendiente hasta confirmar
@@ -2593,13 +2594,14 @@ async function authPedirNuevaClave() {
                 if (hit) return finish(JSON.parse(hit));
                 // Tras recargar la app: si el listado se descargó hace pocos minutos, el respaldo local sirve igual.
                 let last = 0; try { last = Number(localStorage.getItem('HVAC_LIST_AT_' + uid)) || 0; } catch (_) {}
-                if (last && (Date.now() - last) < ttl && Array.isArray(workOrders) && workOrders.length) { EGRESS.stats.hits++; return finish(workOrders.slice()); }
+                let dirty = false; try { dirty = localStorage.getItem('HVAC_LIST_DIRTY') === '1'; } catch (_) {}   // hubo cambios locales: la copia restaurada puede ir atrasada → se revalida
+                if (!dirty && last && (Date.now() - last) < ttl && Array.isArray(workOrders) && workOrders.length) { EGRESS.stats.hits++; return finish(workOrders.slice()); }
             }
             return egressOnce(ckey + ':net', async () => {
                 const list = await egressFetchOrdersFromNet(u);
                 if (!Array.isArray(list)) return null;
                 egressSet(ckey, JSON.stringify(list));
-                try { localStorage.setItem('HVAC_LIST_AT_' + uid, String(Date.now())); } catch (_) {}
+                try { localStorage.setItem('HVAC_LIST_AT_' + uid, String(Date.now())); localStorage.removeItem('HVAC_LIST_DIRTY'); } catch (_) {}
                 return finish(list);
             });
         }
