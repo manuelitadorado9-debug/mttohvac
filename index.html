@@ -3969,6 +3969,19 @@ async function authPedirNuevaClave() {
             if (t && t !== '_') supabaseFetch(t + '?select=id&limit=1', 'GET', null, null, { quiet: true });
         }
 
+        // Diagnóstico de una orden: hvacDiagOrder('PRE-0022') compara servidor (todas las filas con ese id), copia local y cola pendiente.
+        window.hvacDiagOrder = async function (orderId) {
+            const id = String(orderId || '').trim(); if (!id) return console.warn('Uso: hvacDiagOrder("PRE-0022")');
+            const rows = await supabaseFetch('hvac_orders?select=fila:id,id_payload:payload->>id,actualizado:payload->>updatedAt,estado:payload->>status,equipos:payload->equipmentIds&or=' + encodeURIComponent('(id.eq.' + id + ',payload->>id.eq.' + id + ')'), 'GET', null, null, { quiet: true });
+            const srv = Array.isArray(rows) ? rows.map(r => ({ fila: r.fila, id_payload: r.id_payload, actualizado: r.actualizado, estado: r.estado, n_equipos: (r.equipos || []).length, equipos: (r.equipos || []).join(', ') })) : null;
+            const lo = (workOrders || []).find(o => String(o && o.id) === id);
+            const loc = lo ? { n_equipos: (lo.equipmentIds || []).length, equipos: (lo.equipmentIds || []).join(', '), actualizado: lo.updatedAt, soloResumen: !!lo._hvacSummaryOnly } : null;
+            const cola = cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && String(e.id) === cloudCleanId(id)).length;
+            console.log('[Diag ' + id + '] filas en el servidor: ' + (srv ? srv.length : 'error de lectura') + (srv && srv.length > 1 ? '  ⚠️ DUPLICADAS' : ''));
+            if (srv) console.table(srv); console.log('Local:', loc, '| cambios pendientes en cola:', cola);
+            return { servidor: srv, local: loc, cola };
+        };
+
         // ===== Medidor de consumo (egress REST) — validar con datos reales =====
         // Consola: hvacEgressReport()  ·  Atajo: Ctrl+Alt+Shift+E  ·  Reiniciar: hvacEgress.reset()
         // Cuenta los bytes de texto descargados por endpoint (cota superior; el tráfico real va comprimido).
@@ -4194,14 +4207,31 @@ async function authPedirNuevaClave() {
 
         async function cloudSaveEquipment(eq) { return cloudUpsert('hvac_equipments', eq.id || eq.code, eq); }
         async function cloudDeleteEquipment(id) { return cloudDeleteGeneric('hvac_equipments', id); }
-        async function cloudSaveOrder(order) {
+        // Otras filas de hvac_orders con el MISMO id de orden dentro del payload (duplicados): se igualan a la copia guardada.
+        async function hvacSyncDuplicateOrderRows(full) {
+            let n = 0;
+            try {
+                const mine = cloudCleanId(full.id);
+                const rows = await supabaseFetch('hvac_orders?select=id&limit=20&payload->>id=eq.' + encodeURIComponent(full.id), 'GET', null, null, { quiet: true });
+                if (Array.isArray(rows)) for (const r of rows) {
+                    if (String(r.id) === mine) continue;
+                    console.warn('[Rutina] Fila duplicada de la orden, se actualiza:', r.id);
+                    if (await supabaseFetch('hvac_orders?id=eq.' + encodeURIComponent(r.id), 'PATCH', { payload: full }, { 'Prefer': 'return=minimal' }, { quiet: true })) n++;
+                }
+            } catch (e) { console.warn('[Rutina] No se pudieron sincronizar duplicados:', e); }
+            return n;
+        }
+        async function cloudSaveOrder(order, opts) {
             let target = order;
             if (target && target._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') {
                 target = await hvacEnsureFullOrder(target.id);
             }
             if (!target) return null;
             delete target._hvacSummaryOnly;
-            return cloudUpsert('hvac_orders', target.id, target);
+            const res = await cloudUpsert('hvac_orders', target.id, target);
+            if (res && opts && opts.dup) await hvacSyncDuplicateOrderRows(target);
+            try { hvacInvalidateOrderQueries(); } catch (_) {}      // también al terminar: un listado en vuelo no deja datos viejos en caché
+            return res;
         }
         async function cloudDeleteOrder(id) { return cloudDeleteGeneric('hvac_orders', id); }
         async function cloudSaveClient(cli) { return cloudUpsert('hvac_clients', cli.id, cli); }
@@ -4644,6 +4674,11 @@ async function authPedirNuevaClave() {
         // conserva executions/fotos/firmas; si no, queda marcada para hidratarla al abrirla.
         function mergeOrderSummariesIntoList(list, replaceAll = false) {
             if (!Array.isArray(list)) return;
+            {   // Si hay varias filas con el mismo id de orden, se queda la de updatedAt más reciente (resultado determinista)
+                const byId = new Map();
+                list.forEach(s => { if (!s || !s.id) return; const k = String(s.id), p = byId.get(k); if (!p || String(s.updatedAt || '') >= String(p.updatedAt || '')) byId.set(k, s); });
+                list = Array.from(byId.values());
+            }
             const previous = new Map((workOrders || []).map(o => [String(o && o.id), o]));
             const merged = replaceAll ? new Map() : new Map(previous);
             list.forEach(summary => {
@@ -7044,7 +7079,7 @@ async function authPedirNuevaClave() {
                 proj.equipmentIds = equipmentIds.slice();
             }
 
-            await cloudSaveOrder(order);
+            await cloudSaveOrder(order, { dup: true });
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             localStorage.setItem('HVAC_PROJECTIONS_BACKUP', JSON.stringify(monthlyProjections));
@@ -7785,7 +7820,7 @@ async function authPedirNuevaClave() {
             }
             order.updatedAt = new Date().toISOString();
 
-            await cloudSaveOrder(order);
+            await cloudSaveOrder(order, { dup: true });
             registrarAuditoria('EDITAR', 'hvac_orders', order.id);
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             closeAddEquipmentToJobModal();
