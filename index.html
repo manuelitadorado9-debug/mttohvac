@@ -12294,6 +12294,24 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     });
   }
 
+  // Asegura que jsPDF esté disponible antes de crear el archivo.
+  // El HTML también declara jsPDF con defer; este respaldo cubre fallos o cargas lentas del CDN.
+  let pdfLibsPromise = null;
+  function ensurePdfLibs() {
+    const ready = () => !!(window.jspdf && typeof window.jspdf.jsPDF === 'function');
+    if (ready()) return Promise.resolve();
+    if (!pdfLibsPromise) {
+      const src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      pdfLibsPromise = loadScriptOnce(src, ready).catch(error => {
+        pdfLibsPromise = null; // permite reintentar si la conexión/CDN falla
+        throw error;
+      });
+    }
+    return pdfLibsPromise.then(() => {
+      if (!ready()) throw new Error('jsPDF se cargó, pero window.jspdf.jsPDF no está disponible.');
+    });
+  }
+
   /* Exportación vectorial con jsPDF:
      - textos y datos se dibujan como texto real del PDF;
      - fondos, bordes y líneas como vectores;
