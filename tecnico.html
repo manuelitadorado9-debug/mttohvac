@@ -1231,7 +1231,7 @@ async function authPedirNuevaClave() {
             HVAC_AGENDA_BACKUP: 'hvac_agenda'
         };
         const ESTADO_PAGINA = 200;
-        const ESTADO_TTL_MS = 20000;   // plan free: no se vuelve a descargar una tabla consultada hace menos de 20 s
+        const ESTADO_TTL_MS = 60000;   // no se vuelve a consultar una tabla consultada hace menos de 60 s (antes 20 s)
         const estadoCtl = { disabled: false, running: {}, again: {}, retry: {}, ultimo: {} };
 
         // ---------- utilidades ----------
@@ -1406,16 +1406,51 @@ async function authPedirNuevaClave() {
         }
 
         // ---------- LECTURA: trae filas remotas y las mezcla sin perder cambios locales ----------
-        async function estadoDescargar(tabla) {
-            const todas = [];
-            for (let offset = 0; ; offset += ESTADO_PAGINA) {
+        // Descarga INCREMENTAL: primero un índice diminuto (id + version) y luego el payload SOLO de las filas
+        // nuevas o cuya versión cambió respecto a la última sincronización. Antes se bajaban todas las filas
+        // completas cada vez que se cambiaba de sección (≈ cada 20 s). Si algo no cuadra, cae a la descarga completa.
+        async function estadoDescargar(tabla, key) {
+            const completa = async () => {
+                const todas = [];
+                for (let offset = 0; ; offset += ESTADO_PAGINA) {
+                    const rows = await supabaseFetch(
+                        `${tabla}?select=id,payload,version&order=created_at.asc,id.asc&limit=${ESTADO_PAGINA}&offset=${offset}`,
+                        'GET', null, null, { quiet: true });
+                    if (!Array.isArray(rows)) return null;
+                    todas.push(...rows);
+                    if (rows.length < ESTADO_PAGINA) return todas;
+                }
+            };
+            if (!key) return completa();
+            const indice = [];
+            for (let offset = 0; ; offset += 1000) {
                 const rows = await supabaseFetch(
-                    `${tabla}?select=id,payload,version&order=created_at.asc,id.asc&limit=${ESTADO_PAGINA}&offset=${offset}`,
+                    `${tabla}?select=id,version&order=created_at.asc,id.asc&limit=1000&offset=${offset}`,
                     'GET', null, null, { quiet: true });
                 if (!Array.isArray(rows)) return null;
-                todas.push(...rows);
-                if (rows.length < ESTADO_PAGINA) return todas;
+                indice.push(...rows);
+                if (rows.length < 1000) break;
             }
+            const snap = estadoLeerSnap(key), local = estadoLeerLocal(key);
+            const localPorId = new Map();
+            local.forEach(it => { if (it && it.id !== undefined && it.id !== null) localPorId.set(String(it.id), it); });
+            const faltan = indice.map(r => String(r.id)).filter((id, i) => { const s = snap[id]; return !(s && String(s.v) === String(indice[i].version)); });
+            const bajados = new Map();
+            for (let i = 0; i < faltan.length; i += 25) {
+                const lote = faltan.slice(i, i + 25);
+                const rows = await supabaseFetch(
+                    `${tabla}?select=id,payload,version&id=in.(${lote.map(encodeURIComponent).join(',')})`,
+                    'GET', null, null, { quiet: true });
+                if (!Array.isArray(rows)) return completa();
+                rows.forEach(r => bajados.set(String(r.id), r));
+            }
+            if (faltan.some(id => !bajados.has(id))) return completa();      // algo no cuadró (p. ej. id con coma): no se adivina
+            return indice.map(r => {
+                const id = String(r.id);
+                if (bajados.has(id)) return bajados.get(id);
+                const loc = localPorId.get(id);                                // versión sin cambios: el payload remoto == el snapshot local
+                return { id: r.id, version: r.version, payload: loc !== undefined ? loc : null };
+            });
         }
 
         function estadoMezclar(key, rows) {
@@ -1463,7 +1498,7 @@ async function authPedirNuevaClave() {
                 if (usarTtl && Date.now() - (estadoCtl.ultimo[key] || 0) < ESTADO_TTL_MS) continue;
                 await estadoPush(key);                                        // 1) primero se envía lo local
                 if (estadoCtl.disabled) continue;
-                const rows = await estadoDescargar(tabla);                    // 2) luego se descarga
+                const rows = await estadoDescargar(tabla, key);               // 2) luego se descarga (solo lo que cambió)
                 if (!rows) { estadoSinTabla(); continue; }
                 if (estadoCtl.running[key]) await estadoCtl.running[key];
                 estadoCtl.ultimo[key] = Date.now();
@@ -1755,6 +1790,48 @@ async function authPedirNuevaClave() {
             try { showToast(msg, 'error'); } catch (_) {}
         }
 
+        // ===== Medidor de consumo (egress REST) — validar con datos reales =====
+        // Consola: hvacEgressReport()  ·  Atajo: Ctrl+Alt+Shift+E  ·  Reiniciar: hvacEgress.reset()
+        // Cuenta los bytes de texto descargados por endpoint (cota superior; el tráfico real va comprimido).
+        // Avisa en consola cuando UNA respuesta supera 400 KB: así se detecta cualquier fuga nueva.
+        const hvacEgress = (() => {
+            const KEY = 'HVAC_EGRESS_SESSION';
+            let data = { since: Date.now(), total: 0, rows: {} };
+            try { const s = JSON.parse(sessionStorage.getItem(KEY) || 'null'); if (s && s.rows) data = s; } catch (_) {}
+            let timer = null;
+            const persist = () => { clearTimeout(timer); timer = setTimeout(() => { try { sessionStorage.setItem(KEY, JSON.stringify(data)); } catch (_) {} }, 1000); };
+            const fmt = b => b > 1048576 ? (b / 1048576).toFixed(2) + ' MB' : b > 1024 ? (b / 1024).toFixed(1) + ' KB' : b + ' B';
+            function note(endpoint, method, bytes) {
+                bytes = Number(bytes) || 0;
+                const k = method + ' ' + String(endpoint).split('?')[0];
+                const r = data.rows[k] || (data.rows[k] = { n: 0, bytes: 0, max: 0 });
+                r.n++; r.bytes += bytes; if (bytes > r.max) r.max = bytes;
+                data.total += bytes; persist();
+                if (bytes > 400 * 1024) console.warn('[Egress] Respuesta pesada: ' + fmt(bytes) + ' ← ' + method + ' ' + String(endpoint).slice(0, 140));
+            }
+            function report() {
+                const list = Object.entries(data.rows)
+                    .map(([k, r]) => ({ endpoint: k, llamadas: r.n, total: fmt(r.bytes), promedio: fmt(Math.round(r.bytes / r.n)), maximo: fmt(r.max), _b: r.bytes }))
+                    .sort((a, b) => b._b - a._b);
+                const minutos = Math.max(1, Math.round((Date.now() - data.since) / 60000));
+                const detalle = list.map(x => ({ endpoint: x.endpoint, llamadas: x.llamadas, total: x.total, promedio: x.promedio, maximo: x.maximo }));
+                console.log('[Egress] Últimos ' + minutos + ' min: ' + fmt(data.total) + ' descargados de Supabase (REST).');
+                console.table(detalle);
+                return { total: fmt(data.total), minutos, detalle };
+            }
+            function reset() { data = { since: Date.now(), total: 0, rows: {} }; persist(); }
+            return { note, report, reset, fmt };
+        })();
+        window.hvacEgress = hvacEgress;
+        window.hvacEgressReport = hvacEgress.report;
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey && e.altKey && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+                const r = hvacEgress.report();
+                alert('Consumo REST de esta sesión: ' + r.total + ' en ' + r.minutos + ' min\n\n' +
+                    (r.detalle.slice(0, 8).map(x => x.total + ' · ' + x.llamadas + '× · ' + x.endpoint).join('\n') || '(sin datos todavía)'));
+            }
+        });
+
         // opts: { quiet: true } no reporta errores (se usa en intentos con plan B)
         async function supabaseFetch(endpoint, method = 'GET', body = null, extraHeaders = null, opts = null) {
             const quiet = !!(opts && opts.quiet);
@@ -1777,6 +1854,7 @@ async function authPedirNuevaClave() {
                         if (!quiet) cloudReport(true);
                         if (method === 'DELETE') return true;
                         const txt = await res.text();
+                        hvacEgress.note(endpoint, method, txt.length);
                         if (!txt) return true;
                         try { return JSON.parse(txt); } catch (e) { return true; }
                     }
@@ -1947,6 +2025,8 @@ async function authPedirNuevaClave() {
             if (merged.clientSignature === null) lo.clientSignature = null;
             if (merged.technicianFinished) { lo.technicianFinished = true; lo.technicianFinishedAt = merged.technicianFinishedAt; }
         }
+        // id de orden -> sync_ts (sello que pone un trigger de la base en cada escritura) la última vez que nuestra copia quedó al día
+        const ORDER_SEEN_TS = new Map();
         function cloudUpsert(table, rawId, obj) {
             const cleanId = cloudCleanId(rawId);
             const payload = JSON.parse(JSON.stringify(obj));
@@ -1961,7 +2041,23 @@ async function authPedirNuevaClave() {
                 }
                 let body = payload;
                 if (table === 'hvac_orders') {      // fusiona con la nube: conserva lo que cambió el administrador y lo que guardaron otros técnicos
-                    const remote = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=payload`, 'GET', null, null, { quiet: true });
+                    // Sonda: si nadie tocó la orden desde nuestra última lectura/escritura, se evita bajar el payload completo
+                    // (antes se descargaba entero en CADA guardado). Requiere la columna sync_ts; sin ella se usa el camino anterior.
+                    let skipRead = false;
+                    const seen = ORDER_SEEN_TS.get(cleanId);
+                    if (seen && !EGRESS.tsMissing && !hvacHasLite(payload) && navigator.onLine !== false) {
+                        const probe = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=sync_ts`, 'GET', null, null, { quiet: true });
+                        if (Array.isArray(probe)) { if (probe[0] && probe[0].sync_ts && probe[0].sync_ts === seen) skipRead = true; }
+                        else if ([400, 404].includes(Number(cloudCtl.lastStatus))) EGRESS.tsMissing = true;
+                    }
+                    let remote = [];
+                    if (!skipRead) {
+                        remote = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=${EGRESS.tsMissing ? 'payload' : 'payload,sync_ts'}`, 'GET', null, null, { quiet: true });
+                        if (!Array.isArray(remote) && !EGRESS.tsMissing && [400, 404].includes(Number(cloudCtl.lastStatus))) {
+                            EGRESS.tsMissing = true;
+                            remote = await supabaseFetch(`hvac_orders?id=eq.${enc}&select=payload`, 'GET', null, null, { quiet: true });
+                        }
+                    } else { EGRESS.stats.skipped = (EGRESS.stats.skipped || 0) + 1; }
                     const hasRemote = Array.isArray(remote) && remote[0] && remote[0].payload;
                     if (hvacHasLite(payload)) {
                         // La copia local viene de un listado liviano (sin fotos): jamás se sube recortada.
@@ -1969,14 +2065,17 @@ async function authPedirNuevaClave() {
                         if (hasRemote) hvacRestoreHeavy(payload, remote[0].payload);
                         hvacStripLiteFlags(payload);
                     }
-                    if (hasRemote) {
+                    if (skipRead) { body = mergeSharedOrder(payload, payload); applyMergedToLocal(cleanId, body); }   // mismo saneo de estado, sin datos remotos nuevos
+                    else if (hasRemote) {
                         body = mergeSharedOrder(payload, remote[0].payload); applyMergedToLocal(cleanId, body);
                         const lo = workOrders.find(o => o && (o.id === cleanId || cloudCleanId(o.id) === cleanId));
                         if (lo && hvacHasLite(lo)) { if (lo.clientSignature && lo.clientSignature._lite && body.clientSignature) lo.clientSignature = body.clientSignature; hvacStripLiteFlags(lo); }
                     }
                 }
                 // Plan A: upsert atómico (1 petición)
-                let r = await supabaseFetch(`${table}?on_conflict=id`, 'POST', { id: cleanId, payload: body }, { 'Prefer': 'resolution=merge-duplicates,return=minimal' }, { quiet: true });
+                const wantTs = table === 'hvac_orders' && !EGRESS.tsMissing;      // el upsert devuelve solo sync_ts (unos bytes)
+                let r = await supabaseFetch(`${table}?on_conflict=id${wantTs ? '&select=sync_ts' : ''}`, 'POST', { id: cleanId, payload: body }, { 'Prefer': 'resolution=merge-duplicates,' + (wantTs ? 'return=representation' : 'return=minimal') }, { quiet: true });
+                if (!r && wantTs && Number(cloudCtl.lastStatus) === 400) EGRESS.tsMissing = true;
                 if (!r && [400, 404].includes(Number(cloudCtl.lastStatus))) {
                     // Plan B: verificar y actualizar / insertar
                     const check = await supabaseFetch(`${table}?id=eq.${enc}&select=id`, 'GET', null, null, { quiet: true });
@@ -1985,6 +2084,7 @@ async function authPedirNuevaClave() {
                 }
                 if (r) {
                     cloudOutboxClear(table, cleanId, queuedEntry.ts);
+                    if (table === 'hvac_orders') { const wts = Array.isArray(r) && r[0] && r[0].sync_ts; if (wts) ORDER_SEEN_TS.set(cleanId, wts); else ORDER_SEEN_TS.delete(cleanId); }
                     if (table === 'hvac_orders') { try { egressSet('full:' + cleanId, JSON.stringify(body)); } catch (_) {} }   // lo recién guardado ya es la copia completa más reciente
                 }
                 return r || null;
@@ -2236,7 +2336,7 @@ async function authPedirNuevaClave() {
             try { await estadoPullKeys(['HVAC_AGENDA_BACKUP'], true); } catch (e) { console.warn('[Estado] Agenda:', e); }
             if (cloudStateCtl.disabled) return;
             if (!(await cloudStateProbe())) return;
-            const rows = await supabaseFetch('hvac_app_state?select=id,payload', 'GET', null, null, { quiet: true });
+            const rows = await supabaseFetch('hvac_app_state?select=id,payload&id=in.(' + CLOUD_STATE_KEYS.map(k => encodeURIComponent(cloudCleanId(k))).join(',') + ')', 'GET', null, null, { quiet: true });
             if (!Array.isArray(rows)) return;
             const byId = {};
             rows.forEach(r => { if (r && r.payload) byId[r.id] = r.payload; });
@@ -2360,10 +2460,11 @@ async function authPedirNuevaClave() {
             FULL_TTL_MS: 10 * 60 * 1000,     // payload completo de una orden
             HIST_TTL_MS: 10 * 60 * 1000,     // historial de un equipo
             EQ_TTL_MS: 10 * 60 * 1000,       // equipos de una rutina
-            CLIENTS_TTL_MS: 10 * 60 * 1000,  // lista de clientes (marcación GPS)
+            CLIENTS_TTL_MS: 30 * 60 * 1000,  // lista de clientes (marcación GPS)
             MAX_FULL: 3,                     // máx. de órdenes completas guardadas en memoria
             LITE_VIEW: 'hvac_orders_lite',
             liteViewMissing: false,
+            tsMissing: false,
             mem: new Map(),
             inflight: new Map(),
             stats: { hits: 0, net: 0 }
@@ -4198,7 +4299,8 @@ function mxGetPosition() {
 const mxFold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 async function mxLoadAllClients() {
   const KEY = 'HVAC_CLIENTS_ALL'; let all = null;
-  if (navigator.onLine && egressGet('clients', EGRESS.CLIENTS_TTL_MS) === undefined) {   // si se leyó hace poco, se usa la copia local
+  let freshLocal = false; try { freshLocal = !!localStorage.getItem(KEY) && (Date.now() - Number(localStorage.getItem('HVAC_CLIENTS_AT') || 0)) < EGRESS.CLIENTS_TTL_MS; } catch (_) {}
+  if (navigator.onLine && !freshLocal && egressGet('clients', EGRESS.CLIENTS_TTL_MS) === undefined) {   // si se leyó hace poco, se usa la copia local
     all = [];
     for (let off = 0; ; off += 1000) {                       // sin filtros ni límite fijo: pagina de 1000 en 1000
       const rows = await supabaseFetch('hvac_clients?select=payload&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true });
@@ -4206,7 +4308,7 @@ async function mxLoadAllClients() {
       all.push(...rows.map(r => r && r.payload).filter(c => c && c.name));
       if (rows.length < 1000) break;
     }
-    if (all) egressSet('clients', '1');
+    if (all) { egressSet('clients', '1'); try { localStorage.setItem('HVAC_CLIENTS_AT', String(Date.now())); } catch (_) {} }
     if (all && all.length) { try { localStorage.setItem(KEY, JSON.stringify(all.map(c => ({ id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, latitud: c.latitud, longitud: c.longitud, geoRadius: c.geoRadius })))); } catch (e) {} }
   }
   if (!all || !all.length) { try { all = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { all = []; } }   // sin señal: última lista descargada
@@ -4341,7 +4443,8 @@ setTimeout(mxFlushQueue, 4000);
 /* ---------------- Rutinas compartidas: refresco en vivo cada 30 s ---------------- */
 async function mxPullShared() {
   if (!navigator.onLine || document.hidden || !techCurrentUserRecord()) return;
-  const remote = await fetchMyActiveOrders({ maxAge: 120000 }); if (!Array.isArray(remote)) return;   // como máximo 1 petición cada 2 min
+  if (!(workOrders || []).some(o => o && String(o.status).toUpperCase() !== 'COMPLETED' && orderTechs(o).length > 1)) return;   // sin rutinas compartidas abiertas no hay nada que fusionar
+  const remote = await fetchMyActiveOrders({ maxAge: 300000 }); if (!Array.isArray(remote)) return;   // como máximo 1 petición cada 5 min
   let changed = false;
   remote.filter(r => orderTechs(r).length > 1).forEach(r => {
     const lo = workOrders.find(o => o && o.id === r.id);
@@ -4478,9 +4581,11 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
             rows = await supabaseFetch(EGRESS.LITE_VIEW + '?select=payload&equipment_ids=cs.' + cs + '&order=date.desc&limit=10', 'GET', null, null, { quiet: true });
             if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
           }
-          if (!Array.isArray(rows) && EGRESS.liteViewMissing) {   // respaldo sin la vista: pocas filas
-            rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=3', 'GET', null, null, { quiet: true });
-            if (!Array.isArray(rows)) rows = await supabaseFetch('hvac_orders?select=payload&payload->equipmentIds=cs.' + cs + '&limit=3', 'GET', null, null, { quiet: true });
+          if (!Array.isArray(rows) && EGRESS.liteViewMissing) {   // respaldo sin la vista: SOLO la ejecución de este equipo (no la orden completa con todas las fotos)
+            const sel = 'select=id,date:payload->>date,client:payload->>client,technician:payload->>technician,ex:payload->executions->' + encodeURIComponent(k);
+            rows = await supabaseFetch('hvac_orders?' + sel + '&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=3', 'GET', null, null, { quiet: true });
+            if (!Array.isArray(rows)) rows = await supabaseFetch('hvac_orders?' + sel + '&payload->equipmentIds=cs.' + cs + '&limit=3', 'GET', null, null, { quiet: true });
+            if (Array.isArray(rows)) rows = rows.filter(r => r && r.ex).map(r => ({ payload: { id: r.id, date: r.date, client: r.client, technician: r.technician, equipmentIds: [k], executions: { [k]: r.ex } } }));
           }
           list = Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
           if (list) egressSet(hkey, JSON.stringify(list));
