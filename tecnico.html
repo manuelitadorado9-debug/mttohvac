@@ -731,6 +731,12 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         </div>
                     </div>
 
+                    <!-- Campo independiente: siempre visible en Preventivo, Correctivo y Revisión. -->
+                    <label class="field" id="exec-observaciones-tecnicas-field" style="margin-top:4px">
+                        <span>Observaciones Técnicas</span>
+                        <textarea id="exec-f-observaciones-tecnicas" rows="4" class="input" placeholder="Ingrese observaciones técnicas generales del equipo o mantenimiento (opcional)..."></textarea>
+                    </label>
+
                     <div id="exec-notas-extra">
                         <div class="field">
                             <div class="obs-head">
@@ -3318,6 +3324,15 @@ async function authPedirNuevaClave() {
 
             document.getElementById('exec-f-obs').value = exec.obs || '';
 
+            // Precarga las observaciones técnicas independientes; migra registros antiguos desde obs.
+            const technicalObsInput = document.getElementById('exec-f-observaciones-tecnicas');
+            if (technicalObsInput) {
+                technicalObsInput.value = String(
+                    exec.observaciones_tecnicas || exec.observaciones ||
+                    exec.notas_tecnicas || exec.obs || ''
+                );
+            }
+
             const chkCorr = document.getElementById('exec-chk-correctivo');
             chkCorr.checked = !!exec.corrective;
             document.getElementById('exec-corrective-desc').value = exec.correctiveDesc || '';
@@ -3530,6 +3545,10 @@ async function authPedirNuevaClave() {
                 paramsValues,
                 checklist,
                 obs: document.getElementById('exec-f-obs').value,
+                // Campo general que alimenta la sección 4 del informe técnico.
+                observaciones_tecnicas: String(
+                    document.getElementById('exec-f-observaciones-tecnicas')?.value || ''
+                ).trim(),
                 corrective,
                 correctiveDesc,
                 photos: tempPhotosList,
@@ -4116,6 +4135,10 @@ async function authPedirNuevaClave() {
                 e.presionOtros = document.getElementById('exec-f-presion').value.trim();
                 e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
                 e.conclusion = document.getElementById('exec-f-conclusion').value.trim();
+                const technicalObsInput = document.getElementById('exec-f-observaciones-tecnicas');
+                if (technicalObsInput) {
+                    e.observaciones_tecnicas = String(technicalObsInput.value || '').trim();
+                }
                 e.fotosAntes = [...ordenFotos.antes];
                 e.fotosDespues = [...ordenFotos.despues];
                 e.photos = [...ordenFotos.antes, ...ordenFotos.despues];
@@ -4792,7 +4815,8 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
       cNames.forEach((n, i) => { const ok = !!ck['chk_' + (i + 1)]; h += '<div class="lm-chk"><i class="fa-solid ' + (ok ? 'fa-circle-check ok' : 'fa-circle-minus no') + '"></i><span>' + esc(n) + '</span></div>'; });
     }
 
-    h += '<div class="lm-sec">Novedades / observaciones</div><div class="lm-note">' + esc(ex.obs && String(ex.obs).trim() ? ex.obs : 'Sin observaciones.') + '</div>';
+    const technicalObs = ex.observaciones_tecnicas || ex.observaciones || ex.notas_tecnicas || ex.obs || '';
+    h += '<div class="lm-sec">Observaciones técnicas</div><div class="lm-note">' + esc(String(technicalObs).trim() || 'Sin observaciones adicionales.') + '</div>';
     if (ex.corrective) h += '<div class="lm-sec">Correctivo reportado</div><div class="lm-note warn">' + esc(ex.correctiveDesc || 'Se reportó un correctivo sin descripción.') + '</div>';
     const nPh = Array.isArray(ex.photos) ? ex.photos.length : (Number(ex.photosCount) || 0);
     if (nPh) h += '<div class="lm-meta" style="margin-top:10px"><span><i class="fa-solid fa-camera"></i> ' + nPh + ' foto(s) en ese registro</span></div>';

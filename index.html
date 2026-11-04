@@ -8736,9 +8736,13 @@ async function authPedirNuevaClave() {
             });
             ctx.gap(3.5);
 
-            // 4. Observaciones
+            // 4. Observaciones: prioriza el campo nuevo y conserva compatibilidad con registros anteriores.
             ctx.sectionTitle('4. Observaciones Técnicas', 8);
-            ctx.textBox(exec.obs || 'Sin observaciones adicionales.');
+            const technicalObs = [
+                exec.observaciones_tecnicas, exec.observaciones, exec.notas_tecnicas,
+                exec.obs, exec.notasAnaliticas
+            ].find(value => value != null && String(value).trim() !== '') || 'Sin observaciones adicionales.';
+            ctx.textBox(String(technicalObs));
             ctx.gap(3.5);
 
             // 5. Registro fotográfico
@@ -11920,11 +11924,19 @@ async function attDelete(id) {
     return `${first(eq.code, eq.id, key)} - ${first(eq.name, eq.type, 'Equipo HVAC')}`.toUpperCase();
   }
 
-  /* Texto principal del equipo según el tipo de informe. */
+  /* Texto principal del equipo según el tipo de informe.
+     Las observaciones capturadas en tecnico.html tienen prioridad; los alias mantienen compatibilidad histórica. */
   function workText(typeKey, exec) {
-    if (typeKey === 'PREVENTIVO') return String(first(exec?.notasAnaliticas, exec?.obs, 'Sin observaciones adicionales.'));
-    if (typeKey === 'REVISION') return String(first(exec?.notasAnaliticas, exec?.hallazgos, exec?.obs, exec?.description, 'Sin hallazgos registrados para este equipo.'));
-    return String(first(exec?.notasAnaliticas, exec?.correctiveDesc, exec?.obs, exec?.description, exec?.notes, 'Sin descripción de actividades registrada para este equipo.'));
+    const technicalObs = first(
+      exec?.observaciones_tecnicas, exec?.observaciones, exec?.notas_tecnicas
+    );
+    if (typeKey === 'PREVENTIVO') {
+      return String(first(technicalObs, exec?.notasAnaliticas, exec?.obs, 'Sin observaciones adicionales.'));
+    }
+    if (typeKey === 'REVISION') {
+      return String(first(technicalObs, exec?.notasAnaliticas, exec?.hallazgos, exec?.obs, exec?.description, 'Sin hallazgos registrados para este equipo.'));
+    }
+    return String(first(technicalObs, exec?.notasAnaliticas, exec?.correctiveDesc, exec?.obs, exec?.description, exec?.notes, 'Sin descripción de actividades registrada para este equipo.'));
   }
 
   function buildEquipmentPage(order, typeKey, type, item, index, jobs) {
