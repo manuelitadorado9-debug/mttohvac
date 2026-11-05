@@ -1699,6 +1699,14 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             </div>
             <div id="tools-kpis" class="grid grid-cols-3 gap-2"></div>
             <div id="tools-list" class="space-y-3"></div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-3">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div><h3 class="font-black text-sm text-slate-900"><i class="fa-solid fa-clock-rotate-left mr-2 text-teal-600"></i>Historial de recogidas</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Registro cronológico de recogidas y reaperturas, con responsable y observaciones.</p></div>
+                    <input id="tools-history-search" type="search" oninput="renderToolsHistory()" class="input-box text-xs w-64" placeholder="Buscar orden, cliente o responsable">
+                </div>
+                <div id="tools-history-list" class="overflow-x-auto"></div>
+            </div>
         </section>
 
         <section id="view-admin-financial" class="hidden space-y-4">
@@ -4509,6 +4517,7 @@ async function authPedirNuevaClave() {
             'pickup_done_at:payload->toolPickup->>doneAt',
             'pickup_done_by:payload->toolPickup->>doneBy',
             'pickup_note:payload->toolPickup->>note',
+            'pickup_history:payload->toolPickup->history',
             'signature_timestamp:payload->clientSignature->>timestamp'
         ].join(',');
 
@@ -4529,6 +4538,7 @@ async function authPedirNuevaClave() {
             if (row.pickup_done_at) toolPickup.doneAt = row.pickup_done_at;
             if (row.pickup_done_by) toolPickup.doneBy = row.pickup_done_by;
             if (row.pickup_note) toolPickup.note = row.pickup_note;
+            if (Array.isArray(row.pickup_history)) toolPickup.history = row.pickup_history;
             const n = v => v == null || v === '' ? undefined : Number(v);
             return {
                 id: String(id), client: row.client || '', date: row.order_date || '',
@@ -9499,14 +9509,22 @@ async function authPedirNuevaClave() {
             for (const id of ids) {
                 const o = workOrders.find(x => String(x.id) === String(id)); if (!o) continue;
                 const prev = o.toolPickup || { requestedAt: new Date(hvacToolDoneAt(o) || Date.now()).toISOString() };
+                const now = new Date().toISOString();
+                const history = Array.isArray(prev.history) ? prev.history.slice() : [];
+                // Migración transparente: conserva como evento la recogida actual de versiones anteriores.
+                if (!history.length && prev.status === 'DONE' && prev.doneAt) {
+                    history.push({ action: 'RECOGIDA', at: prev.doneAt, by: prev.doneBy || '', note: prev.note || '' });
+                }
+                history.push({ action: done ? 'RECOGIDA' : 'REAPERTURA', at: now, by: who, note: done ? (note || '') : 'Recogida reabierta' });
                 o.toolPickup = done
-                    ? { ...prev, status: 'DONE', doneAt: new Date().toISOString(), doneBy: who, note: note || '' }
-                    : { requestedAt: prev.requestedAt, status: 'PENDING' };
+                    ? { ...prev, status: 'DONE', doneAt: now, doneBy: who, note: note || '', history }
+                    : { ...prev, status: 'PENDING', history };
                 await cloudSaveOrder(o);
                 try { registrarAuditoria(done ? 'RECOGER_HERRAMIENTAS' : 'REABRIR_RECOGIDA', 'hvac_orders', o.id); } catch (e) {}
             }
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
             renderToolsModule();
+            renderToolsHistory();
             showToast(done ? 'Recogida de herramientas registrada.' : 'Recogida reabierta.', 'success');
         }
         function renderToolsModule() {
@@ -9519,6 +9537,7 @@ async function authPedirNuevaClave() {
             const late = pend.filter(o => days(o) > 2).length;
             const kpi = (label, val, cls) => '<div class="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm"><div class="text-[10px] font-bold text-slate-500 uppercase">' + label + '</div><div class="text-xl font-black ' + cls + '">' + val + '</div></div>';
             document.getElementById('tools-kpis').innerHTML = kpi('Pendientes', pend.length, 'text-amber-600') + kpi('Con +2 días', late, late ? 'text-rose-600' : 'text-slate-900');
+            renderToolsHistory();
             let rows = f === 'PENDING' ? pend : f === 'DONE' ? all.filter(o => hvacToolPickupState(o) === 'DONE') : all;
             if (q) rows = rows.filter(o => normText([o.id, o.client, o.zoneName, o.technician].join(' ')).includes(q));
             if (!rows.length) { list.innerHTML = '<div class="bg-white p-8 rounded-2xl border border-slate-200/80 text-center text-xs text-slate-400">' + (f === 'PENDING' ? 'No hay herramientas pendientes por recoger.' : 'Sin resultados.') + '</div>'; return; }
@@ -9557,6 +9576,41 @@ async function authPedirNuevaClave() {
                 b.disabled = true;
                 hvacToolPickupSet(ids, true, (note || '').trim());
             };
+        }
+
+        function renderToolsHistory() {
+            const host = document.getElementById('tools-history-list'); if (!host) return;
+            const q = normText((document.getElementById('tools-history-search') || {}).value || '');
+            const events = [];
+            (workOrders || []).forEach(o => {
+                if (!o || String(o.id || '').startsWith('HIST-')) return;
+                const tp = o.toolPickup || {};
+                let history = Array.isArray(tp.history) ? tp.history : [];
+                // Compatibilidad con recogidas realizadas antes de activar el historial detallado.
+                if (!history.length && tp.status === 'DONE' && tp.doneAt) {
+                    history = [{ action: 'RECOGIDA', at: tp.doneAt, by: tp.doneBy || '', note: tp.note || '', legacy: true }];
+                }
+                history.forEach(ev => events.push({
+                    order: o.id, client: o.client || '', zone: o.zoneName || '', technician: o.technician || '',
+                    action: ev.action || 'RECOGIDA', at: ev.at || ev.timestamp || '', by: ev.by || ev.doneBy || '',
+                    note: ev.note || '', legacy: !!ev.legacy
+                }));
+            });
+            const matches = events.filter(e => !q || normText([e.order,e.client,e.zone,e.technician,e.by,e.note,e.action].join(' ')).includes(q));
+            matches.sort((a,b) => (parseFlexDate(b.at) || 0) - (parseFlexDate(a.at) || 0));
+            const fmtDate = value => {
+                const d = parseFlexDate(value); return d ? new Date(d).toLocaleString('es-CO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : 'Fecha no disponible';
+            };
+            if (!matches.length) {
+                host.innerHTML = '<div class="py-8 text-center text-xs text-slate-400">' + (events.length ? 'No hay movimientos que coincidan con la búsqueda.' : 'Aún no hay recogidas registradas. Las nuevas aparecerán aquí automáticamente.') + '</div>';
+                return;
+            }
+            host.innerHTML = '<table class="min-w-full text-xs"><thead><tr><th>Fecha y hora</th><th>Movimiento</th><th>Orden / Cliente</th><th>Técnico(s)</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>' +
+                matches.map(e => '<tr><td class="whitespace-nowrap">' + esc(fmtDate(e.at)) + (e.legacy ? '<div class="text-[10px] text-slate-400">Registro anterior</div>' : '') + '</td>' +
+                    '<td><span class="inline-flex rounded-full px-2 py-1 text-[10px] font-bold ' + (e.action === 'REAPERTURA' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700') + '">' + (e.action === 'REAPERTURA' ? 'Reapertura' : 'Recogida') + '</span></td>' +
+                    '<td><strong class="font-mono">' + esc(e.order) + '</strong><div class="text-[10px] text-slate-500">' + esc([e.client,e.zone].filter(Boolean).join(' · ')) + '</div></td>' +
+                    '<td>' + esc(e.technician || '-') + '</td><td>' + esc(e.by || 'No registrado') + '</td><td>' + esc(e.note || '-') + '</td></tr>').join('') +
+                '</tbody></table><div class="text-[10px] text-slate-400 mt-2">' + matches.length + ' movimiento(s) · más recientes primero</div>';
         }
 
         function hvacReactivateOrderIfNeeded(order, previousIds) {
