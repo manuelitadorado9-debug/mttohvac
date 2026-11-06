@@ -2857,28 +2857,54 @@ function consecLocalMax(pref) {
     return max;
 }
 let prevReserveChain = Promise.resolve();
-// Reserva el siguiente consecutivo en Supabase (función atómica generar_consecutivo); sin señal usa un contador local.
+// Consecutivos reservados en esta sesión que aún no se han guardado como orden (evita duplicados al crear varias seguidas).
+const prevPendingIds = new Set();
+const consecCloudCache = {};
+// Números ya usados para un prefijo: órdenes locales + reservas pendientes + (si hay red) todas las órdenes de la nube.
+async function consecUsedNumbers(pref) {
+    const used = new Set();
+    const add = id => { const n = consecParse(id, pref); if (n > 0) used.add(n); };
+    (workOrders || []).forEach(o => add(o && o.id));
+    prevPendingIds.forEach(add);
+    const cached = consecCloudCache[pref];
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) { cached.ids.forEach(add); return used; }   // evita consultas repetidas (ahorra transferencia)
+    if (navigator.onLine !== false) {
+        try {
+            const ids = [];
+            for (let off = 0; off < 20000; off += 1000) {
+                // Solo la columna id y solo las filas del prefijo: unos pocos KB aunque haya miles de órdenes.
+                const rows = await Promise.race([
+                    supabaseFetch('hvac_orders?select=id&id=like.' + pref + '*&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true }),
+                    new Promise(res => setTimeout(() => res(null), 5000))
+                ]);
+                if (!Array.isArray(rows)) break;
+                rows.forEach(r => ids.push(r && r.id));
+                if (rows.length < 1000) { consecCloudCache[pref] = { at: Date.now(), ids }; break; }
+            }
+            ids.forEach(add);
+        } catch (e) { /* sin nube: se usa solo lo local */ }
+    }
+    return used;
+}
+// k-ésimo número libre (el más bajo disponible) según lo que hay cargado localmente; se usa en la vista previa.
+function consecFreeLocal(pref, k = 1) {
+    const used = new Set();
+    (workOrders || []).forEach(o => { const n = consecParse(o && o.id, pref); if (n > 0) used.add(n); });
+    prevPendingIds.forEach(id => { const n = consecParse(id, pref); if (n > 0) used.add(n); });
+    let n = 0, found = 0;
+    while (found < k) { n++; if (!used.has(n)) found++; }
+    return n;
+}
+// Reserva el consecutivo MÁS BAJO disponible (rellena huecos de órdenes borradas) para PRE-, COR- o REV-.
 function reservePrevId(tipo = 'PREVENTIVO') {
     const pref = CONSEC_PREF[tipo] || 'PRE-';
     const run = async () => {
-        if (navigator.onLine !== false) {
-            const r = await Promise.race([supabaseFetch('rpc/generar_consecutivo', 'POST', { p_tipo: tipo }, null, { quiet: true }), new Promise(res => setTimeout(() => res(null), 5000))]);
-            const id = Array.isArray(r) ? r[0] : r;
-            // Nunca aceptar un consecutivo que retroceda: el RPC debe avanzar por encima
-            // del mayor número existente o reservado localmente, incluso si hubo borrados.
-            const cloudN = typeof id === 'string' && id.indexOf(pref) === 0 ? consecParse(id, pref) : 0;
-            const localMax = consecLocalMax(pref);
-            const idTaken = (workOrders || []).some(o => o && String(o.id) === id);
-            if (cloudN > localMax && !idTaken) {
-                try { localStorage.setItem('HVAC_CONSEC_' + pref, String(cloudN)); } catch (e) {}
-                deletedOrderIdClear(id); // si el último consecutivo borrado se reutiliza, vuelve a estar habilitado
-                return id;
-            }
-        }
-        let n = consecLocalMax(pref), id;
-        do { n++; id = prevFormat(n, pref); } while ((workOrders || []).some(o => o && String(o.id) === id));
-        try { localStorage.setItem('HVAC_CONSEC_' + pref, String(n)); } catch (e) {}
-        deletedOrderIdClear(id);
+        const used = await consecUsedNumbers(pref);
+        let n = 1;
+        while (used.has(n)) n++;
+        const id = prevFormat(n, pref);
+        prevPendingIds.add(id);
+        deletedOrderIdClear(id); // si el consecutivo estaba borrado, vuelve a quedar habilitado
         return id;
     };
     const p = prevReserveChain.then(run, run);
@@ -4562,7 +4588,7 @@ async function authPedirNuevaClave() {
         // La lista del histórico nunca descarga payload de hvac_orders; el fallback solo
         // consulta hvac_orders_lite para las órdenes visibles (sin fotos base64).
         const HVAC_ORDER_SUMMARY_TTL = 60 * 1000; // metadatos escalares: revalidación ligera cada minuto
-        const HVAC_PROGRESS_TTL = 45 * 1000;
+        const HVAC_PROGRESS_TTL = 10 * 60 * 1000;   // avance automático cada 10 min; el botón Sincronizar siempre consulta al instante
         const HVAC_PROGRESS_RETRY_MS = 15 * 1000;
         const hvacProgressCache = new Map();       // id -> { at, ok, total, done, started, source }
         const hvacProgressPending = new Set();
@@ -4601,10 +4627,31 @@ async function authPedirNuevaClave() {
             return changed;
         }
 
+        let hvacOutboxMemo = { at: 0, set: new Set() };
+        function hvacOrderHasPendingSave(id) {
+            if (Date.now() - hvacOutboxMemo.at > 1500) {
+                let set = new Set();
+                try { set = new Set(cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && e.op !== 'delete').map(e => String(e.id))); } catch (_) {}
+                hvacOutboxMemo = { at: Date.now(), set };
+            }
+            return hvacOutboxMemo.set.has(cloudCleanId(id));
+        }
+        // Avance confirmado por la nube hace poco para una orden con detalle local; null si no aplica (p. ej. hay cambios locales sin enviar).
+        function hvacLiveProgress(o) {
+            try {
+                const pc = hvacProgressCache.get(String(o && o.id));
+                const n = new Set(((o && o.equipmentIds) || []).map(String).filter(Boolean)).size;
+                if (!pc || !pc.ok || Number(pc.total) !== n || Date.now() - pc.at > HVAC_PROGRESS_TTL + 60 * 1000) return null;
+                if (hvacOrderHasPendingSave(o.id)) return null;
+                return pc;
+            } catch (_) { return null; }
+        }
         async function hvacRefreshProgress(list) {
             if (!navigator.onLine || !Array.isArray(list)) return false;
             const now = Date.now();
-            const eligible = [...new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)))];
+            // Todas las filas visibles (no solo las "resumen"): una orden con detalle guardado localmente se quedaba con el % viejo.
+            const eligible = [...new Set(list.filter(o => o && o.id && !String(o.id).startsWith('HIST-') && String(o.status || '').toUpperCase() !== 'BILLED').map(o => String(o.id)))];
+            const liteOnly = new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)));
             const ids = eligible.filter(id => {
                 const c = hvacProgressCache.get(id);
                 const triedAt = hvacProgressAttempt.get(id) || 0;
@@ -4620,7 +4667,9 @@ async function authPedirNuevaClave() {
                 // Un error/timeout de la vista no debe impedir el respaldo RPC.
                 let viewChanged = false;
                 try {
-                    viewChanged = await hvacFetchLiteProgress(ids, list);
+                    // Vista ligera (trae ejecuciones) solo para filas resumen; las que ya tienen detalle usan la RPC numérica (~50 bytes por orden).
+                    const liteIds = hvacProgressDisabled ? ids : ids.filter(id => liteOnly.has(id));
+                    viewChanged = liteIds.length ? await hvacFetchLiteProgress(liteIds, list) : false;
                 } catch (viewError) {
                     console.warn('[Avance] La vista ligera no respondió; se intentará RPC:', viewError);
                     if (Number(cloudCtl.lastStatus) === 404) hvacProgressLiteViewMissing = true;
@@ -4700,7 +4749,7 @@ async function authPedirNuevaClave() {
             }
             const task = (async () => {
                 if (table === 'hvac_orders') return cloudFetchOrderSummaries(undefined, { force: !!force });
-                const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true });
+                const rows = await supabaseFetch(table + '?select=payload', 'GET', null, null, { quiet: true, noStore: !!force });   // sin caché solo al pulsar Sincronizar
                 return Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
             })();
             cloudTableInFlight[table] = task;
@@ -4767,9 +4816,17 @@ async function authPedirNuevaClave() {
         function deletedOrderIdHas(id) { return tombHas('hvac_orders', id); }
         function deletedOrderIdMark(id) { tombMark('hvac_orders', id); }
         function deletedOrderIdClear(id) { tombClear('hvac_orders', id); }
+        // Si la nube tiene una versión POSTERIOR al borrado (otro equipo reutilizó el consecutivo o re-creó la orden), la lápida ya no aplica.
+        function orderTombSuperseded(id, updatedAt) {
+            const t = (tombRead().hvac_orders || {})[cloudCleanId(id)];
+            if (!t) return false;
+            const u = Date.parse(updatedAt || '');
+            if (Number.isFinite(u) && u > Number(t) + 1000) { tombClear('hvac_orders', id); return true; }
+            return false;
+        }
         function mergeOrdersIntoList(list) {
             list.forEach(o => {
-                if (!o || !o.id || deletedOrderIdHas(o.id)) return;
+                if (!o || !o.id || (deletedOrderIdHas(o.id) && !orderTombSuperseded(o.id, o.updatedAt))) return;
                 const idx = workOrders.findIndex(x => String(x.id) === String(o.id));
                 if (idx >= 0) workOrders[idx] = o; else workOrders.push(o);
             });
@@ -4787,9 +4844,21 @@ async function authPedirNuevaClave() {
             const previous = new Map((workOrders || []).map(o => [String(o && o.id), o]));
             const merged = replaceAll ? new Map() : new Map(previous);
             let pendingSave = new Set();
-            try { pendingSave = new Set(cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && e.op !== 'delete').map(e => String(e.id))); } catch (_) {}
+            try {
+                // Un cambio local pendiente solo protege la copia local mientras NO exista en la nube una versión más nueva.
+                // Si la nube ya tiene algo posterior (otro dispositivo guardó después), gana la nube y la entrada vieja se descarta.
+                const srvUpdated = new Map(list.map(x => [cloudCleanId(x && x.id), Date.parse((x && x.updatedAt) || '')]));
+                pendingSave = new Set();
+                cloudOutboxRead().forEach(e => {
+                    if (!e || e.table !== 'hvac_orders' || e.op === 'delete') return;
+                    const cid = String(e.id), srv = srvUpdated.get(cid);
+                    const localTs = Math.max(Date.parse((e.payload && e.payload.updatedAt) || '') || 0, Number(e.ts) || 0);
+                    if (Number.isFinite(srv) && srv > localTs + 1000) { cloudOutboxClear('hvac_orders', e.id); return; }
+                    pendingSave.add(cid);
+                });
+            } catch (_) {}
             list.forEach(summary => {
-                if (!summary || !summary.id || deletedOrderIdHas(summary.id)) return;
+                if (!summary || !summary.id || (deletedOrderIdHas(summary.id) && !orderTombSuperseded(summary.id, summary.updatedAt))) return;
                 const key = String(summary.id), old = previous.get(key);
                 if (!old) { merged.set(key, summary); return; }
                 if (pendingSave.has(cloudCleanId(key))) { merged.set(key, old); return; }   // cambio local aún sin confirmar en la nube: no se pisa con la copia vieja del servidor
@@ -4801,6 +4870,8 @@ async function authPedirNuevaClave() {
                     if (summary.clientSignature) next.clientSignature = Object.assign({}, old.clientSignature || {}, summary.clientSignature);
                     else if (old.clientSignature) next.clientSignature = old.clientSignature;
                     if (old.executions) next.executions = old.executions; // un resultado parcial de trazabilidad no pisa todos los detalles
+                    // Si la versión de la nube es distinta a la del detalle guardado, ese detalle está viejo: se vuelve a bajar al abrir la orden.
+                    if (!old._hvacDetailUpdatedAt || String(summary.updatedAt || '') !== String(old._hvacDetailUpdatedAt)) next._hvacDetailStale = true;
                     delete next._hvacSummaryOnly;
                     if (old._hvacDetailFetchedAt) next._hvacDetailFetchedAt = old._hvacDetailFetchedAt;
                 } else {
@@ -4818,7 +4889,8 @@ async function authPedirNuevaClave() {
             if (!key) return null;
             let current = workOrders.find(o => String(o && o.id) === key);
             if (!current) return null;
-            if (current._hvacSummaryOnly !== true) {
+            if (current._hvacSummaryOnly !== true && !navigator.onLine) return current;   // sin red se usa lo local
+            if (current._hvacSummaryOnly !== true && !current._hvacDetailStale) {
                 // Ya hay detalle en memoria. Dentro del TTL (o sin red, o con cambios locales pendientes) se reutiliza.
                 const fetchedAt = Number(current._hvacDetailFetchedAt || 0);
                 if (!fetchedAt || Date.now() - fetchedAt < CLOUD_TABLE_TTL || !navigator.onLine) return current;
@@ -4843,12 +4915,15 @@ async function authPedirNuevaClave() {
                 current = workOrders.find(o => String(o && o.id) === key) || current;
                 // El servidor aporta el documento completo; los campos ligeros actuales preservan
                 // cualquier cambio local reciente y se combinan con los objetos anidados completos.
-                const full = Object.assign({}, payload, current);
+                let hasPending = false;
+                try { hasPending = cloudOutboxRead().some(e => e && e.table === 'hvac_orders' && e.op !== 'delete' && String(e.id) === cloudCleanId(key)); } catch (_) {}
+                const full = hasPending ? Object.assign({}, payload, current) : Object.assign({}, current, payload);   // sin cambios pendientes, manda la nube
                 full.invoice = Object.assign({}, payload.invoice || {}, current.invoice || {});
                 full.toolPickup = Object.assign({}, payload.toolPickup || {}, current.toolPickup || {});
                 full.clientSignature = Object.assign({}, payload.clientSignature || {}, current.clientSignature || {});
                 full.executions = payload.executions || current.executions || {};
                 delete full._hvacSummaryOnly;
+                delete full._hvacDetailStale;
                 full._hvacDetailFetchedAt = Date.now();
                 full._hvacDetailUpdatedAt = String(payload.updatedAt || '');
                 const idx = workOrders.findIndex(o => String(o && o.id) === key);
@@ -5028,10 +5103,10 @@ async function authPedirNuevaClave() {
         const equipmentPager = { page: 1, sig: '' };
 
         // Devuelve true si algún módulo local fue reemplazado por una versión más nueva de la nube.
-        async function loadCloudStateKeys(keys) {
+        async function loadCloudStateKeys(keys, force) {
             let cambioEstado = false;
             if (keys && keys.some(k => ESTADO_TABLAS[k]) && !estadoCtl.disabled) {
-                cambioEstado = await estadoPullKeys(keys.filter(k => ESTADO_TABLAS[k]), true);
+                cambioEstado = await estadoPullKeys(keys.filter(k => ESTADO_TABLAS[k]), !force);
                 if (!estadoCtl.disabled) keys = keys.filter(k => !ESTADO_TABLAS[k]);
             }
             if (!keys || !keys.length || cloudStateCtl.disabled || !navigator.onLine) return cambioEstado;
@@ -5111,7 +5186,7 @@ async function authPedirNuevaClave() {
                             const t = CLOUD_TABLE_TARGETS[table];
                             localStorage.setItem(t.backup, JSON.stringify(t.get()));
                         });
-                        if (await loadCloudStateKeys(cfg.state)) restoreLocalAppData();
+                        if (await loadCloudStateKeys(cfg.state, force)) restoreLocalAppData();
                         if (cfg.equipmentsProgressive && (force || cloudTableStale('hvac_equipments'))) {
                             if (!(await loadEquipmentsProgressive(tabId))) failed.push('hvac_equipments');
                         }
@@ -8840,11 +8915,12 @@ async function authPedirNuevaClave() {
             ctx.gap(3.5);
 
             // 4. Observaciones: prioriza el campo nuevo y conserva compatibilidad con registros anteriores.
-            ctx.sectionTitle('4. Observaciones Técnicas', 8);
-            const technicalObs = [
+            const isRevisionExec = String(exec.tipoRutina || '').toUpperCase() === 'REVISION';
+            ctx.sectionTitle(isRevisionExec ? '4. Desarrollo del Mantenimiento' : '4. Observaciones Técnicas', 8);
+            const technicalObs = (isRevisionExec ? [exec.notasAnaliticas] : [
                 exec.observaciones_tecnicas, exec.observaciones, exec.notas_tecnicas,
                 exec.obs, exec.notasAnaliticas
-            ].find(value => value != null && String(value).trim() !== '') || 'Sin observaciones adicionales.';
+            ]).find(value => value != null && String(value).trim() !== '') || (isRevisionExec ? 'Sin desarrollo registrado.' : 'Sin observaciones adicionales.');
             ctx.textBox(String(technicalObs));
             ctx.gap(3.5);
 
@@ -9425,6 +9501,11 @@ async function authPedirNuevaClave() {
                 const pc = hvacProgressCache.get(String(o.id));
                 return (pc && pc.ok && (pc.done > 0 || pc.started > 0)) ? 'IN_PROGRESS' : 'PENDING';
             }
+            const live = hvacLiveProgress(o);
+            if (live) {
+                if (s === 'COMPLETED' && live.total > 0 && live.done >= live.total) return 'COMPLETED';
+                return (live.done > 0 || live.started > 0) ? 'IN_PROGRESS' : 'PENDING';
+            }
             const p = hvacOrderProgress(o);
             if (s === 'COMPLETED' && p.complete) return 'COMPLETED';
             return (p.done > 0 || hvacOrderHasExecution(o)) ? 'IN_PROGRESS' : 'PENDING';
@@ -9692,9 +9773,16 @@ async function authPedirNuevaClave() {
                         if (!hvacExecutionIsFinalized(o, eqId)) missingByEquipment.push(`${eq.code || eqId}: pendiente de finalizar informe`);
                     });
                     const progress = hvacOrderProgress(o);
-                    doneCount = progress.done;
-                    percent = progress.percent;
-                    progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los equipos están finalizados.';
+                    const live = hvacLiveProgress(o);
+                    if (live) {
+                        doneCount = Math.min(Math.max(0, live.done), eqIds.length);
+                        percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                        progressTitle = 'Avance actualizado desde la nube.';
+                    } else {
+                        doneCount = progress.done;
+                        percent = progress.percent;
+                        progressTitle = missingByEquipment.length ? missingByEquipment.join(' | ') : 'Todos los equipos están finalizados.';
+                    }
                 }
                 const percentLabel = percent == null ? '—' : percent + '%';
                 const progressWidth = percent == null ? 0 : percent;
@@ -9748,6 +9836,25 @@ async function authPedirNuevaClave() {
             hvacRefreshProgress(historyState.lastPage).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
         }
         setInterval(hvacHistoryProgressTick, HVAC_PROGRESS_TTL);
+        // Caja menor, agenda y financiero: mientras la pestaña esté a la vista y activa, se revisa cada 10 min si otro equipo cambió algo.
+        // La consulta solo trae id+versión y descarga únicamente las filas que cambiaron (unos pocos KB).
+        const HVAC_STATE_TICK_MS = 10 * 60 * 1000;
+        async function hvacStateSectionTick() {
+            try {
+                if (document.hidden || !navigator.onLine || typeof estadoPullKeys !== 'function') return;
+                const active = document.querySelector('main > section[id^="view-"]:not(.hidden)');
+                const tabId = active && active.id ? active.id.replace(/^view-/, '') : '';
+                const cfg = CLOUD_SECTION_CONFIG[tabId];
+                if (!cfg || !cfg.state || !cfg.state.length || !['admin-caja', 'admin-agenda', 'admin-financial'].includes(tabId)) return;
+                if (appBusyCount > 0) return;
+                const keys = cfg.state.filter(k => ESTADO_TABLAS[k]);
+                if (!keys.length) return;
+                const changed = await estadoPullKeys(keys, true);
+                if (changed) { restoreLocalAppData(); if (document.getElementById('view-' + tabId) && !document.getElementById('view-' + tabId).classList.contains('hidden')) renderSection(tabId); }
+            } catch (e) { console.warn('[Estado] Refresco periódico omitido:', e); }
+        }
+        setInterval(hvacStateSectionTick, HVAC_STATE_TICK_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) hvacStateSectionTick(); });
         document.addEventListener('visibilitychange', hvacHistoryProgressTick);
 
         let appBusyCount = 0;
@@ -11690,7 +11797,7 @@ async function attDelete(id) {
     normalize(zones);
     var used=usedNums(zones), mats=periodMatrices(), multi=used.length>1;
     if(multi&&!S.touched) autoSplit(zones,used);
-    var n0=(typeof consecLocalMax==='function')?consecLocalMax('PRE-'):0, newCount=0, h='';
+    var newCount=0, h='';
     h+='<div class="flex items-center justify-between gap-2 flex-wrap mb-2"><p class="font-black text-teal-800 text-xs"><i class="fa-solid fa-layer-group mr-1"></i>Zonas y facturación <span class="font-semibold text-slate-500">· '+zones.length+' zona(s), '+eqCount(zones)+' equipo(s)</span></p>';
     if(zones.length>1) h+='<div class="flex gap-1.5"><button type="button" data-chip="one" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una sola facturación</button><button type="button" data-chip="each" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una por zona</button></div>';
     h+='</div>';
@@ -11705,7 +11812,7 @@ async function attDelete(id) {
     }
     used.forEach(function(gn){
       var zs=zonesOf(zones,gn), tgt=targetFor(gn,used.length,mats), base, label;
-      if(tgt==='NEW'){newCount++;base=prevFormat(n0+newCount,'PRE-');label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
+      if(tgt==='NEW'){newCount++;base=prevFormat(consecFreeLocal('PRE-',newCount),'PRE-');label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
       else{var p=mats.filter(function(x){return x.id===tgt;})[0];base=p.zoneBaseId;label='<span class="text-slate-500">Se agrega a</span> <b class="font-mono text-teal-800">'+esc(base)+'</b>';}
       var codes=hvacZoneOrderIds(base,zs);
       h+='<div class="rounded-2xl border border-slate-200 p-3 mb-2"><div class="flex items-center justify-between gap-2 flex-wrap mb-1.5"><span class="font-black text-xs">'+(multi?'Facturación '+gn:'Consecutivo')+'</span><span class="text-[11px]">'+label+'</span></div><ul class="space-y-0.5 mb-1">';
@@ -12082,7 +12189,9 @@ async function attDelete(id) {
       return String(first(technicalObs, exec?.notasAnaliticas, exec?.obs, 'Sin observaciones adicionales.'));
     }
     if (typeKey === 'REVISION') {
-      return String(first(technicalObs, exec?.notasAnaliticas, exec?.hallazgos, exec?.obs, exec?.description, 'Sin hallazgos registrados para este equipo.'));
+      // Revisión: solo el desarrollo redactado (resultado de "Procesar notas").
+      // No se imprimen las notas crudas del técnico (exec.obs) ni el antiguo campo de observaciones técnicas.
+      return String(first(exec?.notasAnaliticas, 'Sin desarrollo registrado para este equipo.'));
     }
     return String(first(technicalObs, exec?.notasAnaliticas, exec?.correctiveDesc, exec?.obs, exec?.description, exec?.notes, 'Sin descripción de actividades registrada para este equipo.'));
   }
@@ -12108,7 +12217,7 @@ async function attDelete(id) {
       middle += section(`${checklist.length ? 4 : 3}. OBSERVACIONES TÉCNICAS`, textBlock(workText(typeKey, exec), 40));
       photoNumber = checklist.length ? 5 : 4;
     } else if (typeKey === 'REVISION') {
-      middle += section('3. HALLAZGOS DEL TÉCNICO', textBlock(workText(typeKey, exec), 110));
+      middle += section('3. DESARROLLO DEL MANTENIMIENTO', textBlock(workText(typeKey, exec), 110));
     } else {
       middle += section('3. DESCRIPCIÓN DE ACTIVIDADES REALIZADAS', textBlock(workText(typeKey, exec), 70));
     }
@@ -12190,7 +12299,7 @@ async function attDelete(id) {
       body += section('RECOMENDACIONES', `<ul>${list}</ul>`);
     } else {
       const conclusion = String(first(order.conclusion, order.finalConclusion, order.conclusiones,
-        perEquipment(typeKey === 'REVISION' ? ['conclusion', 'notasAnaliticas', 'hallazgos'] : ['conclusion', 'correctiveDesc']),
+        perEquipment(typeKey === 'REVISION' ? ['conclusion'] : ['conclusion', 'correctiveDesc']),
         'No se registró una conclusión del técnico para esta orden.'));
       body += section(type.conclusionTitle, textBlock(conclusion, 110));
       body += section('RECOMENDACIONES', textBlock(first(recText, 'No se registraron recomendaciones para esta orden.'), 90));

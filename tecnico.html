@@ -731,7 +731,7 @@ main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwar
                         </div>
                     </div>
 
-                    <!-- Campo independiente: siempre visible en Preventivo, Correctivo y Revisión. -->
+                    <!-- Campo independiente: visible solo en Preventivo (oculto en Correctivo y Revisión). -->
                     <label class="field" id="exec-observaciones-tecnicas-field" style="margin-top:4px">
                         <span>Observaciones Técnicas</span>
                         <textarea id="exec-f-observaciones-tecnicas" rows="4" class="input" placeholder="Ingrese observaciones técnicas generales del equipo o mantenimiento (opcional)..."></textarea>
@@ -3644,7 +3644,7 @@ async function authPedirNuevaClave() {
                 obs: document.getElementById('exec-f-obs').value,
                 tipoRutina: routineType,
                 // En correctivos, las labores ejecutadas se documentan en Notas del técnico.
-                observaciones_tecnicas: isCorrectiveRoutine ? '' : String(
+                observaciones_tecnicas: (isCorrectiveRoutine || routineType === 'REVISION') ? '' : String(
                     document.getElementById('exec-f-observaciones-tecnicas')?.value || ''
                 ).trim(),
                 corrective,
@@ -4239,7 +4239,13 @@ async function authPedirNuevaClave() {
             // En una rutina CORRECTIVA, la necesidad del correctivo ya está definida por la orden.
             // También se oculta el campo independiente: el técnico describe lo ejecutado en "Notas del técnico".
             show('exec-correctivo-flag-section', !isCorrectiveRoutine);
-            show('exec-observaciones-tecnicas-field', !isCorrectiveRoutine);
+            // En REVISIÓN tampoco aplica: la redacción sale de "Notas del técnico" -> Procesar notas.
+            const isRevisionRoutine = plannedType === 'REVISION';
+            show('exec-observaciones-tecnicas-field', !isCorrectiveRoutine && !isRevisionRoutine);
+            if (isRevisionRoutine) {
+                const revTechObs = document.getElementById('exec-f-observaciones-tecnicas');
+                if (revTechObs) revTechObs.value = '';
+            }
             if (isCorrectiveRoutine) {
                 const correctiveFlag = document.getElementById('exec-chk-correctivo');
                 const correctiveDescription = document.getElementById('exec-corrective-desc');
@@ -4279,7 +4285,10 @@ async function authPedirNuevaClave() {
                 e.notasAnaliticas = document.getElementById('exec-f-notas-analiticas').value.trim();
                 e.conclusion = document.getElementById('exec-f-conclusion').value.trim();
                 const technicalObsInput = document.getElementById('exec-f-observaciones-tecnicas');
-                if (e.tipoRutina === 'CORRECTIVO') {
+                if (e.tipoRutina === 'REVISION') {
+                    if (technicalObsInput) technicalObsInput.value = '';
+                    e.observaciones_tecnicas = '';
+                } else if (e.tipoRutina === 'CORRECTIVO') {
                     if (technicalObsInput) technicalObsInput.value = '';
                     e.observaciones_tecnicas = '';
                     e.corrective = false;
@@ -4971,7 +4980,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
     }
 
     const technicalObs = ex.observaciones_tecnicas || ex.observaciones || ex.notas_tecnicas || ex.obs || '';
-    h += '<div class="lm-sec">Observaciones técnicas</div><div class="lm-note">' + esc(String(technicalObs).trim() || 'Sin observaciones adicionales.') + '</div>';
+    if (String(ex.tipoRutina || '').toUpperCase() !== 'REVISION') h += '<div class="lm-sec">Observaciones técnicas</div><div class="lm-note">' + esc(String(technicalObs).trim() || 'Sin observaciones adicionales.') + '</div>';
     if (ex.corrective) h += '<div class="lm-sec">Correctivo reportado</div><div class="lm-note warn">' + esc(ex.correctiveDesc || 'Se reportó un correctivo sin descripción.') + '</div>';
     const nPh = Array.isArray(ex.photos) ? ex.photos.length : (Number(ex.photosCount) || 0);
     if (nPh) h += '<div class="lm-meta" style="margin-top:10px"><span><i class="fa-solid fa-camera"></i> ' + nPh + ' foto(s) en ese registro</span></div>';
