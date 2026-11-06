@@ -2066,14 +2066,14 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Tipo de Mantenimiento *</label>
-                    <select id="nr-type" required class="input-box font-bold text-xs">
+                    <select id="nr-type" required onchange="nrTypeChanged()" class="input-box font-bold text-xs">
                         <option value="PREVENTIVO" selected>Preventivo</option>
                         <option value="CORRECTIVO">Correctivo</option>
                         <option value="REVISION">Revisión / Diagnóstico</option>
                     </select>
                 </div>
                 <div id="nr-pb-row" class="grid grid-cols-2 gap-2.5">
-                    <div>
+                    <div id="nr-periodicity-wrap">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Periodicidad *</label>
                         <select id="nr-periodicity" required class="input-box font-bold text-xs">
                             <option value="Mensual">Mensual</option>
@@ -2085,7 +2085,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                             <option value="Sin periodicidad">Sin periodicidad (manual)</option>
                         </select>
                     </div>
-                    <div>
+                    <div id="nr-budget-wrap">
                         <label class="block text-xs font-bold text-slate-700 mb-1">Valor Presupuestado ($) *</label>
                         <input type="number" id="nr-budget" required class="input-box font-bold text-xs" placeholder="Ej: 1500000">
                     </div>
@@ -7225,6 +7225,32 @@ async function authPedirNuevaClave() {
             document.getElementById('nr-pb-row').classList.toggle('hidden', !showPB);
             document.getElementById('nr-periodicity').required = showPB;
             document.getElementById('nr-budget').required = showPB;
+            nrTypeChanged();
+        }
+
+        // Solo el PREVENTIVO es programado/recurrente. Correctivo y Revisión nacen de una novedad del cliente: sin periodicidad.
+        let nrLastPeriodicity = 'Trimestral';
+        function nrTypeChanged() {
+            const type = String((document.getElementById('nr-type') || {}).value || 'PREVENTIVO').toUpperCase();
+            const isPrev = type === 'PREVENTIVO';
+            const per = document.getElementById('nr-periodicity');
+            const wrap = document.getElementById('nr-periodicity-wrap');
+            const budgetWrap = document.getElementById('nr-budget-wrap');
+            if (!per || !wrap) return;
+            if (isPrev) {
+                if (per.value === 'Sin periodicidad' && nrLastPeriodicity && nrLastPeriodicity !== 'Sin periodicidad') per.value = nrLastPeriodicity;
+            } else {
+                if (per.value !== 'Sin periodicidad') nrLastPeriodicity = per.value;
+                per.value = 'Sin periodicidad';          // no genera recordatorios de vencimiento ni ciclo recurrente
+            }
+            const pbHidden = (document.getElementById('nr-pb-row') || {}).classList.contains('hidden');
+            const isRev = type === 'REVISION';          // la revisión no tiene valor: no se pide ni se guarda presupuesto
+            wrap.classList.toggle('hidden', !isPrev);
+            per.required = isPrev && !pbHidden;
+            const budget = document.getElementById('nr-budget');
+            if (budgetWrap) { budgetWrap.classList.toggle('hidden', isRev); budgetWrap.classList.toggle('col-span-2', !isPrev); }
+            if (budget) { budget.required = !isRev && !pbHidden; if (isRev) budget.value = ''; }
+            try { if (typeof window.hvacNrUpdateZonePreview === 'function') window.hvacNrUpdateZonePreview(); } catch (_) {}
         }
 
         function nrResetForm() {
@@ -7233,6 +7259,7 @@ async function authPedirNuevaClave() {
             document.getElementById('nr-budget').value = '';
             const per = document.getElementById('nr-periodicity'); if (per) per.selectedIndex = 0;
             const nrT = document.getElementById('nr-type'); if (nrT) nrT.value = 'PREVENTIVO';
+            nrTypeChanged();
             document.querySelectorAll('#nr-tech input[type=checkbox]').forEach(c => { c.checked = false; });
         }
 
@@ -7286,6 +7313,7 @@ async function authPedirNuevaClave() {
             if (proj) {
                 document.getElementById('nr-periodicity').value = proj.periodicity || 'Trimestral';
                 document.getElementById('nr-budget').value = proj.budget || '';
+                nrTypeChanged();
             }
             document.getElementById('nr-date').value = String(order.date || '').slice(0, 10);
 
@@ -7463,10 +7491,10 @@ async function authPedirNuevaClave() {
             if (nrSaving) return;
             if (nrEditingId !== null) return saveEditedRoutine();
             const client = document.getElementById('nr-client').value;
-            const periodicity = document.getElementById('nr-periodicity').value;
+            const routineType = (document.getElementById('nr-type') || {}).value || 'PREVENTIVO';
+            const periodicity = routineType === 'PREVENTIVO' ? document.getElementById('nr-periodicity').value : 'Sin periodicidad';   // correctivo/revisión: no programados
             const budget = parseFloat(document.getElementById('nr-budget').value) || 0;
             const date = document.getElementById('nr-date').value;
-            const routineType = (document.getElementById('nr-type') || {}).value || 'PREVENTIVO';
             const technicians = techPickerValues('nr-tech'); const technician = technicians.join(', ');
             const equipmentIds = Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(c => c.value);
             if (!client || !periodicity || !date || !technician) return showToast("Completa todos los campos obligatorios.", "error");
@@ -11809,7 +11837,8 @@ async function attDelete(id) {
     if(!zones.length){box.classList.add('hidden');box.innerHTML='';return;}
     normalize(zones);
     var used=usedNums(zones), mats=periodMatrices(), multi=used.length>1;
-    if(multi&&!S.touched) autoSplit(zones,used);
+    var rType=String(($('nr-type')||{}).value||'PREVENTIVO').toUpperCase(), isRev=rType==='REVISION', pref=(typeof CONSEC_PREF!=='undefined'&&CONSEC_PREF[rType])||'PRE-';
+    if(multi&&!isRev&&!S.touched) autoSplit(zones,used);
     var newCount=0, h='';
     h+='<div class="flex items-center justify-between gap-2 flex-wrap mb-2"><p class="font-black text-teal-800 text-xs"><i class="fa-solid fa-layer-group mr-1"></i>Zonas y facturación <span class="font-semibold text-slate-500">· '+zones.length+' zona(s), '+eqCount(zones)+' equipo(s)</span></p>';
     if(zones.length>1) h+='<div class="flex gap-1.5"><button type="button" data-chip="one" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una sola facturación</button><button type="button" data-chip="each" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una por zona</button></div>';
@@ -11825,20 +11854,20 @@ async function attDelete(id) {
     }
     used.forEach(function(gn){
       var zs=zonesOf(zones,gn), tgt=targetFor(gn,used.length,mats), base, label;
-      if(tgt==='NEW'){newCount++;base=prevFormat(consecFreeLocal('PRE-',newCount),'PRE-');label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
+      if(tgt==='NEW'){newCount++;base=prevFormat(consecFreeLocal(pref,newCount),pref);label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
       else{var p=mats.filter(function(x){return x.id===tgt;})[0];base=p.zoneBaseId;label='<span class="text-slate-500">Se agrega a</span> <b class="font-mono text-teal-800">'+esc(base)+'</b>';}
       var codes=hvacZoneOrderIds(base,zs);
       h+='<div class="rounded-2xl border border-slate-200 p-3 mb-2"><div class="flex items-center justify-between gap-2 flex-wrap mb-1.5"><span class="font-black text-xs">'+(multi?'Facturación '+gn:'Consecutivo')+'</span><span class="text-[11px]">'+label+'</span></div><ul class="space-y-0.5 mb-1">';
       zs.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
       h+='</ul>';
       if(mats.length) h+='<select data-target="'+gn+'" class="input-box text-xs mt-1.5"><option value="NEW"'+(tgt==='NEW'?' selected':'')+'>Consecutivo nuevo</option>'+mats.map(function(p){return '<option value="'+esc(p.id)+'"'+(tgt===p.id?' selected':'')+'>Agregar a '+esc(p.zoneBaseId)+' (mismo mes)</option>';}).join('')+'</select>';
-      if(multi) h+='<label class="block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1">Valor de esta facturación ($)</label><input type="number" data-gv="'+gn+'" value="'+(Number(S.values[gn])||'')+'" class="input-box text-xs font-bold" placeholder="0">';
+      if(multi&&!isRev) h+='<label class="block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1">Valor de esta facturación ($)</label><input type="number" data-gv="'+gn+'" value="'+(Number(S.values[gn])||'')+'" class="input-box text-xs font-bold" placeholder="0">';
       h+='</div>';
     });
-    if(multi) h+='<p id="nr-sum-label" class="text-[11px] font-bold text-slate-700 text-right"></p>';
+    if(multi&&!isRev) h+='<p id="nr-sum-label" class="text-[11px] font-bold text-slate-700 text-right"></p>';
     h+='<p class="text-[10px] text-slate-500 mt-1">El número definitivo se asigna al guardar. Cada facturación se cobra cuando todas sus partes estén completadas.</p>';
     box.innerHTML=h; box.classList.remove('hidden');
-    if(multi) syncTotal();
+    if(multi&&!isRev) syncTotal();
   }
   window.hvacNrUpdateZonePreview=render;
   window.hvacNrSelectAllZones=function(){
