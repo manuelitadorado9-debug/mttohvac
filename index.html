@@ -4845,17 +4845,8 @@ async function authPedirNuevaClave() {
             const merged = replaceAll ? new Map() : new Map(previous);
             let pendingSave = new Set();
             try {
-                // Un cambio local pendiente solo protege la copia local mientras NO exista en la nube una versión más nueva.
-                // Si la nube ya tiene algo posterior (otro dispositivo guardó después), gana la nube y la entrada vieja se descarta.
-                const srvUpdated = new Map(list.map(x => [cloudCleanId(x && x.id), Date.parse((x && x.updatedAt) || '')]));
-                pendingSave = new Set();
-                cloudOutboxRead().forEach(e => {
-                    if (!e || e.table !== 'hvac_orders' || e.op === 'delete') return;
-                    const cid = String(e.id), srv = srvUpdated.get(cid);
-                    const localTs = Math.max(Date.parse((e.payload && e.payload.updatedAt) || '') || 0, Number(e.ts) || 0);
-                    if (Number.isFinite(srv) && srv > localTs + 1000) { cloudOutboxClear('hvac_orders', e.id); return; }
-                    pendingSave.add(cid);
-                });
+                                // Un cambio local sin confirmar en la nube se conserva SIEMPRE (nunca se descarta automáticamente: puede contener el trabajo del técnico).
+                pendingSave = new Set(cloudOutboxRead().filter(e => e && e.table === 'hvac_orders' && e.op !== 'delete').map(e => String(e.id)));
             } catch (_) {}
             list.forEach(summary => {
                 if (!summary || !summary.id || (deletedOrderIdHas(summary.id) && !orderTombSuperseded(summary.id, summary.updatedAt))) return;
@@ -4890,6 +4881,7 @@ async function authPedirNuevaClave() {
             let current = workOrders.find(o => String(o && o.id) === key);
             if (!current) return null;
             if (current._hvacSummaryOnly !== true && !navigator.onLine) return current;   // sin red se usa lo local
+            if (current._hvacSummaryOnly !== true && current._hvacDetailStale && hvacOrderHasPendingSave(key)) return current;   // cambios locales sin enviar: no se pisan
             if (current._hvacSummaryOnly !== true && !current._hvacDetailStale) {
                 // Ya hay detalle en memoria. Dentro del TTL (o sin red, o con cambios locales pendientes) se reutiliza.
                 const fetchedAt = Number(current._hvacDetailFetchedAt || 0);
@@ -4921,7 +4913,7 @@ async function authPedirNuevaClave() {
                 full.invoice = Object.assign({}, payload.invoice || {}, current.invoice || {});
                 full.toolPickup = Object.assign({}, payload.toolPickup || {}, current.toolPickup || {});
                 full.clientSignature = Object.assign({}, payload.clientSignature || {}, current.clientSignature || {});
-                full.executions = payload.executions || current.executions || {};
+                full.executions = hasPending ? Object.assign({}, payload.executions || {}, current.executions || {}) : (payload.executions || current.executions || {});
                 delete full._hvacSummaryOnly;
                 delete full._hvacDetailStale;
                 full._hvacDetailFetchedAt = Date.now();
@@ -12853,6 +12845,10 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       }
       if (!order) throw new Error(`No se pudo descargar el detalle de la orden ${orderId}.`);
 
+      // No generar un informe vacío: si la orden figura como ejecutada/firmada pero no trae ejecuciones, algo no se cargó.
+      if (!Object.keys(order.executions || {}).length && ['COMPLETED', 'IN_PROGRESS', 'BILLED'].includes(String(order.status || '').toUpperCase())) {
+        throw new Error(`La orden ${order.id} no trae los datos de ejecución (parámetros, textos y fotos). No se generó el PDF para no imprimir un informe vacío; pulsa Sincronizar e inténtalo de nuevo.`);
+      }
       const typeKey = normalizeRoutine(reportType || getOrderType(order));
       if (!typeKey || !REPORTS[typeKey]) throw new Error('Tipo de informe inválido. Usa REVISION, PREVENTIVO o CORRECTIVO.');
 
