@@ -251,6 +251,7 @@ html[data-theme="dark"] #header-role-badge{color:#5eead4}
 #view-admin-caja .page-head>div:first-child::before{content:"\f555";background:linear-gradient(135deg,#a855f7,#6366f1)}
 #view-admin-equipment .page-head>div:first-child::before{content:"\f0ad";background:linear-gradient(135deg,#14b8a6,#0ea5e9)}
 #view-admin-history .page-head>div:first-child::before{content:"\f1da";background:linear-gradient(135deg,#0ea5e9,#6366f1)}
+#view-admin-tools .page-head>div:first-child::before{content:"\f552";background:linear-gradient(135deg,#f59e0b,#f97316)}
 #view-admin-billing .page-head>div:first-child::before{content:"\f571";background:linear-gradient(135deg,#6366f1,#8b5cf6)}
 #view-admin-financial .page-head>div:first-child::before{content:"\f201";background:linear-gradient(135deg,#10b981,#14b8a6)}
 #app-main .filter-bar{background:var(--glass);backdrop-filter:blur(8px);padding:.9rem 1.1rem}
@@ -1650,7 +1651,6 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                             <option value="ALL" selected>Todos</option>
                             <option value="PREVENTIVO">Preventivo</option>
                             <option value="CORRECTIVO">Correctivo</option>
-                            <option value="REVISION">Revisión</option>
                         </select></div>
                     <button type="button" onclick="billingClearFilters()" class="px-3 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition"><i class="fa-solid fa-xmark"></i> Limpiar</button>
                 </div>
@@ -3677,6 +3677,7 @@ async function authPedirNuevaClave() {
             const orderId = document.getElementById('inv-f-order-id').value;
             let order = workOrders.find(o => o.id === orderId);
             if (!order) return;
+            if (billingRoutineType(order) === 'REVISION') return showToast('Las revisiones no se facturan.', 'error');
             if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
             if (!order) return showToast('No se pudo cargar el detalle de la orden.', 'error');
 
@@ -5536,10 +5537,10 @@ async function authPedirNuevaClave() {
                 list.appendChild(makeLink('fa-wallet', 'Caja Menor', 'admin-caja'));
                 list.appendChild(makeLink('fa-clock-rotate-left', 'Histórico & Avance Global', 'admin-history'));
                 list.appendChild(makeLink('fa-location-crosshairs', 'Asistencia & GPS', 'admin-attendance'));
-                list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 const toolsLink = makeLink('fa-toolbox', 'Recogida de Herramientas', 'admin-tools');
                 toolsLink.insertAdjacentHTML('beforeend', '<span id="nav-tools-badge" class="ml-auto hidden bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>');
                 list.appendChild(toolsLink);
+                list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
                 if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
             }
@@ -8521,7 +8522,7 @@ async function authPedirNuevaClave() {
             renderAdminDashboard();
             renderPlanningModule();
             renderBillingModule();
-            showToast("Rutina completada con firma. Lista para facturar; herramientas pendientes de recogida.");
+            showToast(billingRoutineType(order) === 'REVISION' ? "Revisión completada con firma." : "Rutina completada con firma. Lista para facturar; herramientas pendientes de recogida.");
         }
 
         async function finalizeRoutineWithoutSignature() {
@@ -8542,7 +8543,7 @@ async function authPedirNuevaClave() {
             renderAdminDashboard();
             renderPlanningModule();
             renderBillingModule();
-            showToast("Rutina finalizada sin firma. Lista para facturar; herramientas pendientes de recogida.");
+            showToast(billingRoutineType(order) === 'REVISION' ? "Revisión finalizada sin firma." : "Rutina finalizada sin firma. Lista para facturar; herramientas pendientes de recogida.");
         }
 
         // =========================================================================
@@ -9228,6 +9229,7 @@ async function authPedirNuevaClave() {
             // Los filtros son independientes y se combinan entre sí (AND)
             const list = workOrders.filter(o => {
                 if (String(o.id || '').startsWith('HIST-')) return false;
+                if (billingRoutineType(o) === 'REVISION' && o.status !== 'BILLED') return false;   // las revisiones no se facturan (solo se conservan las ya facturadas en el pasado)
                 if (status === 'PENDING' && o.status !== 'COMPLETED') return false;
                 if (status === 'BILLED' && o.status !== 'BILLED') return false;
                 if (execMonth && billingMonthKey(o.date) !== execMonth) return false;
@@ -9319,7 +9321,7 @@ async function authPedirNuevaClave() {
                 <div class="overflow-x-auto mt-3">
                     <table>
                         <thead><tr><th>Subtotal por tipo</th><th class="text-center">Órdenes</th><th class="text-center">Facturadas</th><th class="text-center">Pendientes</th><th>Cobrado</th><th>Gastos</th><th>Neto</th><th>Margen</th></tr></thead>
-                        <tbody>${row('Preventivo', byType.PREVENTIVO)}${row('Correctivo', byType.CORRECTIVO)}${row('Revisión', byType.REVISION)}</tbody>
+                        <tbody>${row('Preventivo', byType.PREVENTIVO)}${row('Correctivo', byType.CORRECTIVO)}${byType.REVISION.n ? row('Revisión', byType.REVISION) : ''}</tbody>
                     </table>
                 </div>`;
 
@@ -9356,6 +9358,7 @@ async function authPedirNuevaClave() {
         async function openInvoiceModal(orderId) {
             let order = workOrders.find(o => o.id === orderId);
             if (!order) return;
+            if (billingRoutineType(order) === 'REVISION') return showToast('Las revisiones no se facturan.', 'error');
             if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
             if (!order) return showToast('No se pudo cargar el detalle de la orden.', 'error');
             const inv = hvacMatrixHolder(order).invoice || {};
@@ -9601,18 +9604,45 @@ async function authPedirNuevaClave() {
         // Al cerrar la rutina la orden sigue dos caminos: facturación y recogida (order.toolPickup).
         var HVAC_TOOLPICKUP_FROM = Date.parse('2026-10-30T00:00:00');   // fecha de puesta en marcha: no marca como pendientes las órdenes anteriores
         function hvacToolPickupRequest(order) {
+            if (billingRoutineType(order) === 'REVISION') { order.toolPickup = null; return; }   // las revisiones no requieren recogida de herramientas
             order.toolPickup = { status: 'PENDING', requestedAt: new Date().toISOString() };
+        }
+        // Matriz (rutina dividida en partes -P1, -P2…): la recogida es UNA sola, a nombre de la primera parte, y solo aparece cuando todas las partes están completadas.
+        function hvacIsMatrixOrder(o) {
+            return !!(o && (o.zoneBaseId || /-P\d+$/i.test(String(o.id || '')) || Number(o.zoneParts || 1) > 1));
+        }
+        function hvacToolPickupHolder(o) {
+            const parts = hvacMatrixParts(o);
+            return [...parts].sort((a, b) => (Number(a.zonePart || 0) - Number(b.zonePart || 0)) || String(a.id).localeCompare(String(b.id), 'es', { numeric: true }))[0] || o;
         }
         // null = no aplica | 'PENDING' | 'DONE'. Cubre también órdenes cerradas desde otra app (sin campo toolPickup).
         function hvacToolPickupState(o) {
             if (!o) return null;
+            if (billingRoutineType(o) === 'REVISION') return null;               // revisión: nunca hay recogida
             const st = String(o.status || '').toUpperCase();
             if (st !== 'COMPLETED' && st !== 'BILLED') return null;
+            if (hvacIsMatrixOrder(o)) {
+                const parts = hvacMatrixParts(o);
+                const holder = hvacToolPickupHolder(o);
+                if (!holder || String(holder.id) !== String(o.id)) return null;  // solo la primera parte representa a toda la matriz
+                const expected = Math.max(Number(o.zoneParts || 1), parts.length);
+                if (parts.length < expected) return null;                         // aún no se han cargado todas las partes
+                if (!parts.every(p => ['COMPLETED', 'BILLED'].includes(hvacOrderState(p)))) return null;   // faltan partes por completar
+                const tpOf = x => (x && x.toolPickup && x.toolPickup.status) ? x.toolPickup : null;
+                if (tpOf(o)) return tpOf(o).status === 'DONE' ? 'DONE' : 'PENDING';
+                if (parts.every(p => tpOf(p) && tpOf(p).status === 'DONE')) return 'DONE';
+                const lastSig = Math.max(...parts.map(p => parseFlexDate(p.clientSignature && p.clientSignature.timestamp) || 0));
+                return (lastSig && lastSig >= HVAC_TOOLPICKUP_FROM) ? 'PENDING' : null;
+            }
             if (o.toolPickup && o.toolPickup.status) return o.toolPickup.status === 'DONE' ? 'DONE' : 'PENDING';
             const t = parseFlexDate(o.clientSignature && o.clientSignature.timestamp);
             return (t && t >= HVAC_TOOLPICKUP_FROM) ? 'PENDING' : null;
         }
         function hvacToolDoneAt(o) {
+            if (hvacIsMatrixOrder(o)) {   // la matriz se considera terminada cuando termina su última parte
+                const t = Math.max(...hvacMatrixParts(o).map(p => parseFlexDate((p.toolPickup && p.toolPickup.requestedAt) || (p.clientSignature && p.clientSignature.timestamp)) || 0));
+                if (t > 0) return t;
+            }
             return parseFlexDate((o.toolPickup && o.toolPickup.requestedAt) || (o.clientSignature && o.clientSignature.timestamp)) || 0;
         }
         function hvacToolChip(o) {
@@ -9683,9 +9713,9 @@ async function authPedirNuevaClave() {
                     const body = st === 'PENDING'
                         ? '<div class="flex gap-2 items-center mt-2"><input type="text" class="tp-note input-box text-xs flex-1" placeholder="Observación (opcional)"><button type="button" data-act="one" data-ids="' + esc(o.id) + '" class="btn-teal text-[11px]" style="flex:none"><i class="fa-solid fa-check"></i> Recogida</button></div>'
                         : '<div class="flex items-center justify-between gap-2 mt-1.5 flex-wrap"><span class="text-[11px] text-slate-500">Recogida el ' + fmt(parseFlexDate(tp.doneAt)) + (tp.doneBy ? ' por ' + esc(tp.doneBy) : '') + (tp.note ? ' · ' + esc(tp.note) : '') + '</span><button type="button" data-act="reopen" data-ids="' + esc(o.id) + '" class="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline">Reabrir</button></div>';
-                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(o.id) + '</span>' +
-                        (o.zoneName ? '<span class="text-[11px] text-slate-600 ml-2">' + esc(o.zoneName) + '</span>' : '') + '</div>' + chip + '</div>' +
-                        '<div class="text-[11px] text-slate-500 mt-0.5">' + (g.os.length > 1 ? '' : esc(o.client || '') + ' · ') + 'Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
+                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(hvacIsMatrixOrder(o) ? hvacMatrixBase(o) : o.id) + '</span>' +
+                        (hvacIsMatrixOrder(o) ? '<span class="text-[11px] text-slate-600 ml-2">Rutina completa (' + hvacMatrixParts(o).length + ' partes)</span>' : (o.zoneName ? '<span class="text-[11px] text-slate-600 ml-2">' + esc(o.zoneName) + '</span>' : '')) + '</div>' + chip + '</div>' +
+                        '<div class="text-[11px] text-slate-500 mt-0.5">' + esc(o.client || '') + ' · Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
                 }).join('');
                 return '<div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">' + head + items + '</div>';
             }).join('');
@@ -9996,12 +10026,13 @@ async function authPedirNuevaClave() {
     <!-- Capa de interfaz (solo presentación): no altera la lógica ni los datos de la aplicación -->
     <script>
     (function () {
-        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-billing','admin-financial'];
+        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-tools','admin-billing','admin-financial'];
         const META = {
             'admin-dashboard': ['Panel', 'Panel Principal'], 'admin-clients': ['Gestión', 'Gestión de Clientes'],
             'admin-users': ['Gestión', 'Gestión de Usuarios'], 'admin-planning': ['Operación', 'Planificación'],
             'admin-agenda': ['Operación', 'Agenda de Gestión'], 'admin-caja': ['Finanzas', 'Caja Menor'],
             'admin-history': ['Operación', 'Histórico & Avance Global'], 'admin-attendance': ['Operación', 'Asistencia & GPS'], 'admin-equipment': ['Gestión', 'Gestión de Equipos'],
+            'admin-tools': ['Operación', 'Recogida de Herramientas'],
             'admin-billing': ['Finanzas', 'Facturación'], 'admin-financial': ['Finanzas', 'Finanzas']
         };
         const $ = id => document.getElementById(id);
