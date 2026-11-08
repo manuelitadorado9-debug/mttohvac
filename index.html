@@ -4285,8 +4285,9 @@ async function authPedirNuevaClave() {
             }
             if (!target) return null;
             delete target._hvacSummaryOnly;
-            // Protección: una copia SIN ejecuciones nunca debe sobrescribir las que ya existan en la nube.
-            if (!Object.keys(target.executions || {}).length && navigator.onLine !== false) {
+            // Protección: una copia SIN ejecuciones, o con detalle VIEJO (_hvacDetailStale), nunca debe sobrescribir las que ya existan en la nube.
+            // (Corrección PRE-0024: una acción como recoger herramientas guardaba la orden con ejecuciones antiguas y borraba las nuevas.)
+            if ((!Object.keys(target.executions || {}).length || target._hvacDetailStale === true) && navigator.onLine !== false) {
                 const srv = await supabaseFetch('hvac_orders?select=ex:payload->executions&id=eq.' + encodeURIComponent(cloudCleanId(target.id)) + '&limit=1', 'GET', null, null, { quiet: true, noStore: true });
                 if (!Array.isArray(srv)) return null;                                   // no se pudo verificar: no se guarda (queda pendiente y se reintenta)
                 const remote = srv[0] && srv[0].ex;
