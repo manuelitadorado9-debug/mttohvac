@@ -1151,7 +1151,6 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <div class="rail-logo"><i class="fa-solid fa-snowflake"></i></div>
                 <div>
                     <h3>SMART MAINTENANCE</h3>
-                    <p>Cloud R2 & Supabase</p>
                 </div>
             </div>
             <button onclick="toggleSidebar(false)" class="rail-close transition"><i class="fa-solid fa-xmark"></i></button>
@@ -1270,7 +1269,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         <section id="view-admin-clients" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h2 class="text-base font-black text-slate-900 tracking-tight">Directorio de Clientes (Regulares y Esporádicos)</h2>
+                    <h2 class="text-base font-black text-slate-900 tracking-tight">Directorio de Clientes</h2>
                     <p class="text-xs text-slate-500 mt-0.5">Administra los clientes, sedes, datos de contacto y centros de costo.</p>
                 </div>
                 <button onclick="openClientModal(null)" class="btn-teal text-xs"><i class="fa-solid fa-plus"></i> Nuevo Cliente / Esporádico</button>
@@ -5698,6 +5697,13 @@ async function authPedirNuevaClave() {
             };
             filterIds.forEach(id => fill(id, id === 'fin-filter-client' ? '<option value="ALL">Todos</option>' : '<option value="ALL">Todos los Clientes</option>', filterOptions));
             formIds.forEach(id => fill(id, '<option value="">-- Selecciona un Cliente --</option>', formOptions));
+            // Histórico: el filtro solo muestra los clientes del directorio (Gestión de Clientes), agrupados por raíz
+            if (officialNames.length) {
+                const histGroups = new Map();
+                officialNames.forEach(n => { const k = clientRootKey(n); if (k && !histGroups.has(k)) histGroups.set(k, clientRootLabel(n)); });
+                fill('hist-filter-client', '<option value="ALL">Todos los Clientes</option>',
+                    [...histGroups.entries()].map(([k, label]) => `<option value="${corrEsc(k)}">${corrEsc(label)}</option>`).join(''));
+            }
             populateCajaClientDropdown();
             syncEquipmentClientSelectors(true);
         }
@@ -9668,7 +9674,7 @@ async function authPedirNuevaClave() {
                 if (!history.length && prev.status === 'DONE' && prev.doneAt) {
                     history.push({ action: 'RECOGIDA', at: prev.doneAt, by: prev.doneBy || '', note: prev.note || '' });
                 }
-                history.push({ action: done ? 'RECOGIDA' : 'REAPERTURA', at: now, by: who, note: done ? (note || '') : 'Recogida reabierta' });
+                history.push({ action: done ? 'RECOGIDA' : 'REAPERTURA', at: now, by: who, note: done ? (note || '') : (note || 'Recogida reabierta') });
                 o.toolPickup = done
                     ? { ...prev, status: 'DONE', doneAt: now, doneBy: who, note: note || '', history }
                     : { ...prev, status: 'PENDING', history };
@@ -9702,7 +9708,7 @@ async function authPedirNuevaClave() {
             list.innerHTML = arr.map(g => {
                 const pendIds = g.os.filter(o => hvacToolPickupState(o) === 'PENDING').map(o => o.id);
                 const head = g.os.length > 1
-                    ? '<div class="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(g.base) + '</span><span class="text-[11px] text-slate-500 ml-2">' + esc(g.os[0].client || '') + ' · ' + g.os.length + ' partes</span></div>' +
+                    ? '<div class="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100"><div><div class="text-sm font-black text-slate-900 leading-tight">' + esc(g.os[0].client || 'Sin cliente') + '</div><span class="font-mono font-bold text-xs text-slate-500">' + esc(g.base) + '</span><span class="text-[11px] text-slate-500 ml-2">· ' + g.os.length + ' partes</span></div>' +
                       (pendIds.length > 1 ? '<button type="button" data-act="group" data-ids="' + esc(pendIds.join('|')) + '" class="btn-teal text-[11px]"><i class="fa-solid fa-check-double"></i> Marcar toda la matriz (' + pendIds.length + ')</button>' : '') + '</div>'
                     : '';
                 const items = g.os.map(o => {
@@ -9714,9 +9720,9 @@ async function authPedirNuevaClave() {
                     const body = st === 'PENDING'
                         ? '<div class="flex gap-2 items-center mt-2"><input type="text" class="tp-note input-box text-xs flex-1" placeholder="Observación (opcional)"><button type="button" data-act="one" data-ids="' + esc(o.id) + '" class="btn-teal text-[11px]" style="flex:none"><i class="fa-solid fa-check"></i> Recogida</button></div>'
                         : '<div class="flex items-center justify-between gap-2 mt-1.5 flex-wrap"><span class="text-[11px] text-slate-500">Recogida el ' + fmt(parseFlexDate(tp.doneAt)) + (tp.doneBy ? ' por ' + esc(tp.doneBy) : '') + (tp.note ? ' · ' + esc(tp.note) : '') + '</span><button type="button" data-act="reopen" data-ids="' + esc(o.id) + '" class="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline">Reabrir</button></div>';
-                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(hvacIsMatrixOrder(o) ? hvacMatrixBase(o) : o.id) + '</span>' +
+                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><div class="text-sm font-black text-slate-900 leading-tight">' + esc(o.client || 'Sin cliente') + '</div><span class="font-mono font-bold text-xs text-slate-500">' + esc(hvacIsMatrixOrder(o) ? hvacMatrixBase(o) : o.id) + '</span>' +
                         (hvacIsMatrixOrder(o) ? '<span class="text-[11px] text-slate-600 ml-2">Rutina completa (' + hvacMatrixParts(o).length + ' partes)</span>' : (o.zoneName ? '<span class="text-[11px] text-slate-600 ml-2">' + esc(o.zoneName) + '</span>' : '')) + '</div>' + chip + '</div>' +
-                        '<div class="text-[11px] text-slate-500 mt-0.5">' + esc(o.client || '') + ' · Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
+                        '<div class="text-[11px] text-slate-500 mt-0.5">Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
                 }).join('');
                 return '<div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">' + head + items + '</div>';
             }).join('');
@@ -9749,6 +9755,13 @@ async function authPedirNuevaClave() {
                     note: ev.note || '', legacy: !!ev.legacy
                 }));
             });
+            // Solo se puede revertir la ÚLTIMA recogida de una orden que hoy sigue como recogida
+            const lastByOrder = {};
+            events.forEach(ev => { const t = parseFlexDate(ev.at) || 0; if (!(ev.order in lastByOrder) || t >= lastByOrder[ev.order]) lastByOrder[ev.order] = t; });
+            events.forEach(ev => {
+                const ord = (workOrders || []).find(x => String(x.id) === String(ev.order));
+                ev.canRevert = ev.action === 'RECOGIDA' && !!ord && hvacToolPickupState(ord) === 'DONE' && (parseFlexDate(ev.at) || 0) === lastByOrder[ev.order];
+            });
             const matches = events.filter(e => !q || normText([e.order,e.client,e.zone,e.technician,e.by,e.note,e.action].join(' ')).includes(q));
             matches.sort((a,b) => (parseFlexDate(b.at) || 0) - (parseFlexDate(a.at) || 0));
             const fmtDate = value => {
@@ -9758,12 +9771,19 @@ async function authPedirNuevaClave() {
                 host.innerHTML = '<div class="py-8 text-center text-xs text-slate-400">' + (events.length ? 'No hay movimientos que coincidan con la búsqueda.' : 'Aún no hay recogidas registradas. Las nuevas aparecerán aquí automáticamente.') + '</div>';
                 return;
             }
-            host.innerHTML = '<table class="min-w-full text-xs"><thead><tr><th>Fecha y hora</th><th>Movimiento</th><th>Orden / Cliente</th><th>Técnico(s)</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>' +
+            host.innerHTML = '<table class="min-w-full text-xs"><thead><tr><th>Fecha y hora</th><th>Movimiento</th><th>Orden / Cliente</th><th>Técnico(s)</th><th>Responsable</th><th>Observación</th><th></th></tr></thead><tbody>' +
                 matches.map(e => '<tr><td class="whitespace-nowrap">' + esc(fmtDate(e.at)) + (e.legacy ? '<div class="text-[10px] text-slate-400">Registro anterior</div>' : '') + '</td>' +
                     '<td><span class="inline-flex rounded-full px-2 py-1 text-[10px] font-bold ' + (e.action === 'REAPERTURA' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700') + '">' + (e.action === 'REAPERTURA' ? 'Reapertura' : 'Recogida') + '</span></td>' +
-                    '<td><strong class="font-mono">' + esc(e.order) + '</strong><div class="text-[10px] text-slate-500">' + esc([e.client,e.zone].filter(Boolean).join(' · ')) + '</div></td>' +
-                    '<td>' + esc(e.technician || '-') + '</td><td>' + esc(e.by || 'No registrado') + '</td><td>' + esc(e.note || '-') + '</td></tr>').join('') +
+                    '<td><div class="text-sm font-black text-slate-900 leading-tight">' + esc(e.client || 'Sin cliente') + '</div><div class="text-[11px] text-slate-500"><strong class="font-mono">' + esc(e.order) + '</strong>' + (e.zone ? ' · ' + esc(e.zone) : '') + '</div></td>' +
+                    '<td>' + esc(e.technician || '-') + '</td><td>' + esc(e.by || 'No registrado') + '</td><td>' + esc(e.note || '-') + '</td><td class="whitespace-nowrap">' + (e.canRevert ? '<button type="button" data-revert="' + esc(e.order) + '" data-client="' + esc(e.client) + '" class="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline">Revertir</button>' : '') + '</td></tr>').join('') +
                 '</tbody></table><div class="text-[10px] text-slate-400 mt-2">' + matches.length + ' movimiento(s) · más recientes primero</div>';
+            host.onclick = function (ev) {
+                const b = ev.target.closest('button[data-revert]'); if (!b) return;
+                const id = b.dataset.revert, cli = b.dataset.client || '';
+                if (!confirm('¿Revertir la recogida de herramientas de la orden ' + id + (cli ? ' (' + cli + ')' : '') + '?\n\nVolverá a la lista de pendientes y quedará registrado en el historial.')) return;
+                b.disabled = true;
+                hvacToolPickupSet([id], false, 'Recogida revertida (confirmada por error)');
+            };
         }
 
         function hvacReactivateOrderIfNeeded(order, previousIds) {
@@ -11636,6 +11656,7 @@ async function attDelete(id) {
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
     <input id="hvac-zone-batch-search" type="search" class="input-box" style="flex:1;min-width:170px;min-height:44px" placeholder="Buscar: código, nombre, serial, tipo, marca…" oninput="hvacBatchRender()">
     <select id="hvac-zone-batch-filter" class="input-box" style="min-height:44px" onchange="hvacBatchRender()"><option value="ALL">Todos</option><option value="NONE">Sin zona</option><option value="OTHER">En otra zona</option><option value="SAME">Ya en esta zona</option></select>
+    <select id="hvac-zone-batch-origin" class="input-box" style="min-height:44px" onchange="hvacBatchRender()" title="Zona donde están hoy los equipos"><option value="ALL">Zona de origen: todas</option></select>
    </div>
    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
     <button type="button" onclick="hvacBatchSelectAll(true)" style="min-height:40px;padding:0 12px;border:1px solid var(--line,#cbd5e1);border-radius:10px;font-size:12px;font-weight:800">Seleccionar resultados</button>
@@ -11744,15 +11765,16 @@ async function attDelete(id) {
  // ===== Asignación de equipos a una zona en lote =====
  const batchSel=new Set();let batchClient=null;
  const bNorm=v=>typeof normText==='function'?normText(v):String(v??'').toLowerCase();
- const bEls=()=>({zone:document.getElementById('hvac-zone-batch-zone'),q:document.getElementById('hvac-zone-batch-search'),f:document.getElementById('hvac-zone-batch-filter'),list:document.getElementById('hvac-zone-batch-list'),count:document.getElementById('hvac-zone-batch-count')});
+ const bEls=()=>({zone:document.getElementById('hvac-zone-batch-zone'),q:document.getElementById('hvac-zone-batch-search'),f:document.getElementById('hvac-zone-batch-filter'),o:document.getElementById('hvac-zone-batch-origin'),list:document.getElementById('hvac-zone-batch-list'),count:document.getElementById('hvac-zone-batch-count')});
  const bClientEquipments=()=>{const c=zClient();return c?(equipmentCatalog||[]).filter(e=>eqBelongsToClient(e,c)):[];};
  function bFiltered(){
-   const {zone,q,f}=bEls(),zid=String(zone?.value||''),term=bNorm(q?.value||'').trim(),mode=f?.value||'ALL';
+   const {zone,q,f,o}=bEls(),zid=String(zone?.value||''),term=bNorm(q?.value||'').trim(),mode=f?.value||'ALL',origin=o?.value||'ALL';
    return bClientEquipments().filter(e=>{
      const ez=String(e.zoneId||'');
      if(mode==='NONE'&&ez)return false;
      if(mode==='OTHER'&&(!ez||ez===zid))return false;
      if(mode==='SAME'&&(!zid||ez!==zid))return false;
+     if(origin!=='ALL'&&ez!==String(origin))return false;
      return !term||[e.code,e.name,e.serial,e.type,e.brand,e.model,e.zoneName].some(v=>bNorm(v).includes(term));
    }).sort((a,b)=>String(a.code||'').localeCompare(String(b.code||''),'es',{numeric:true}));
  }
@@ -11763,6 +11785,8 @@ async function attDelete(id) {
    const previous=zone.value,zones=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(client||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es',{numeric:true}));
    zone.innerHTML='<option value="">Selecciona una zona</option>'+zones.map(z=>`<option value="${escH(z.id)}">${escH(z.name)}</option>`).join('');
    zone.value=zones.some(z=>String(z.id)===String(previous))?previous:(zones.length===1?zones[0].id:'');
+   const og=document.getElementById('hvac-zone-batch-origin');
+   if(og){const prevO=og.value;og.innerHTML='<option value="ALL">Zona de origen: todas</option>'+zones.map(z=>`<option value="${escH(z.id)}">Origen: ${escH(z.name)}</option>`).join('');og.value=[...og.options].some(x=>x.value===prevO)?prevO:'ALL';}
    window.hvacBatchRender();
  };
  window.hvacBatchRender=function(){
@@ -11774,13 +11798,13 @@ async function attDelete(id) {
      const chip=same?'<span style="font-size:10px;font-weight:800;color:#047857;background:#d1fae5;border-radius:999px;padding:2px 8px;white-space:nowrap">En esta zona</span>':(ez?`<span style="font-size:10px;font-weight:800;color:#92400e;background:#fef3c7;border-radius:999px;padding:2px 8px;white-space:nowrap">${escH(e.zoneName||'Otra zona')}</span>`:'<span style="font-size:10px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:999px;padding:2px 8px;white-space:nowrap">Sin zona</span>');
      return `<label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:1px solid var(--line,#e2e8f0);border-radius:10px;cursor:${same?'default':'pointer'};opacity:${same?.6:1}"><input type="checkbox" data-id="${escH(id)}" ${checked?'checked':''} ${same?'disabled':''} onchange="hvacBatchToggle(this)" style="width:18px;height:18px;flex:none"><span style="flex:1;min-width:0"><span style="display:block;font-weight:800;font-size:12.5px">${escH(e.code||'-')} <span style="font-weight:600;color:var(--text-2,#334155)">· ${escH(e.name||e.type||'Sin nombre')}</span></span><span style="display:block;font-size:10.5px;color:var(--text-2,#334155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH([e.type,e.brand,e.serial].filter(Boolean).join(' · '))}</span></span>${chip}</label>`;
    }).join(''):'<div style="font-size:12px;color:var(--text-2,#334155);padding:14px;text-align:center">No hay equipos que coincidan.</div>';
-   count.textContent=`${batchSel.size} seleccionado(s) · ${rows.length} resultado(s)${rows.length>LIMIT?` (mostrando ${LIMIT}; usa el buscador)`:''}${typeof eqBackgroundLoading!=='undefined'&&eqBackgroundLoading?' · aún cargando equipos…':''}`;
+   const visSel=rows.filter(e=>batchSel.has(String(e.id))).length;count.textContent=`${batchSel.size} seleccionado(s)${batchSel.size>visSel?` (${batchSel.size-visSel} fuera de esta vista)`:''} · ${rows.length} resultado(s)${rows.length>LIMIT?` (mostrando ${LIMIT}; usa el buscador)`:''}${typeof eqBackgroundLoading!=='undefined'&&eqBackgroundLoading?' · aún cargando equipos…':''}`;
  };
  window.hvacBatchToggle=function(cb){const id=cb.dataset.id;if(cb.checked)batchSel.add(id);else batchSel.delete(id);window.hvacBatchRender();};
  window.hvacBatchSelectAll=function(on){
    const zid=String(bEls().zone?.value||'');
    if(!on){batchSel.clear();}
-   else bFiltered().forEach(e=>{if(!zid||String(e.zoneId||'')!==zid)batchSel.add(String(e.id));});
+   else{batchSel.clear();bFiltered().forEach(e=>{if(!zid||String(e.zoneId||'')!==zid)batchSel.add(String(e.id));});}
    window.hvacBatchRender();
  };
  window.hvacBatchAssign=async function(){
@@ -11789,7 +11813,7 @@ async function attDelete(id) {
    const eqs=[...batchSel].map(id=>(equipmentCatalog||[]).find(e=>String(e.id)===id)).filter(e=>e&&String(e.zoneId||'')!==zid);
    if(!eqs.length)return showToast('Marca al menos un equipo que no esté ya en esa zona.','error');
    const moved=eqs.filter(e=>e.zoneId).length;
-   if(moved&&!confirm(`${moved} equipo(s) ya están en otra zona y se moverán a "${z.name}". ¿Continuar?`))return;
+   if(!confirm(`Se asignarán ${eqs.length} equipo(s) a "${z.name}"${moved?` (${moved} ya están en otra zona y se moverán)`:''}. ¿Continuar?`))return;
    const btn=document.getElementById('hvac-zone-batch-save'),lbl=document.getElementById('hvac-zone-batch-save-label'),old=lbl.textContent;
    btn.disabled=true;lbl.textContent='Guardando…';
    let synced=0,pending=0;
