@@ -1563,6 +1563,16 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <label for="hist-filter-client" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Filtrar por cliente</label>
                     <select id="hist-filter-client" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full"></select>
                 </div>
+                <div class="min-w-[12rem]">
+                    <label for="hist-filter-status" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Estado de la orden</label>
+                    <select id="hist-filter-status" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full">
+                        <option value="ALL">Todos los estados</option>
+                        <option value="PENDING">Pendiente</option>
+                        <option value="IN_PROGRESS">En proceso</option>
+                        <option value="COMPLETED">Completado</option>
+                        <option value="BILLED">Facturado</option>
+                    </select>
+                </div>
                 <div class="min-w-[14rem]">
                     <label for="hist-sort" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Ordenar por</label>
                     <select id="hist-sort" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full">
@@ -5046,7 +5056,8 @@ async function authPedirNuevaClave() {
             const sel = document.getElementById('hist-filter-client');
             const clientKey = (sel && sel.value) || 'ALL';
             const label = clientKey !== 'ALL' && sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
-            return { text, clientKey, label };
+            const status = (document.getElementById('hist-filter-status') || {}).value || 'ALL';
+            return { text, clientKey, label, status };
         }
         async function fetchHistoryPage(reset, force) {
             if (!navigator.onLine) return false;
@@ -5054,7 +5065,7 @@ async function authPedirNuevaClave() {
             const f = historyServerFilters();
             if (reset) { st.offset = 0; st.hasMore = true; }
             if (force) hvacProgressCache.clear();   // botón Sincronizar: avance también se refresca
-            st.sig = f.text + '|' + f.clientKey;
+            st.sig = f.text + '|' + f.clientKey + '|' + f.status;
             const token = ++st.token;
             st.loading = true;
             let filters = '';
@@ -5063,6 +5074,8 @@ async function authPedirNuevaClave() {
                 filters += '&or=' + encodeURIComponent(`(id.ilike.${pat},payload->>client.ilike.${pat},payload->>technician.ilike.${pat})`);
             }
             if (f.label) filters += '&payload->>client=ilike.' + encodeURIComponent(pgLikePattern(clientRootLabel(f.label)));
+            // Estados guardados en la orden: se piden ya filtrados. Pendiente / En proceso se calculan con el avance real, en pantalla.
+            if (f.status === 'COMPLETED' || f.status === 'BILLED') filters += '&payload->>status=eq.' + f.status;
             // Paginación liviana: no descarga fotos, ejecuciones ni firmas en base64.
             let rows = await cloudFetchOrderSummaries(`&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`, { force: !!force });
             let paged = true;
@@ -9812,13 +9825,23 @@ async function authPedirNuevaClave() {
             
             const searchText = normText(document.getElementById('hist-search-input')?.value);
             const selectedClient = document.getElementById('hist-filter-client')?.value || 'ALL';
+            const selectedStatus = document.getElementById('hist-filter-status')?.value || 'ALL';
+            // Pendiente / En proceso dependen del avance real: se consulta (una vez) el avance de las órdenes aún abiertas que no lo tienen.
+            if ((selectedStatus === 'PENDING' || selectedStatus === 'IN_PROGRESS') && navigator.onLine) {
+                const need = workOrders.filter(o => o && o._hvacSummaryOnly && !String(o.id || '').startsWith('HIST-')
+                    && !['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase())
+                    && matchesClientFilter(String(o.client || o.clientName || ''), selectedClient)
+                    && !(hvacProgressCache.get(String(o.id)) || {}).ok).slice(0, 40);
+                if (need.length) hvacRefreshProgress(need).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
+            }
             const filteredHistory = workOrders.filter(o => {
                 const orderId = String(o.id || '');
                 const client = String(o.client || o.clientName || '');
                 const technician = String(o.technician || '');
                 const matchesText = !searchText || [orderId, client, technician].some(value => normText(value).includes(searchText));
                 const matchesClient = matchesClientFilter(client, selectedClient);
-                return matchesText && matchesClient;
+                const matchesStatus = selectedStatus === 'ALL' || hvacOrderState(o) === selectedStatus;
+                return matchesText && matchesClient && matchesStatus;
             }).sort(getHistoryComparator()); // orden elegido (por defecto: más reciente arriba)
 
             const total = filteredHistory.length;
@@ -13099,6 +13122,70 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       busy = false;
     }
   };
+})();
+</script>
+
+<script id="modal-outside-click">
+// Cerrar la ventana abierta al hacer clic en la zona borrosa (fuera de la tarjeta).
+// Usa la misma función de cierre de cada ventana; si hay datos escritos sin guardar, pregunta antes.
+(function () {
+    var CLOSERS = {
+        'order-hub-modal-backdrop': 'closeOrderHubModal',
+        'add-eq-job-modal-backdrop': 'closeAddEquipmentToJobModal',
+        'formularios-modal-backdrop': 'closeFormulariosModal',
+        'form-type-editor-modal-backdrop': 'closeFormTypeEditorModal',
+        'batch-projection-modal-backdrop': 'closeBatchProjectionModal',
+        'batch-equipment-modal-backdrop': 'closeBatchEquipmentModal',
+        'schedule-modal-backdrop': 'closeScheduleModal',
+        'schedule-agenda-modal-backdrop': 'closeScheduleAgendaModal',
+        'new-routine-modal-backdrop': 'closeNewRoutineModal',
+        'corrective-client-modal-backdrop': 'closeCorrectiveClientModal',
+        'agenda-item-modal-backdrop': 'closeAgendaItemModal',
+        'caja-modal-backdrop': 'closeCajaModal',
+        'print-legalization-modal-backdrop': 'closePrintLegalizationModal',
+        'legalization-modal-backdrop': 'closeLegalizationModal',
+        'receipt-viewer-modal-backdrop': 'closeReceiptViewerModal',
+        'global-signature-modal-backdrop': 'closeGlobalSignatureModal',
+        'exec-equipment-modal-backdrop': 'closeEquipmentExecutionModal',
+        'equipment-history-modal-backdrop': 'closeEquipmentHistoryModal',
+        'invoice-modal-backdrop': 'closeInvoiceModal',
+        'user-edit-modal-backdrop': 'closeUserEditorModal',
+        'equipment-modal-backdrop': 'closeEquipmentModal',
+        'hvac-zones-modal': 'hvacCloseZonesManager'
+    };
+    var downTarget = null;
+    function isHidden(m) { return m.classList.contains('hidden') || m.style.display === 'none'; }
+    // Para no cerrar si se empezó a arrastrar/seleccionar dentro de la tarjeta y se soltó afuera
+    document.addEventListener('pointerdown', function (e) { downTarget = e.target; }, true);
+    document.addEventListener('mousedown', function (e) { downTarget = e.target; }, true);
+    // Marca "con cambios" cuando se escribe en un campo de la ventana (los buscadores y filtros no cuentan)
+    document.addEventListener('input', function (e) {
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (t.type === 'search' || /search|buscar|filter|filtro/i.test(t.id || '')) return;
+        var m = t.closest('.modal-backdrop, #hvac-zones-modal');
+        if (m) m.setAttribute('data-hvac-dirty', '1');
+    }, true);
+    document.addEventListener('click', function (e) {
+        var m = e.target;
+        if (!m || !m.id || !CLOSERS[m.id]) return;      // solo si el clic fue en el fondo mismo, no dentro de la tarjeta
+        if (downTarget !== m || isHidden(m)) return;
+        var fn = window[CLOSERS[m.id]];
+        if (typeof fn !== 'function') return;
+        if (m.getAttribute('data-hvac-dirty') === '1' && !window.confirm('Hay datos escritos sin guardar. ¿Cerrar la ventana de todos modos?')) return;
+        m.removeAttribute('data-hvac-dirty');
+        try { fn(); } catch (err) { console.warn('[Ventana] No se pudo cerrar:', err); }
+    }, false);
+    // Al cerrarse (por cualquier vía) se limpia la marca de cambios
+    if (window.MutationObserver) {
+        var mo = new MutationObserver(function (recs) {
+            recs.forEach(function (r) { if (isHidden(r.target)) r.target.removeAttribute('data-hvac-dirty'); });
+        });
+        Object.keys(CLOSERS).forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) mo.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
+        });
+    }
 })();
 </script>
 
