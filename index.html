@@ -1642,12 +1642,12 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <h2 class="text-base font-black text-slate-900 tracking-tight">Facturación de Órdenes</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina.</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina. Solo aparecen las rutinas completadas al 100% por el técnico y las ya facturadas.</p>
                 </div>
                 <div class="flex items-end gap-2 flex-wrap">
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
-                            <option value="ALL" selected>Todas las Órdenes</option>
+                            <option value="ALL" selected>Completadas y facturadas</option>
                             <option value="PENDING">Pendientes por Facturar</option>
                             <option value="BILLED">Facturadas</option>
                         </select></div>
@@ -4683,10 +4683,12 @@ async function authPedirNuevaClave() {
             // Todas las filas visibles (no solo las "resumen"): una orden con detalle guardado localmente se quedaba con el % viejo.
             const eligible = [...new Set(list.filter(o => o && o.id && !String(o.id).startsWith('HIST-') && String(o.status || '').toUpperCase() !== 'BILLED').map(o => String(o.id)))];
             const liteOnly = new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)));
+            // Detalle local AL DÍA (no marcado como viejo): el avance sale de ese detalle con la misma regla que usa el técnico; no se consulta la nube.
+            const freshDetail = new Set(list.filter(o => o && o._hvacSummaryOnly !== true && o._hvacDetailStale !== true && o.executions && typeof o.executions === 'object' && Object.keys(o.executions).length).map(o => String(o.id)));
             const ids = eligible.filter(id => {
                 const c = hvacProgressCache.get(id);
                 const triedAt = hvacProgressAttempt.get(id) || 0;
-                return !hvacProgressPending.has(id) && !(c && c.ok && now - c.at < HVAC_PROGRESS_TTL) && (now - triedAt >= HVAC_PROGRESS_RETRY_MS);
+                return !freshDetail.has(id) && !hvacProgressPending.has(id) && !(c && c.ok && now - c.at < HVAC_PROGRESS_TTL) && (now - triedAt >= HVAC_PROGRESS_RETRY_MS);
             });
             if (!ids.length) return false;
 
@@ -4699,7 +4701,7 @@ async function authPedirNuevaClave() {
                 let viewChanged = false;
                 try {
                     // Vista ligera (trae ejecuciones) solo para filas resumen; las que ya tienen detalle usan la RPC numérica (~50 bytes por orden).
-                    const liteIds = hvacProgressDisabled ? ids : ids.filter(id => liteOnly.has(id));
+                    const liteIds = ids;   // filas resumen o con detalle viejo: se calcula con las ejecuciones de la nube y la regla de la app
                     viewChanged = liteIds.length ? await hvacFetchLiteProgress(liteIds, list) : false;
                 } catch (viewError) {
                     console.warn('[Avance] La vista ligera no respondió; se intentará RPC:', viewError);
@@ -4713,7 +4715,7 @@ async function authPedirNuevaClave() {
 
                 // Respaldo: RPC numérica. Solo se invoca si la vista no entregó ejecuciones
                 // verificables; una respuesta fallida nunca reemplaza el último valor bueno.
-                if (unresolved.length && !hvacProgressDisabled) {
+                if (unresolved.length && !hvacProgressDisabled && hvacProgressLiteViewMissing) {
                     const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
                     if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) {
                         hvacProgressDisabled = true;
@@ -5796,9 +5798,21 @@ async function authPedirNuevaClave() {
             if (!visible.length) return;
             const allChecked = visible.every(cb => cb.checked);
             visible.forEach(cb => cb.checked = !allChecked);
-            if (btn) {
-                btn.innerHTML = allChecked ? '<i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos' : '<i class="fa-solid fa-xmark mr-1"></i> Deseleccionar todos';
-            }
+            hvacSyncSelectAllButtons();
+        }
+        // El texto de cada botón "Seleccionar todos" sigue el estado real de las casillas (no el último clic)
+        function hvacSyncSelectAllButtons() {
+            document.querySelectorAll('button[onclick*="toggleSelectAllCheckboxes("]').forEach(btn => {
+                const m = /toggleSelectAllCheckboxes\('([^']+)'/.exec(btn.getAttribute('onclick') || '');
+                if (!m) return;
+                const visible = Array.from(document.querySelectorAll(m[1])).filter(cb => {
+                    const row = cb.closest('label');
+                    return !(row && row.style.display === 'none') && !cb.disabled;
+                });
+                const allChecked = visible.length > 0 && visible.every(cb => cb.checked);
+                const html = allChecked ? '<i class="fa-solid fa-xmark mr-1"></i> Deseleccionar todos' : '<i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos';
+                if (btn.innerHTML !== html) btn.innerHTML = html;
+            });
         }
 
         const DASH_ORDERS_PER_PAGE = 7;
@@ -9246,9 +9260,15 @@ async function authPedirNuevaClave() {
             const tbody = document.getElementById('billing-table-body');
             tbody.innerHTML = '';
 
+            // Solo se listan rutinas que el técnico dejó COMPLETADAS al 100% (o las ya facturadas): nunca las programadas, en proceso o con avance parcial
+            const billingReady = o => {
+                const st = String(o.status || '').toUpperCase();
+                return st === 'BILLED' || (st === 'COMPLETED' && hvacOrderState(o) === 'COMPLETED');
+            };
             // Los filtros son independientes y se combinan entre sí (AND)
             const list = workOrders.filter(o => {
                 if (String(o.id || '').startsWith('HIST-')) return false;
+                if (!billingReady(o)) return false;
                 if (billingRoutineType(o) === 'REVISION' && o.status !== 'BILLED') return false;   // las revisiones no se facturan (solo se conservan las ya facturadas en el pasado)
                 if (status === 'PENDING' && o.status !== 'COMPLETED') return false;
                 if (status === 'BILLED' && o.status !== 'BILLED') return false;
@@ -13189,5 +13209,22 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 })();
 </script>
 
+<script id="select-all-sync">
+// Mantiene el texto "Seleccionar todos / Deseleccionar todos" igual al estado real de las casillas.
+(function () {
+    var pend = false;
+    function sync() { if (pend) return; pend = true; setTimeout(function () { pend = false; try { hvacSyncSelectAllButtons(); } catch (e) {} }, 0); }
+    document.addEventListener('change', function (e) { if (e.target && e.target.type === 'checkbox') sync(); }, true);
+    document.addEventListener('click', sync, true);
+    if (window.MutationObserver) {
+        var mo = new MutationObserver(sync);
+        ['new-routine-modal-backdrop', 'schedule-modal-backdrop', 'schedule-agenda-modal-backdrop', 'corrective-client-modal-backdrop'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        });
+    }
+    sync();
+})();
+</script>
 </body>
 </html>
