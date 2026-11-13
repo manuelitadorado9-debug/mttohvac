@@ -2014,6 +2014,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                         <button type="button" onclick="toggleSelectAllCheckboxes('.sch-eq-checkbox', this)" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos</button>
                     </div>
                     <div id="sch-equipments-picker" class="border border-slate-200 rounded-2xl p-3 max-h-48 overflow-y-auto space-y-1.5 bg-slate-50 text-xs"></div>
+                    <label class="flex items-start gap-2 text-[11px] font-bold text-slate-700 mt-2"><input type="checkbox" id="sch-no-split" class="mt-0.5"><span>Un solo informe con todas las zonas <span class="font-semibold text-slate-500">(no dividir en una orden por zona; se factura un solo valor)</span></span></label>
                 </div>
                 <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
                     <button type="button" onclick="closeScheduleModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
@@ -7222,7 +7223,7 @@ async function authPedirNuevaClave() {
             const alreadyScheduled=new Set((proj.scheduledEquipmentIds||[]).map(String));
             if(equipmentIds.some(id=>alreadyScheduled.has(String(id))))return showToast('Uno o más equipos ya están programados en esta proyección. Actualiza la lista y vuelve a seleccionar.','error');
             try{
-              const baseId=await hvacBaseIdForProjection(proj),groups=hvacGroupEquipmentByZone(equipmentIds);
+              const baseId=await hvacBaseIdForProjection(proj),groups=((document.getElementById('sch-no-split')||{}).checked)?hvacMergeZoneGroups(hvacGroupEquipmentByZone(equipmentIds)):hvacGroupEquipmentByZone(equipmentIds);
               const orders=hvacBuildZoneOrders({client:proj.client,date,technician,technicians,groups,base:baseId});
               workOrders.push(...orders);
               proj.zoneBaseId=baseId;
@@ -7511,7 +7512,7 @@ async function authPedirNuevaClave() {
         function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base, type = 'PREVENTIVO' }) {
             const ids = hvacZoneOrderIds(base, groups);
             return groups.map((g, i) => {
-                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: type, tipoRutina: type };
+                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, ...(g.zoneNames ? { zoneNames: g.zoneNames } : {}), zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: type, tipoRutina: type };
                 linkClientFields(o, client); return o;
             });
         }
@@ -7520,6 +7521,12 @@ async function authPedirNuevaClave() {
             const map=new Map();
             (ids||[]).forEach(id=>{const e=(equipmentCatalog||[]).find(x=>String(x.id)===String(id)||String(x.code)===String(id))||{};const zid=String(e.zoneId||'');const zname=String(e.zoneName||'').trim()||(zid?'Zona asignada':'Sin zona');const key=zid||'__NO_ZONE__';if(!map.has(key))map.set(key,{zoneId:zid,zoneName:zname,ids:[]});map.get(key).ids.push(id);});
             return Array.from(map.values()).sort((a,b)=>a.zoneName.localeCompare(b.zoneName,'es'));
+        }
+        // Une varias zonas en UN solo grupo: una sola orden y un solo informe con todos los equipos (sin partes -P#)
+        function hvacMergeZoneGroups(groups) {
+            if (!groups || groups.length < 2) return groups;
+            const names = groups.map(g => g.zoneName).filter(Boolean);
+            return [{ zoneId: '', zoneName: names.join(' · '), zoneNames: names, ids: groups.reduce((a, g) => a.concat(g.ids || []), []) }];
         }
 
         async function saveNewRoutineManual() {
@@ -9252,6 +9259,22 @@ async function authPedirNuevaClave() {
         const billingMoney = n => '$ ' + Number(n || 0).toLocaleString();
         const billingMonthLabel = k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('es', { month: 'long', year: 'numeric' }); };
 
+        // Si faltan partes de una matriz en memoria (histórico paginado), las trae una vez y repinta
+        var hvacBillingMatrixTried = new Set();
+        function hvacBillingLoadMissingParts() {
+            try {
+                (workOrders || []).forEach(o => {
+                    if (!o || String(o.id || '').startsWith('HIST-') || !hvacIsMatrixOrder(o)) return;
+                    const base = hvacMatrixBase(o);
+                    if (!base || hvacBillingMatrixTried.has(base)) return;
+                    const expected = Number(o.zoneParts || 0);
+                    if (expected > 1 && hvacMatrixParts(o).length < expected) {
+                        hvacBillingMatrixTried.add(base);
+                        if (typeof hvacLoadMatrixParts === 'function') hvacLoadMatrixParts(o).then(ok => { if (ok) renderBillingModule(); });
+                    }
+                });
+            } catch (e) { console.warn('[Facturación] No se pudieron verificar las partes de la matriz:', e); }
+        }
         function renderBillingModule() {
             const status = document.getElementById('billing-filter-status').value || 'ALL';
             const execMonth = document.getElementById('billing-filter-exec-month').value || '';
@@ -9265,10 +9288,17 @@ async function authPedirNuevaClave() {
                 const st = String(o.status || '').toUpperCase();
                 return st === 'BILLED' || (st === 'COMPLETED' && hvacOrderState(o) === 'COMPLETED');
             };
+            // Matriz (rutina dividida por zonas -P#): UNA sola fila por matriz, a nombre de su parte titular, y solo cuando TODAS las partes están completadas.
+            hvacBillingLoadMissingParts();
             // Los filtros son independientes y se combinan entre sí (AND)
             const list = workOrders.filter(o => {
                 if (String(o.id || '').startsWith('HIST-')) return false;
-                if (!billingReady(o)) return false;
+                if (hvacIsMatrixOrder(o)) {
+                    const holder = hvacMatrixHolder(o);
+                    if (!holder || String(holder.id) !== String(o.id)) return false;
+                    const ms = hvacMatrixState(o);
+                    if (ms !== 'COMPLETED' && ms !== 'BILLED') return false;
+                } else if (!billingReady(o)) return false;
                 if (billingRoutineType(o) === 'REVISION' && o.status !== 'BILLED') return false;   // las revisiones no se facturan (solo se conservan las ya facturadas en el pasado)
                 if (status === 'PENDING' && o.status !== 'COMPLETED') return false;
                 if (status === 'BILLED' && o.status !== 'BILLED') return false;
@@ -9299,6 +9329,7 @@ async function authPedirNuevaClave() {
             if (baseMonth) {
                 const pool = workOrders.filter(o => {
                     if (String(o.id || '').startsWith('HIST-')) return false;
+                    if (hvacIsMatrixOrder(o) && String((hvacMatrixHolder(o) || {}).id) !== String(o.id)) return false;   // una matriz = una factura
                     if (o.status !== 'BILLED' || billingMonthKey(o.invoice && o.invoice.date) !== baseMonth) return false;
                     if (status === 'PENDING') return false;
                     if (typeFilter !== 'ALL' && billingRoutineType(o) !== typeFilter) return false;
@@ -9376,8 +9407,9 @@ async function authPedirNuevaClave() {
                 const routineLabel = ({ PREVENTIVO: 'Preventivo', CORRECTIVO: 'Correctivo', REVISION: 'Revisión' })[routineType] || routineType;
                 const routineClass = routineType === 'CORRECTIVO' ? 'corr' : routineType === 'REVISION' ? 'rev' : 'prev';
                 const billedOn = isBilled && inv.date ? billingMonthKey(inv.date) : '';
+                const isMx = hvacIsMatrixOrder(o), mxN = isMx ? hvacMatrixParts(o).length : 0;
                 tbody.insertAdjacentHTML('beforeend', `<tr>
-                    <td class="font-bold text-slate-900">${esc(o.id)}</td>
+                    <td class="font-bold text-slate-900">${esc(isMx ? hvacMatrixBase(o) : o.id)}${mxN > 1 ? ` <span class="text-[10px] font-bold text-slate-500">(${mxN} zonas)</span>` : ''}</td>
                     <td class="font-bold text-teal-700">${esc(o.client)}</td>
                     <td><span class="bill-chip ${routineClass}">${routineLabel}</span></td>
                     <td>${esc(o.date)}</td>
@@ -9406,7 +9438,8 @@ async function authPedirNuevaClave() {
 
             document.getElementById('invoice-modal-backdrop').classList.remove('hidden');
             document.getElementById('inv-f-order-id').value = order.id;
-            document.getElementById('inv-modal-title').innerText = inv.number ? `Editar Factura (${order.id})` : `Facturar Orden (${order.id})`;
+            const invLabel = hvacIsMatrixOrder(order) ? `${hvacMatrixBase(order)} · ${hvacMatrixParts(order).length} zonas` : order.id;
+            document.getElementById('inv-modal-title').innerText = inv.number ? `Editar Factura (${invLabel})` : `Facturar Orden (${invLabel})`;
             document.getElementById('inv-f-number').value = inv.number || '';
             document.getElementById('inv-f-amount').value = inv.amount || (projInv && projInv.budget) || '';
             document.getElementById('inv-f-expenses').value = inv.expenses || '';
@@ -11880,8 +11913,10 @@ async function attDelete(id) {
 <script>
 /* ===== Nueva rutina: zonas, facturación por consecutivo y vista previa ===== */
 (function(){
-  var S={assign:{},values:{},targets:{},touched:false};
+  var S={assign:{},values:{},targets:{},touched:false,noSplit:false};
   function $(id){return document.getElementById(id);}
+  // Con "un solo informe" cada facturación se crea como UNA orden con todas sus zonas
+  function groupsOf(zs){return (S.noSplit&&zs.length>1)?hvacMergeZoneGroups(zs):zs;}
   function checkedIds(){return Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(function(c){return c.value;});}
   function zoneList(){return hvacGroupEquipmentByZone(checkedIds());}
   function zkey(g){return g.zoneId||'__NO_ZONE__';}
@@ -11921,7 +11956,7 @@ async function attDelete(id) {
     return used.map(function(gn){
       var zs=zonesOf(zones,gn), eq=[];
       zs.forEach(function(z){eq=eq.concat(z.ids);});
-      return {n:gn,groups:zs,equipmentIds:eq,value:used.length===1?budget:(Number(S.values[gn])||0),target:targetFor(gn,used.length,mats)};
+      return {n:gn,groups:groupsOf(zs),equipmentIds:eq,value:used.length===1?budget:(Number(S.values[gn])||0),target:targetFor(gn,used.length,mats)};
     });
   };
   function syncTotal(){
@@ -11942,6 +11977,7 @@ async function attDelete(id) {
     h+='<div class="flex items-center justify-between gap-2 flex-wrap mb-2"><p class="font-black text-teal-800 text-xs"><i class="fa-solid fa-layer-group mr-1"></i>Zonas y facturación <span class="font-semibold text-slate-500">· '+zones.length+' zona(s), '+eqCount(zones)+' equipo(s)</span></p>';
     if(zones.length>1) h+='<div class="flex gap-1.5"><button type="button" data-chip="one" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una sola facturación</button><button type="button" data-chip="each" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una por zona</button></div>';
     h+='</div>';
+    if(zones.length>1) h+='<label class="flex items-start gap-2 text-[11px] font-bold text-slate-700 mb-2"><input type="checkbox" data-nosplit class="mt-0.5"'+(S.noSplit?' checked':'')+'><span>Un solo informe con todas las zonas <span class="font-semibold text-slate-500">(sin dividir cada facturación en una orden por zona)</span></span></label>';
     if(zones.length>1){
       h+='<p class="text-[10px] text-slate-500 mb-1.5">Elige a qué facturación va cada zona. Cada facturación tiene su propio consecutivo.</p><div class="mb-3">';
       zones.forEach(function(z){
@@ -11955,9 +11991,9 @@ async function attDelete(id) {
       var zs=zonesOf(zones,gn), tgt=targetFor(gn,used.length,mats), base, label;
       if(tgt==='NEW'){newCount++;base=prevFormat(consecFreeLocal(pref,newCount),pref);label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
       else{var p=mats.filter(function(x){return x.id===tgt;})[0];base=p.zoneBaseId;label='<span class="text-slate-500">Se agrega a</span> <b class="font-mono text-teal-800">'+esc(base)+'</b>';}
-      var codes=hvacZoneOrderIds(base,zs);
+      var zsE=groupsOf(zs), codes=hvacZoneOrderIds(base,zsE);
       h+='<div class="rounded-2xl border border-slate-200 p-3 mb-2"><div class="flex items-center justify-between gap-2 flex-wrap mb-1.5"><span class="font-black text-xs">'+(multi?'Facturación '+gn:'Consecutivo')+'</span><span class="text-[11px]">'+label+'</span></div><ul class="space-y-0.5 mb-1">';
-      zs.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
+      zsE.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
       h+='</ul>';
       if(mats.length) h+='<select data-target="'+gn+'" class="input-box text-xs mt-1.5"><option value="NEW"'+(tgt==='NEW'?' selected':'')+'>Consecutivo nuevo</option>'+mats.map(function(p){return '<option value="'+esc(p.id)+'"'+(tgt===p.id?' selected':'')+'>Agregar a '+esc(p.zoneBaseId)+' (mismo mes)</option>';}).join('')+'</select>';
       if(multi&&!isRev) h+='<label class="block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1">Valor de esta facturación ($)</label><input type="number" data-gv="'+gn+'" value="'+(Number(S.values[gn])||'')+'" class="input-box text-xs font-bold" placeholder="0">';
@@ -11982,7 +12018,8 @@ async function attDelete(id) {
   if(box){
     box.addEventListener('change',function(e){
       var t=e.target; if(!t||!t.dataset) return;
-      if(t.dataset.zone!==undefined){S.assign[t.dataset.zone]=parseInt(t.value,10)||1;S.touched=false;render();}
+      if(t.dataset.nosplit!==undefined){S.noSplit=!!t.checked;render();}
+      else if(t.dataset.zone!==undefined){S.assign[t.dataset.zone]=parseInt(t.value,10)||1;S.touched=false;render();}
       else if(t.dataset.target!==undefined){S.targets[t.dataset.target]=t.value;render();}
     });
     box.addEventListener('input',function(e){
@@ -12008,7 +12045,7 @@ async function attDelete(id) {
   if(picker) new MutationObserver(function(){render();}).observe(picker,{childList:true});
   var modal=$('new-routine-modal-backdrop');
   if(modal) new MutationObserver(function(){
-    if(modal.classList.contains('hidden')){S={assign:{},values:{},targets:{},touched:false};var b=$('nr-zone-preview');if(b){b.classList.add('hidden');b.innerHTML='';}}
+    if(modal.classList.contains('hidden')){S={assign:{},values:{},targets:{},touched:false,noSplit:false};var b=$('nr-zone-preview');if(b){b.classList.add('hidden');b.innerHTML='';}}
   }).observe(modal,{attributes:true,attributeFilter:['class']});
 })();
 </script>
@@ -13224,6 +13261,16 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
         });
     }
     sync();
+})();
+</script>
+<script id="no-split-reset">
+// La casilla "Un solo informe con todas las zonas" de Programar vuelve a desmarcada cada vez que se cierra la ventana.
+(function () {
+    var m = document.getElementById('schedule-modal-backdrop');
+    if (!m || !window.MutationObserver) return;
+    new MutationObserver(function () {
+        if (m.classList.contains('hidden')) { var c = document.getElementById('sch-no-split'); if (c) c.checked = false; }
+    }).observe(m, { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
 </body>
