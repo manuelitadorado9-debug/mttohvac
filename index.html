@@ -6674,9 +6674,7 @@ async function authPedirNuevaClave() {
             ensureCajaConsecutiveIds();
 
             const ids = Array.isArray(leg.expenseIds) ? leg.expenseIds : [];
-            const expenses = ids.map(id => cajaMenorItems.find(c => String(c.id) === String(id))).filter(Boolean)
-                .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) ||
-                    String(a.consecutiveId || '').localeCompare(String(b.consecutiveId || ''), 'es', { numeric: true }));
+            const expenses = ids.map(id => cajaMenorItems.find(c => String(c.id) === String(id))).filter(Boolean);
             const money = n => '$ ' + Math.round(Number(n) || 0).toLocaleString('es-CO');
             const totalSpent = expenses.reduce((t, e) => t + (Number(e.amount) || 0), 0);
             const capital = Number(leg.capital) || 0;
@@ -6796,22 +6794,6 @@ async function authPedirNuevaClave() {
             ]), 'Este corte no tiene facturas asociadas.');
             y += 5;
 
-            // --- Resumen por centro de costo
-            const groups = new Map();
-            expenses.forEach(e => {
-                const name = e.clientName || e.client || 'Cliente no asignado';
-                const num = e.costCenterNumber || 'Sin número';
-                const key = normText(name) + '|' + normText(num);
-                const g = groups.get(key) || { name, num, count: 0, sum: 0 };
-                g.count += 1; g.sum += Number(e.amount) || 0;
-                groups.set(key, g);
-            });
-            sectionTitle('Resumen por centro de costo');
-            drawTable(
-                [{ h: 'Centro de costo', w: 95 }, { h: 'N.º', w: 35 }, { h: 'Facturas', w: 20, right: true }, { h: 'Subtotal', w: CW - 150, right: true }],
-                [...groups.values()].map(g => [g.name, g.num, String(g.count), money(g.sum)]),
-                'Sin información de centros de costo.'
-            );
             totalRow(`TOTAL GASTADO (${expenses.length} facturas)`, money(totalSpent));
             y += 5;
 
