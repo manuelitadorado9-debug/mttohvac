@@ -2802,6 +2802,22 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         // Sufijos de ubicación que se agrupan bajo la raíz del cliente: "Jocol piso 16" → "Jocol".
         const CLIENT_SUFFIX_RE = /\s*[-–—,:]?\s*\b(?:pisos|piso|nivel|s[oó]tano|planta|oficina|ofc|of)(?![a-z])\.?\s*(?:n[°º.]?\s*)?#?\s*\d[\w\s.\-/]*$/i;
         const cleanSpaces = v => String(v == null ? '' : v).replace(/[\s\u00a0\u200b]+/g, ' ').trim();
+        // Criterio único de orden alfabético para TODAS las listas de clientes de la app.
+        // Respeta el alfabeto español, ignora mayúsculas/tildes y ordena números de forma natural.
+        function compareClientNames(a, b) {
+            const left = cleanSpaces(a), right = cleanSpaces(b);
+            return left.localeCompare(right, 'es', { sensitivity: 'base', numeric: true }) ||
+                left.localeCompare(right, 'es', { sensitivity: 'variant', numeric: true });
+        }
+        function getSortedClientRecords(source = clientsCatalog) {
+            return (Array.isArray(source) ? source : []).filter(c => c && cleanSpaces(c.name))
+                .slice().sort((a, b) => compareClientNames(a.name, b.name) ||
+                    String(a.id == null ? '' : a.id).localeCompare(String(b.id == null ? '' : b.id), 'es', { numeric: true }));
+        }
+        function getSortedUniqueClientNames(source) {
+            return [...new Set((Array.isArray(source) ? source : []).map(cleanSpaces).filter(Boolean))]
+                .sort(compareClientNames);
+        }
         const clientRootLabel = name => cleanSpaces(name).replace(CLIENT_SUFFIX_RE, '').trim() || cleanSpaces(name);
         const clientRootKey = name => normText(clientRootLabel(name));
         const sameClient = (a, b) => { const k = normText(a); return k !== '' && k === normText(b); };
@@ -2982,7 +2998,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             clientsCatalog.forEach(c => add(c && c.name));
             equipmentCatalog.forEach(e => add(eqClientName(e)));
             workOrders.forEach(o => add(o && (o.client || o.clientName)));
-            return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+            return [...seen.values()].sort(compareClientNames);
         }
         function canonicalClientName(name) {
             const k = normText(name);
@@ -5718,7 +5734,7 @@ async function authPedirNuevaClave() {
         function getOfficialClientNames() {
             const seen = new Map();
             clientsCatalog.forEach(c => { const n = cleanSpaces(c && c.name), k = normText(n); if (k && !seen.has(k)) seen.set(k, n); });
-            return [...seen.values()].sort((a, b) => a.localeCompare(b, 'es'));
+            return [...seen.values()].sort(compareClientNames);
         }
         let eqClientSelSig = '';
         // Reconstruye filtro y selector del catálogo de equipos; solo toca el DOM si cambió la lista oficial
@@ -5745,10 +5761,10 @@ async function authPedirNuevaClave() {
             const el = document.getElementById('caja-f-client');
             if (!el) return;
             const prev = selectedId || el.value;
-            el.innerHTML = '<option value="">-- Selecciona un Cliente --</option>';
-            clientsCatalog.forEach(client => {
-                el.innerHTML += `<option value="${esc(client.id)}">${esc(client.name)}</option>`;
-            });
+            const options = getSortedClientRecords().map(client =>
+                `<option value="${esc(client.id)}">${esc(client.name)}</option>`
+            ).join('');
+            el.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' + options;
             if (prev && Array.from(el.options).some(option => option.value === String(prev))) el.value = String(prev);
         }
 
@@ -7530,8 +7546,9 @@ async function authPedirNuevaClave() {
             if (!tbody) return;
             tbody.innerHTML = '';
             const cq = normText((document.getElementById('client-search') || {}).value || ''), cqd = cq.replace(/\D/g, '');
-            const clientList = !cq ? clientsCatalog : clientsCatalog.filter(c => [c.name, c.nit, c.phone, c.address].some(v => normText(v).includes(cq))
+            const filteredClients = !cq ? clientsCatalog : clientsCatalog.filter(c => [c.name, c.nit, c.phone, c.address].some(v => normText(v).includes(cq))
                 || (cqd.length >= 3 && [c.nit, c.phone].some(v => String(v || '').replace(/\D/g, '').includes(cqd))));
+            const clientList = getSortedClientRecords(filteredClients);
             const cnt = document.getElementById('client-search-count'); if (cnt) cnt.textContent = cq ? clientList.length + ' de ' + clientsCatalog.length : clientsCatalog.length + ' clientes';
             if (!clientList.length) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-xs text-slate-400 py-8">Sin resultados para la búsqueda.</td></tr>';
             clientList.forEach(c => {
@@ -7850,8 +7867,7 @@ async function authPedirNuevaClave() {
             const clientSelect = document.getElementById('eq-f-client');
             if (clientSelect) {
                 clientSelect.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' +
-                    clientsCatalog.slice().sort((a,b) => String(a.name).localeCompare(String(b.name), 'es'))
-                    .map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
+                    getSortedClientRecords().map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
             }
             await window.hvacLoadZonesForClient?.(document.getElementById('eq-f-client')?.value || '');
             document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
@@ -10246,7 +10262,7 @@ function attInit() {
     const ts = document.getElementById('att-f-tech'), cs = document.getElementById('att-f-client');
     const pt = ts.value, pc = cs.value;
     ts.innerHTML = '<option value="">Todos</option>' + systemUsers.filter(u => u.role !== 'ADMIN').map(u => `<option value="${esc(u.name)}">${esc(u.name)}</option>`).join('');
-    cs.innerHTML = '<option value="">Todas</option>' + [...new Set(clientsCatalog.map(c => c.name).filter(Boolean))].sort().map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    cs.innerHTML = '<option value="">Todas</option>' + getSortedUniqueClientNames(clientsCatalog.map(c => c.name)).map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
     ts.value = pt; cs.value = pc;
     if (!attRows.length) attLoad();
 }
@@ -10844,7 +10860,7 @@ async function progDrop(ev, techId, date) {
 function progOpen(id, techId, date) {
     const it = id ? progItems.find(i => String(i.id) === String(id)) : null;
     progEl('prog-m-tech').innerHTML = progTechs().map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-    progEl('prog-m-client').innerHTML = '<option value="">— Sin cliente —</option>' + [...clientsCatalog].sort((a, b) => String(a.name).localeCompare(String(b.name))).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    progEl('prog-m-client').innerHTML = '<option value="">— Sin cliente —</option>' + getSortedClientRecords().map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     progEl('prog-m-id').value = it ? it.id : '';
     progEl('prog-m-title').textContent = it ? 'Editar labor' : 'Nueva labor';
     progEl('prog-m-tech').value = it ? it.tecnico_id : (techId || '');
@@ -10993,7 +11009,7 @@ function attEdit(id) {
     q('att-e-hora').value = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     q('att-e-tech').innerHTML = systemUsers.filter(u => u.role !== 'ADMIN').map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
     const tOpt = [...q('att-e-tech').options].find(o => o.textContent === r.tecnico_nombre); if (tOpt) q('att-e-tech').value = tOpt.value;
-    const names = [...new Set(clientsCatalog.map(c => c.name).concat(r.cliente_nombre))].sort();
+    const names = getSortedUniqueClientNames(clientsCatalog.map(c => c.name).concat(r.cliente_nombre));
     q('att-e-client').innerHTML = names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''); q('att-e-client').value = r.cliente_nombre;
     q('att-e-img').classList.toggle('hidden', !r.foto_url); if (r.foto_url) q('att-e-img').src = r.foto_url;
     q('att-e-file').value = ''; q('att-e-rmfoto').checked = false; q('att-e-motivo').value = '';
@@ -11310,7 +11326,7 @@ async function attDelete(id) {
     /* ---------- lista, filtros y selección ---------- */
     function fillClients() {
         const sel = $('qrm-client'), prev = sel.value || 'ALL';
-        const list = (clientsCatalog || []).filter(c => c && c.id != null && c.name).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+        const list = getSortedClientRecords(clientsCatalog).filter(c => c.id != null);
         sel.innerHTML = '<option value="ALL">Todos los clientes</option>' + list.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
         sel.value = [...sel.options].some(o => o.value === prev) ? prev : 'ALL';
         st.lastClients = (clientsCatalog || []).length;
@@ -11695,7 +11711,7 @@ async function attDelete(id) {
    const sel=document.getElementById('hvac-zone-client');
    try{
     if(!Array.isArray(clientsCatalog)||!clientsCatalog.length){const rows=await supabaseFetch('hvac_clients?select=id,payload','GET',null,null,{quiet:true});if(Array.isArray(rows))clientsCatalog=rows.filter(r=>r.payload).map(r=>({...r.payload,id:r.payload.id||r.id}));}
-    sel.innerHTML='<option value="">Selecciona un cliente</option>'+clientsCatalog.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'es')).map(c=>`<option value="${escH(c.name)}">${escH(c.name)}</option>`).join('');
+    sel.innerHTML='<option value="">Selecciona un cliente</option>'+getSortedClientRecords().map(c=>`<option value="${escH(c.name)}">${escH(c.name)}</option>`).join('');
     await fetchZones(); hvacRenderZones();
    }catch(e){showToast(e.message||'No fue posible cargar las zonas.','error');}
  };
