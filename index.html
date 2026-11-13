@@ -43,7 +43,7 @@
     <!-- CSS compilado (se genera con "npm run build:css"). Si el CDN de abajo está bloqueado en el celular, esto mantiene los estilos. -->
     <link rel="stylesheet" href="/tailwind.css?v=1">
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=9"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- FontAwesome Icons -->
@@ -574,6 +574,36 @@ td .font-mono { overflow-wrap:anywhere; word-break:normal; line-height:1.45; }
   #view-admin-agenda .client-pagination { margin:.5rem; }
   .client-pagination { padding:.7rem; }
   th { white-space:normal; }
+}
+/* Caja menor: historial como tarjetas en móvil (evita columnas cortadas/desalineadas) */
+@media (max-width:767.98px){
+  #view-admin-caja .overflow-x-auto{overflow:visible;background:none}
+  #view-admin-caja table{min-width:0;width:100%}
+  #view-admin-caja thead{display:none}
+  #view-admin-caja tbody{display:grid;gap:.7rem;padding:.7rem}
+  #view-admin-caja tbody tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 .8rem;padding:.65rem .75rem;border:1px solid var(--line);border-radius:13px;background:var(--card);box-shadow:var(--sh-sm);min-width:0}
+  #view-admin-caja tbody tr:hover td{background:transparent}
+  #view-admin-caja tbody tr td{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:0;width:auto;padding:.55rem 0;border-bottom:1px solid var(--line-2);font-size:.78rem;white-space:normal;overflow-wrap:break-word}
+  #view-admin-caja tbody tr td::before{display:block;margin-bottom:.28rem;color:var(--muted);font-size:.59rem;font-weight:800;letter-spacing:.075em;text-transform:uppercase;line-height:1.25}
+  #view-admin-caja tbody tr td:nth-child(1)::before{content:"ID / FECHA"}
+  #view-admin-caja tbody tr td:nth-child(2)::before{content:"TIPO"}
+  #view-admin-caja tbody tr td:nth-child(3)::before{content:"CONCEPTO / DETALLE"}
+  #view-admin-caja tbody tr td:nth-child(4)::before{content:"VALOR ($)"}
+  #view-admin-caja tbody tr td:nth-child(5)::before{content:"CLIENTE / CENTRO DE COSTO"}
+  #view-admin-caja tbody tr td:nth-child(6)::before{content:"COMPROBANTE"}
+  #view-admin-caja tbody tr td:nth-child(7)::before{content:"ACCIONES"}
+  #view-admin-caja tbody tr.caja-leg-row td:nth-child(4)::before{content:"CAPITAL / GASTADO"}
+  #view-admin-caja tbody tr.caja-leg-row td:nth-child(5)::before{content:"RESULTADO"}
+  #view-admin-caja tbody tr td:nth-child(1){grid-column:1;grid-row:1}
+  #view-admin-caja tbody tr td:nth-child(2){grid-column:2;grid-row:1}
+  #view-admin-caja tbody tr td:nth-child(3){grid-column:1/-1;grid-row:2}
+  #view-admin-caja tbody tr td:nth-child(4){grid-column:1/-1;grid-row:3}
+  #view-admin-caja tbody tr td:nth-child(5){grid-column:1/-1;grid-row:4}
+  #view-admin-caja tbody tr td:nth-child(6){grid-column:1;grid-row:5;border-bottom:0}
+  #view-admin-caja tbody tr td:nth-child(7){grid-column:2;grid-row:5;border-bottom:0;align-items:flex-end}
+  #view-admin-caja tbody tr td:nth-child(7) .inline-flex{display:flex;flex-wrap:nowrap}
+  #view-admin-caja tbody tr td[colspan]{grid-column:1/-1;align-items:center}
+  #view-admin-caja tbody tr td[colspan]::before{content:none}
 }
 @media(max-width:380px) {
   #view-admin-agenda tbody { padding:.45rem; }
@@ -6422,7 +6452,7 @@ async function authPedirNuevaClave() {
                 if (item.isLeg) {
                     const diff = item.capital - item.totalSpent;
                     let diffText = diff >= 0 ? `Vuelto: $ ${diff.toLocaleString()}` : `Reembolso: $ ${Math.abs(diff).toLocaleString()}`;
-                    tbody.insertAdjacentHTML('beforeend', `<tr class="bg-purple-50/70 border-y border-purple-200">
+                    tbody.insertAdjacentHTML('beforeend', `<tr class="caja-leg-row bg-purple-50/70 border-y border-purple-200">
                         <td class="font-bold text-xs text-purple-900"><i class="fa-solid fa-file-invoice-dollar text-purple-600 mr-1"></i> ${esc(item.date)}</td>
                         <td><span class="bg-purple-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-black uppercase">Corte de Legalización</span></td>
                         <td class="text-xs text-purple-900 font-bold">${esc(item.concept)} <span class="text-purple-600 font-normal">(${(item.expenseIds || []).length} facturas)</span></td>
@@ -6853,7 +6883,8 @@ async function authPedirNuevaClave() {
                 afcResolvePhoto(absoluteSrc(rawFooter))
             ]);
             if (!header || !footer) {
-                throw new Error('No fue posible cargar el encabezado y el pie de página oficiales. Verifica el bucket de membretes en Supabase Storage.');
+                const det = (window.HVAC && HVAC.letterhead && HVAC.letterhead.errors) ? Object.entries(HVAC.letterhead.errors).map(([k, v]) => (k === 'header' ? 'Encabezado' : 'Pie') + ': ' + v).join(' · ') : '';
+                throw new Error('No fue posible cargar el encabezado y el pie de página oficiales. Verifica el bucket de membretes en Supabase Storage.' + (det ? ' (' + det + ')' : ''));
             }
             return { header, footer };
         }

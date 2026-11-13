@@ -113,13 +113,30 @@
 
   /* ---------- Membretes PDF (en  Storage, con caché en IndexedDB) ---------- */
   HVAC.letterhead = {
+    errors: {},   // diagnóstico por clave (header/footer): qué falló al cargar
     async load() {
-      const out = {};
+      const out = {}, self = HVAC.letterhead; self.errors = {};
+      const isImg = d => typeof d === 'string' && /^data:image\//i.test(d);
       for (const k of ['header', 'footer']) {
         const path = HVAC.cfg.letterhead[k], key = 'letterhead:' + path;
         let data = await HVAC.idb.get(key);
-        if (!data && HVAC.net.isOnline()) {
-          try { const r = await fetch(HVAC.storage.publicUrl(path), { cache: 'force-cache' }); if (r.ok) { data = await HVAC.img.toDataUrl(await r.blob()); HVAC.idb.set(key, data); } } catch (_) {}
+        if (data && !isImg(data)) { data = ''; HVAC.idb.del(key); }   // caché corrupta o de tipo no imagen
+        if (!data) {
+          if (!HVAC.net.isOnline()) self.errors[k] = 'sin conexión';
+          else {
+            const url = HVAC.storage.publicUrl(path);
+            try {
+              const r = await fetch(url, { cache: 'no-cache' });
+              if (!r.ok) self.errors[k] = 'HTTP ' + r.status + ' en ' + HVAC.cfg.bucket + '/' + path;
+              else {
+                let b = await r.blob();
+                if (!/^image\//i.test(b.type)) b = new Blob([b], { type: /\.png$/i.test(path) ? 'image/png' : 'image/jpeg' });   // el bucket puede servir octet-stream
+                data = await HVAC.img.toDataUrl(b);
+                if (isImg(data) && b.size) HVAC.idb.set(key, data); else { self.errors[k] = 'archivo vacío o no es imagen'; data = ''; }
+              }
+            } catch (e) { self.errors[k] = 'red/CORS: ' + (e && e.message || e); }
+          }
+          if (self.errors[k]) console.warn('[membrete]', k, self.errors[k]);
         }
         out[k] = data || '';
       }
