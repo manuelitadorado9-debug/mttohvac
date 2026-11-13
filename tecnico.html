@@ -4717,6 +4717,16 @@ function mxPhotoFile(inp) { const f = inp.files && inp.files[0]; inp.value = '';
 function mxPhotoCancel() { mxPhotoDone(null); }
 
 /* ---- Registro (foto → Storage → fila en Supabase) con cola offline en IndexedDB ---- */
+/* Foto de asistencia: R2 primero (no consume transferencia de Supabase); si R2 no responde, Supabase Storage como respaldo.
+   Devuelve la URL pública o null si no se pudo subir (queda en la cola offline). */
+async function mxUploadPhoto(blob, path) {
+  try {
+    const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+    const url = await Promise.race([r2keep(dataUrl, 'asistencia'), new Promise(res => setTimeout(() => res(null), 12000))]);
+    if (typeof url === 'string' && /^https?:\/\//i.test(url)) return url;
+  } catch (e) { console.warn('[Asistencia] R2 no disponible; se usa Supabase Storage:', e); }
+  return (await HVAC.storage.upload(path, blob, 'image/jpeg')) ? HVAC.storage.publicUrl(path) : null;
+}
 const mxSyncItem = async it => {
   if (it.type === 'telegram') {
     const s = await mxTgSend(it.msg);
@@ -4724,7 +4734,12 @@ const mxSyncItem = async it => {
     return true;
   }
   if (it.type !== 'asistencia') return false;
-  if (it.photo && !(await HVAC.storage.upload(it.path, it.photo, 'image/jpeg'))) return false;
+  if (it.photo) {                                           // foto pendiente de subir (marcación hecha sin señal)
+    const url = await mxUploadPhoto(it.photo, it.path);
+    if (!url) return false;
+    it.rec.foto_url = url;
+    if (it.msg) it.msg += '\n📸 <b>Foto:</b> ' + url;
+  }
   const ok = !!(await HVAC.sb.insertIgnore(MX.TABLE, it.rec));
   if (ok && it.msg) enviarMarcacionTelegram(it.msg);        // marcación hecha sin señal: ahora sí se notifica
   return ok;
@@ -4750,7 +4765,8 @@ async function mxMark(tipo) {
       mxAttMsg('Comprimiendo foto…', 'warn');
       blob = await HVAC.img.compress(raw, { maxW: 720, quality: 0.7, maxBytes: 120 * 1024 });
       path = 'asistencia/' + mxToday().replace(/-/g, '/') + '/' + id + '.jpg';
-      fotoUrl = HVAC.storage.publicUrl(path);          // la URL es determinista: ya sirve para el mensaje
+      mxAttMsg('Subiendo foto…', 'warn');
+      fotoUrl = await mxUploadPhoto(blob, path);       // null = sin señal: queda en la cola y se sube al sincronizar
     }
     const rec = {
       id, tecnico_id: u.id ? String(u.id) : null, tecnico_nombre: u.name || u.username || 'Técnico',
@@ -4765,7 +4781,7 @@ async function mxMark(tipo) {
       '👷 <b>Técnico:</b> ' + h(rec.tecnico_nombre), '🏢 <b>Cliente / Sede:</b> ' + h(name), '🕒 <b>Fecha y hora:</b> ' + h(hora), '📡 <b>GPS:</b> ' + h(estado),
       '📍 <b>Ubicación:</b> https://www.google.com/maps?q=' + lat.toFixed(6) + ',' + lng.toFixed(6)].concat(fotoUrl ? ['📸 <b>Foto:</b> ' + fotoUrl] : []).join('\n');
     mxAttMsg('Guardando registro…', 'warn');
-    const uploaded = blob ? await HVAC.storage.upload(path, blob, 'image/jpeg') : true;
+    const uploaded = blob ? !!fotoUrl : true;
     const saved = uploaded && !!(await HVAC.sb.insertIgnore(MX.TABLE, rec));
     if (!saved) {
       await HVAC.outbox.add({ id, type: 'asistencia', rec, path, photo: uploaded ? null : blob, msg });

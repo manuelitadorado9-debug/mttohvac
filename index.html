@@ -1151,6 +1151,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <div class="rail-logo"><i class="fa-solid fa-snowflake"></i></div>
                 <div>
                     <h3>SMART MAINTENANCE</h3>
+                    <p>Cloud R2 & Supabase</p>
                 </div>
             </div>
             <button onclick="toggleSidebar(false)" class="rail-close transition"><i class="fa-solid fa-xmark"></i></button>
@@ -1269,7 +1270,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         <section id="view-admin-clients" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h2 class="text-base font-black text-slate-900 tracking-tight">Directorio de Clientes</h2>
+                    <h2 class="text-base font-black text-slate-900 tracking-tight">Directorio de Clientes (Regulares y Esporádicos)</h2>
                     <p class="text-xs text-slate-500 mt-0.5">Administra los clientes, sedes, datos de contacto y centros de costo.</p>
                 </div>
                 <button onclick="openClientModal(null)" class="btn-teal text-xs"><i class="fa-solid fa-plus"></i> Nuevo Cliente / Esporádico</button>
@@ -1563,16 +1564,6 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <label for="hist-filter-client" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Filtrar por cliente</label>
                     <select id="hist-filter-client" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full"></select>
                 </div>
-                <div class="min-w-[12rem]">
-                    <label for="hist-filter-status" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Estado de la orden</label>
-                    <select id="hist-filter-status" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full">
-                        <option value="ALL">Todos los estados</option>
-                        <option value="PENDING">Pendiente</option>
-                        <option value="IN_PROGRESS">En proceso</option>
-                        <option value="COMPLETED">Completado</option>
-                        <option value="BILLED">Facturado</option>
-                    </select>
-                </div>
                 <div class="min-w-[14rem]">
                     <label for="hist-sort" class="block text-xs font-bold text-slate-600 uppercase mb-1.5">Ordenar por</label>
                     <select id="hist-sort" onchange="historyFiltersChanged()" class="input-box font-semibold text-xs w-full">
@@ -1642,12 +1633,12 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <h2 class="text-base font-black text-slate-900 tracking-tight">Facturación de Órdenes</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina. Solo aparecen las rutinas completadas al 100% por el técnico y las ya facturadas.</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina.</p>
                 </div>
                 <div class="flex items-end gap-2 flex-wrap">
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
-                            <option value="ALL" selected>Completadas y facturadas</option>
+                            <option value="ALL" selected>Todas las Órdenes</option>
                             <option value="PENDING">Pendientes por Facturar</option>
                             <option value="BILLED">Facturadas</option>
                         </select></div>
@@ -2014,7 +2005,6 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                         <button type="button" onclick="toggleSelectAllCheckboxes('.sch-eq-checkbox', this)" class="text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos</button>
                     </div>
                     <div id="sch-equipments-picker" class="border border-slate-200 rounded-2xl p-3 max-h-48 overflow-y-auto space-y-1.5 bg-slate-50 text-xs"></div>
-                    <label class="flex items-start gap-2 text-[11px] font-bold text-slate-700 mt-2"><input type="checkbox" id="sch-no-split" class="mt-0.5"><span>Un solo informe con todas las zonas <span class="font-semibold text-slate-500">(no dividir en una orden por zona; se factura un solo valor)</span></span></label>
                 </div>
                 <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
                     <button type="button" onclick="closeScheduleModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
@@ -4295,9 +4285,8 @@ async function authPedirNuevaClave() {
             }
             if (!target) return null;
             delete target._hvacSummaryOnly;
-            // Protección: una copia SIN ejecuciones, o con detalle VIEJO (_hvacDetailStale), nunca debe sobrescribir las que ya existan en la nube.
-            // (Corrección PRE-0024: una acción como recoger herramientas guardaba la orden con ejecuciones antiguas y borraba las nuevas.)
-            if ((!Object.keys(target.executions || {}).length || target._hvacDetailStale === true) && navigator.onLine !== false) {
+            // Protección: una copia SIN ejecuciones nunca debe sobrescribir las que ya existan en la nube.
+            if (!Object.keys(target.executions || {}).length && navigator.onLine !== false) {
                 const srv = await supabaseFetch('hvac_orders?select=ex:payload->executions&id=eq.' + encodeURIComponent(cloudCleanId(target.id)) + '&limit=1', 'GET', null, null, { quiet: true, noStore: true });
                 if (!Array.isArray(srv)) return null;                                   // no se pudo verificar: no se guarda (queda pendiente y se reintenta)
                 const remote = srv[0] && srv[0].ex;
@@ -4684,12 +4673,10 @@ async function authPedirNuevaClave() {
             // Todas las filas visibles (no solo las "resumen"): una orden con detalle guardado localmente se quedaba con el % viejo.
             const eligible = [...new Set(list.filter(o => o && o.id && !String(o.id).startsWith('HIST-') && String(o.status || '').toUpperCase() !== 'BILLED').map(o => String(o.id)))];
             const liteOnly = new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)));
-            // Detalle local AL DÍA (no marcado como viejo): el avance sale de ese detalle con la misma regla que usa el técnico; no se consulta la nube.
-            const freshDetail = new Set(list.filter(o => o && o._hvacSummaryOnly !== true && o._hvacDetailStale !== true && o.executions && typeof o.executions === 'object' && Object.keys(o.executions).length).map(o => String(o.id)));
             const ids = eligible.filter(id => {
                 const c = hvacProgressCache.get(id);
                 const triedAt = hvacProgressAttempt.get(id) || 0;
-                return !freshDetail.has(id) && !hvacProgressPending.has(id) && !(c && c.ok && now - c.at < HVAC_PROGRESS_TTL) && (now - triedAt >= HVAC_PROGRESS_RETRY_MS);
+                return !hvacProgressPending.has(id) && !(c && c.ok && now - c.at < HVAC_PROGRESS_TTL) && (now - triedAt >= HVAC_PROGRESS_RETRY_MS);
             });
             if (!ids.length) return false;
 
@@ -4702,7 +4689,7 @@ async function authPedirNuevaClave() {
                 let viewChanged = false;
                 try {
                     // Vista ligera (trae ejecuciones) solo para filas resumen; las que ya tienen detalle usan la RPC numérica (~50 bytes por orden).
-                    const liteIds = ids;   // filas resumen o con detalle viejo: se calcula con las ejecuciones de la nube y la regla de la app
+                    const liteIds = hvacProgressDisabled ? ids : ids.filter(id => liteOnly.has(id));
                     viewChanged = liteIds.length ? await hvacFetchLiteProgress(liteIds, list) : false;
                 } catch (viewError) {
                     console.warn('[Avance] La vista ligera no respondió; se intentará RPC:', viewError);
@@ -4716,8 +4703,10 @@ async function authPedirNuevaClave() {
 
                 // Respaldo: RPC numérica. Solo se invoca si la vista no entregó ejecuciones
                 // verificables; una respuesta fallida nunca reemplaza el último valor bueno.
-                if (unresolved.length && !hvacProgressDisabled && hvacProgressLiteViewMissing) {
-                    const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
+                if (unresolved.length && !hvacProgressDisabled) {
+                    // v2 aplica el mismo criterio que el técnico (parámetros + checklist); si no existe, se usa la versión anterior.
+                    let rows = await supabaseFetch('rpc/hvac_orders_progress_v2', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
+                    if (!Array.isArray(rows)) rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
                     if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) {
                         hvacProgressDisabled = true;
                         console.info('[Avance] RPC no disponible; se conserva el conteo de la vista ligera o se muestra — hasta obtener datos válidos.');
@@ -5059,8 +5048,7 @@ async function authPedirNuevaClave() {
             const sel = document.getElementById('hist-filter-client');
             const clientKey = (sel && sel.value) || 'ALL';
             const label = clientKey !== 'ALL' && sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex].text : '';
-            const status = (document.getElementById('hist-filter-status') || {}).value || 'ALL';
-            return { text, clientKey, label, status };
+            return { text, clientKey, label };
         }
         async function fetchHistoryPage(reset, force) {
             if (!navigator.onLine) return false;
@@ -5068,7 +5056,7 @@ async function authPedirNuevaClave() {
             const f = historyServerFilters();
             if (reset) { st.offset = 0; st.hasMore = true; }
             if (force) hvacProgressCache.clear();   // botón Sincronizar: avance también se refresca
-            st.sig = f.text + '|' + f.clientKey + '|' + f.status;
+            st.sig = f.text + '|' + f.clientKey;
             const token = ++st.token;
             st.loading = true;
             let filters = '';
@@ -5077,8 +5065,6 @@ async function authPedirNuevaClave() {
                 filters += '&or=' + encodeURIComponent(`(id.ilike.${pat},payload->>client.ilike.${pat},payload->>technician.ilike.${pat})`);
             }
             if (f.label) filters += '&payload->>client=ilike.' + encodeURIComponent(pgLikePattern(clientRootLabel(f.label)));
-            // Estados guardados en la orden: se piden ya filtrados. Pendiente / En proceso se calculan con el avance real, en pantalla.
-            if (f.status === 'COMPLETED' || f.status === 'BILLED') filters += '&payload->>status=eq.' + f.status;
             // Paginación liviana: no descarga fotos, ejecuciones ni firmas en base64.
             let rows = await cloudFetchOrderSummaries(`&order=${historyServerOrder()}&limit=${HIST_FETCH_PAGE}&offset=${st.offset}${filters}`, { force: !!force });
             let paged = true;
@@ -5713,13 +5699,6 @@ async function authPedirNuevaClave() {
             };
             filterIds.forEach(id => fill(id, id === 'fin-filter-client' ? '<option value="ALL">Todos</option>' : '<option value="ALL">Todos los Clientes</option>', filterOptions));
             formIds.forEach(id => fill(id, '<option value="">-- Selecciona un Cliente --</option>', formOptions));
-            // Histórico: el filtro solo muestra los clientes del directorio (Gestión de Clientes), agrupados por raíz
-            if (officialNames.length) {
-                const histGroups = new Map();
-                officialNames.forEach(n => { const k = clientRootKey(n); if (k && !histGroups.has(k)) histGroups.set(k, clientRootLabel(n)); });
-                fill('hist-filter-client', '<option value="ALL">Todos los Clientes</option>',
-                    [...histGroups.entries()].map(([k, label]) => `<option value="${corrEsc(k)}">${corrEsc(label)}</option>`).join(''));
-            }
             populateCajaClientDropdown();
             syncEquipmentClientSelectors(true);
         }
@@ -5799,21 +5778,9 @@ async function authPedirNuevaClave() {
             if (!visible.length) return;
             const allChecked = visible.every(cb => cb.checked);
             visible.forEach(cb => cb.checked = !allChecked);
-            hvacSyncSelectAllButtons();
-        }
-        // El texto de cada botón "Seleccionar todos" sigue el estado real de las casillas (no el último clic)
-        function hvacSyncSelectAllButtons() {
-            document.querySelectorAll('button[onclick*="toggleSelectAllCheckboxes("]').forEach(btn => {
-                const m = /toggleSelectAllCheckboxes\('([^']+)'/.exec(btn.getAttribute('onclick') || '');
-                if (!m) return;
-                const visible = Array.from(document.querySelectorAll(m[1])).filter(cb => {
-                    const row = cb.closest('label');
-                    return !(row && row.style.display === 'none') && !cb.disabled;
-                });
-                const allChecked = visible.length > 0 && visible.every(cb => cb.checked);
-                const html = allChecked ? '<i class="fa-solid fa-xmark mr-1"></i> Deseleccionar todos' : '<i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos';
-                if (btn.innerHTML !== html) btn.innerHTML = html;
-            });
+            if (btn) {
+                btn.innerHTML = allChecked ? '<i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos' : '<i class="fa-solid fa-xmark mr-1"></i> Deseleccionar todos';
+            }
         }
 
         const DASH_ORDERS_PER_PAGE = 7;
@@ -7223,7 +7190,7 @@ async function authPedirNuevaClave() {
             const alreadyScheduled=new Set((proj.scheduledEquipmentIds||[]).map(String));
             if(equipmentIds.some(id=>alreadyScheduled.has(String(id))))return showToast('Uno o más equipos ya están programados en esta proyección. Actualiza la lista y vuelve a seleccionar.','error');
             try{
-              const baseId=await hvacBaseIdForProjection(proj),groups=((document.getElementById('sch-no-split')||{}).checked)?hvacMergeZoneGroups(hvacGroupEquipmentByZone(equipmentIds)):hvacGroupEquipmentByZone(equipmentIds);
+              const baseId=await hvacBaseIdForProjection(proj),groups=hvacGroupEquipmentByZone(equipmentIds);
               const orders=hvacBuildZoneOrders({client:proj.client,date,technician,technicians,groups,base:baseId});
               workOrders.push(...orders);
               proj.zoneBaseId=baseId;
@@ -7512,7 +7479,7 @@ async function authPedirNuevaClave() {
         function hvacBuildZoneOrders({ client, date, technician, technicians, groups, base, type = 'PREVENTIVO' }) {
             const ids = hvacZoneOrderIds(base, groups);
             return groups.map((g, i) => {
-                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, ...(g.zoneNames ? { zoneNames: g.zoneNames } : {}), zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: type, tipoRutina: type };
+                const o = { id: ids[i].id, client, date, technician, technicians, equipmentIds: g.ids, zoneId: g.zoneId, zoneName: g.zoneName, zonePart: ids[i].part, zoneParts: groups.length, zoneBaseId: base, executions: {}, status: 'PENDING', clientSignature: null, invoice: null, createdAt: new Date().toISOString(), maintenanceType: type, tipoRutina: type };
                 linkClientFields(o, client); return o;
             });
         }
@@ -7521,12 +7488,6 @@ async function authPedirNuevaClave() {
             const map=new Map();
             (ids||[]).forEach(id=>{const e=(equipmentCatalog||[]).find(x=>String(x.id)===String(id)||String(x.code)===String(id))||{};const zid=String(e.zoneId||'');const zname=String(e.zoneName||'').trim()||(zid?'Zona asignada':'Sin zona');const key=zid||'__NO_ZONE__';if(!map.has(key))map.set(key,{zoneId:zid,zoneName:zname,ids:[]});map.get(key).ids.push(id);});
             return Array.from(map.values()).sort((a,b)=>a.zoneName.localeCompare(b.zoneName,'es'));
-        }
-        // Une varias zonas en UN solo grupo: una sola orden y un solo informe con todos los equipos (sin partes -P#)
-        function hvacMergeZoneGroups(groups) {
-            if (!groups || groups.length < 2) return groups;
-            const names = groups.map(g => g.zoneName).filter(Boolean);
-            return [{ zoneId: '', zoneName: names.join(' · '), zoneNames: names, ids: groups.reduce((a, g) => a.concat(g.ids || []), []) }];
         }
 
         async function saveNewRoutineManual() {
@@ -9259,22 +9220,6 @@ async function authPedirNuevaClave() {
         const billingMoney = n => '$ ' + Number(n || 0).toLocaleString();
         const billingMonthLabel = k => { const [y, m] = k.split('-'); return new Date(+y, +m - 1, 1).toLocaleDateString('es', { month: 'long', year: 'numeric' }); };
 
-        // Si faltan partes de una matriz en memoria (histórico paginado), las trae una vez y repinta
-        var hvacBillingMatrixTried = new Set();
-        function hvacBillingLoadMissingParts() {
-            try {
-                (workOrders || []).forEach(o => {
-                    if (!o || String(o.id || '').startsWith('HIST-') || !hvacIsMatrixOrder(o)) return;
-                    const base = hvacMatrixBase(o);
-                    if (!base || hvacBillingMatrixTried.has(base)) return;
-                    const expected = Number(o.zoneParts || 0);
-                    if (expected > 1 && hvacMatrixParts(o).length < expected) {
-                        hvacBillingMatrixTried.add(base);
-                        if (typeof hvacLoadMatrixParts === 'function') hvacLoadMatrixParts(o).then(ok => { if (ok) renderBillingModule(); });
-                    }
-                });
-            } catch (e) { console.warn('[Facturación] No se pudieron verificar las partes de la matriz:', e); }
-        }
         function renderBillingModule() {
             const status = document.getElementById('billing-filter-status').value || 'ALL';
             const execMonth = document.getElementById('billing-filter-exec-month').value || '';
@@ -9283,22 +9228,9 @@ async function authPedirNuevaClave() {
             const tbody = document.getElementById('billing-table-body');
             tbody.innerHTML = '';
 
-            // Solo se listan rutinas que el técnico dejó COMPLETADAS al 100% (o las ya facturadas): nunca las programadas, en proceso o con avance parcial
-            const billingReady = o => {
-                const st = String(o.status || '').toUpperCase();
-                return st === 'BILLED' || (st === 'COMPLETED' && hvacOrderState(o) === 'COMPLETED');
-            };
-            // Matriz (rutina dividida por zonas -P#): UNA sola fila por matriz, a nombre de su parte titular, y solo cuando TODAS las partes están completadas.
-            hvacBillingLoadMissingParts();
             // Los filtros son independientes y se combinan entre sí (AND)
             const list = workOrders.filter(o => {
                 if (String(o.id || '').startsWith('HIST-')) return false;
-                if (hvacIsMatrixOrder(o)) {
-                    const holder = hvacMatrixHolder(o);
-                    if (!holder || String(holder.id) !== String(o.id)) return false;
-                    const ms = hvacMatrixState(o);
-                    if (ms !== 'COMPLETED' && ms !== 'BILLED') return false;
-                } else if (!billingReady(o)) return false;
                 if (billingRoutineType(o) === 'REVISION' && o.status !== 'BILLED') return false;   // las revisiones no se facturan (solo se conservan las ya facturadas en el pasado)
                 if (status === 'PENDING' && o.status !== 'COMPLETED') return false;
                 if (status === 'BILLED' && o.status !== 'BILLED') return false;
@@ -9329,7 +9261,6 @@ async function authPedirNuevaClave() {
             if (baseMonth) {
                 const pool = workOrders.filter(o => {
                     if (String(o.id || '').startsWith('HIST-')) return false;
-                    if (hvacIsMatrixOrder(o) && String((hvacMatrixHolder(o) || {}).id) !== String(o.id)) return false;   // una matriz = una factura
                     if (o.status !== 'BILLED' || billingMonthKey(o.invoice && o.invoice.date) !== baseMonth) return false;
                     if (status === 'PENDING') return false;
                     if (typeFilter !== 'ALL' && billingRoutineType(o) !== typeFilter) return false;
@@ -9407,9 +9338,8 @@ async function authPedirNuevaClave() {
                 const routineLabel = ({ PREVENTIVO: 'Preventivo', CORRECTIVO: 'Correctivo', REVISION: 'Revisión' })[routineType] || routineType;
                 const routineClass = routineType === 'CORRECTIVO' ? 'corr' : routineType === 'REVISION' ? 'rev' : 'prev';
                 const billedOn = isBilled && inv.date ? billingMonthKey(inv.date) : '';
-                const isMx = hvacIsMatrixOrder(o), mxN = isMx ? hvacMatrixParts(o).length : 0;
                 tbody.insertAdjacentHTML('beforeend', `<tr>
-                    <td class="font-bold text-slate-900">${esc(isMx ? hvacMatrixBase(o) : o.id)}${mxN > 1 ? ` <span class="text-[10px] font-bold text-slate-500">(${mxN} zonas)</span>` : ''}</td>
+                    <td class="font-bold text-slate-900">${esc(o.id)}</td>
                     <td class="font-bold text-teal-700">${esc(o.client)}</td>
                     <td><span class="bill-chip ${routineClass}">${routineLabel}</span></td>
                     <td>${esc(o.date)}</td>
@@ -9438,8 +9368,7 @@ async function authPedirNuevaClave() {
 
             document.getElementById('invoice-modal-backdrop').classList.remove('hidden');
             document.getElementById('inv-f-order-id').value = order.id;
-            const invLabel = hvacIsMatrixOrder(order) ? `${hvacMatrixBase(order)} · ${hvacMatrixParts(order).length} zonas` : order.id;
-            document.getElementById('inv-modal-title').innerText = inv.number ? `Editar Factura (${invLabel})` : `Facturar Orden (${invLabel})`;
+            document.getElementById('inv-modal-title').innerText = inv.number ? `Editar Factura (${order.id})` : `Facturar Orden (${order.id})`;
             document.getElementById('inv-f-number').value = inv.number || '';
             document.getElementById('inv-f-amount').value = inv.amount || (projInv && projInv.budget) || '';
             document.getElementById('inv-f-expenses').value = inv.expenses || '';
@@ -9740,7 +9669,7 @@ async function authPedirNuevaClave() {
                 if (!history.length && prev.status === 'DONE' && prev.doneAt) {
                     history.push({ action: 'RECOGIDA', at: prev.doneAt, by: prev.doneBy || '', note: prev.note || '' });
                 }
-                history.push({ action: done ? 'RECOGIDA' : 'REAPERTURA', at: now, by: who, note: done ? (note || '') : (note || 'Recogida reabierta') });
+                history.push({ action: done ? 'RECOGIDA' : 'REAPERTURA', at: now, by: who, note: done ? (note || '') : 'Recogida reabierta' });
                 o.toolPickup = done
                     ? { ...prev, status: 'DONE', doneAt: now, doneBy: who, note: note || '', history }
                     : { ...prev, status: 'PENDING', history };
@@ -9774,7 +9703,7 @@ async function authPedirNuevaClave() {
             list.innerHTML = arr.map(g => {
                 const pendIds = g.os.filter(o => hvacToolPickupState(o) === 'PENDING').map(o => o.id);
                 const head = g.os.length > 1
-                    ? '<div class="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100"><div><div class="text-sm font-black text-slate-900 leading-tight">' + esc(g.os[0].client || 'Sin cliente') + '</div><span class="font-mono font-bold text-xs text-slate-500">' + esc(g.base) + '</span><span class="text-[11px] text-slate-500 ml-2">· ' + g.os.length + ' partes</span></div>' +
+                    ? '<div class="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-100"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(g.base) + '</span><span class="text-[11px] text-slate-500 ml-2">' + esc(g.os[0].client || '') + ' · ' + g.os.length + ' partes</span></div>' +
                       (pendIds.length > 1 ? '<button type="button" data-act="group" data-ids="' + esc(pendIds.join('|')) + '" class="btn-teal text-[11px]"><i class="fa-solid fa-check-double"></i> Marcar toda la matriz (' + pendIds.length + ')</button>' : '') + '</div>'
                     : '';
                 const items = g.os.map(o => {
@@ -9786,9 +9715,9 @@ async function authPedirNuevaClave() {
                     const body = st === 'PENDING'
                         ? '<div class="flex gap-2 items-center mt-2"><input type="text" class="tp-note input-box text-xs flex-1" placeholder="Observación (opcional)"><button type="button" data-act="one" data-ids="' + esc(o.id) + '" class="btn-teal text-[11px]" style="flex:none"><i class="fa-solid fa-check"></i> Recogida</button></div>'
                         : '<div class="flex items-center justify-between gap-2 mt-1.5 flex-wrap"><span class="text-[11px] text-slate-500">Recogida el ' + fmt(parseFlexDate(tp.doneAt)) + (tp.doneBy ? ' por ' + esc(tp.doneBy) : '') + (tp.note ? ' · ' + esc(tp.note) : '') + '</span><button type="button" data-act="reopen" data-ids="' + esc(o.id) + '" class="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline">Reabrir</button></div>';
-                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><div class="text-sm font-black text-slate-900 leading-tight">' + esc(o.client || 'Sin cliente') + '</div><span class="font-mono font-bold text-xs text-slate-500">' + esc(hvacIsMatrixOrder(o) ? hvacMatrixBase(o) : o.id) + '</span>' +
+                    return '<div class="pt-2"><div class="flex items-center justify-between gap-2 flex-wrap"><div><span class="font-mono font-black text-xs text-slate-900">' + esc(hvacIsMatrixOrder(o) ? hvacMatrixBase(o) : o.id) + '</span>' +
                         (hvacIsMatrixOrder(o) ? '<span class="text-[11px] text-slate-600 ml-2">Rutina completa (' + hvacMatrixParts(o).length + ' partes)</span>' : (o.zoneName ? '<span class="text-[11px] text-slate-600 ml-2">' + esc(o.zoneName) + '</span>' : '')) + '</div>' + chip + '</div>' +
-                        '<div class="text-[11px] text-slate-500 mt-0.5">Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
+                        '<div class="text-[11px] text-slate-500 mt-0.5">' + esc(o.client || '') + ' · Técnico(s): ' + esc(o.technician || '-') + ' · Finalizada: ' + fmt(hvacToolDoneAt(o)) + '</div>' + body + '</div>';
                 }).join('');
                 return '<div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm">' + head + items + '</div>';
             }).join('');
@@ -9821,13 +9750,6 @@ async function authPedirNuevaClave() {
                     note: ev.note || '', legacy: !!ev.legacy
                 }));
             });
-            // Solo se puede revertir la ÚLTIMA recogida de una orden que hoy sigue como recogida
-            const lastByOrder = {};
-            events.forEach(ev => { const t = parseFlexDate(ev.at) || 0; if (!(ev.order in lastByOrder) || t >= lastByOrder[ev.order]) lastByOrder[ev.order] = t; });
-            events.forEach(ev => {
-                const ord = (workOrders || []).find(x => String(x.id) === String(ev.order));
-                ev.canRevert = ev.action === 'RECOGIDA' && !!ord && hvacToolPickupState(ord) === 'DONE' && (parseFlexDate(ev.at) || 0) === lastByOrder[ev.order];
-            });
             const matches = events.filter(e => !q || normText([e.order,e.client,e.zone,e.technician,e.by,e.note,e.action].join(' ')).includes(q));
             matches.sort((a,b) => (parseFlexDate(b.at) || 0) - (parseFlexDate(a.at) || 0));
             const fmtDate = value => {
@@ -9837,19 +9759,12 @@ async function authPedirNuevaClave() {
                 host.innerHTML = '<div class="py-8 text-center text-xs text-slate-400">' + (events.length ? 'No hay movimientos que coincidan con la búsqueda.' : 'Aún no hay recogidas registradas. Las nuevas aparecerán aquí automáticamente.') + '</div>';
                 return;
             }
-            host.innerHTML = '<table class="min-w-full text-xs"><thead><tr><th>Fecha y hora</th><th>Movimiento</th><th>Orden / Cliente</th><th>Técnico(s)</th><th>Responsable</th><th>Observación</th><th></th></tr></thead><tbody>' +
+            host.innerHTML = '<table class="min-w-full text-xs"><thead><tr><th>Fecha y hora</th><th>Movimiento</th><th>Orden / Cliente</th><th>Técnico(s)</th><th>Responsable</th><th>Observación</th></tr></thead><tbody>' +
                 matches.map(e => '<tr><td class="whitespace-nowrap">' + esc(fmtDate(e.at)) + (e.legacy ? '<div class="text-[10px] text-slate-400">Registro anterior</div>' : '') + '</td>' +
                     '<td><span class="inline-flex rounded-full px-2 py-1 text-[10px] font-bold ' + (e.action === 'REAPERTURA' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700') + '">' + (e.action === 'REAPERTURA' ? 'Reapertura' : 'Recogida') + '</span></td>' +
-                    '<td><div class="text-sm font-black text-slate-900 leading-tight">' + esc(e.client || 'Sin cliente') + '</div><div class="text-[11px] text-slate-500"><strong class="font-mono">' + esc(e.order) + '</strong>' + (e.zone ? ' · ' + esc(e.zone) : '') + '</div></td>' +
-                    '<td>' + esc(e.technician || '-') + '</td><td>' + esc(e.by || 'No registrado') + '</td><td>' + esc(e.note || '-') + '</td><td class="whitespace-nowrap">' + (e.canRevert ? '<button type="button" data-revert="' + esc(e.order) + '" data-client="' + esc(e.client) + '" class="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline">Revertir</button>' : '') + '</td></tr>').join('') +
+                    '<td><strong class="font-mono">' + esc(e.order) + '</strong><div class="text-[10px] text-slate-500">' + esc([e.client,e.zone].filter(Boolean).join(' · ')) + '</div></td>' +
+                    '<td>' + esc(e.technician || '-') + '</td><td>' + esc(e.by || 'No registrado') + '</td><td>' + esc(e.note || '-') + '</td></tr>').join('') +
                 '</tbody></table><div class="text-[10px] text-slate-400 mt-2">' + matches.length + ' movimiento(s) · más recientes primero</div>';
-            host.onclick = function (ev) {
-                const b = ev.target.closest('button[data-revert]'); if (!b) return;
-                const id = b.dataset.revert, cli = b.dataset.client || '';
-                if (!confirm('¿Revertir la recogida de herramientas de la orden ' + id + (cli ? ' (' + cli + ')' : '') + '?\n\nVolverá a la lista de pendientes y quedará registrado en el historial.')) return;
-                b.disabled = true;
-                hvacToolPickupSet([id], false, 'Recogida revertida (confirmada por error)');
-            };
         }
 
         function hvacReactivateOrderIfNeeded(order, previousIds) {
@@ -9878,23 +9793,13 @@ async function authPedirNuevaClave() {
             
             const searchText = normText(document.getElementById('hist-search-input')?.value);
             const selectedClient = document.getElementById('hist-filter-client')?.value || 'ALL';
-            const selectedStatus = document.getElementById('hist-filter-status')?.value || 'ALL';
-            // Pendiente / En proceso dependen del avance real: se consulta (una vez) el avance de las órdenes aún abiertas que no lo tienen.
-            if ((selectedStatus === 'PENDING' || selectedStatus === 'IN_PROGRESS') && navigator.onLine) {
-                const need = workOrders.filter(o => o && o._hvacSummaryOnly && !String(o.id || '').startsWith('HIST-')
-                    && !['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase())
-                    && matchesClientFilter(String(o.client || o.clientName || ''), selectedClient)
-                    && !(hvacProgressCache.get(String(o.id)) || {}).ok).slice(0, 40);
-                if (need.length) hvacRefreshProgress(need).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
-            }
             const filteredHistory = workOrders.filter(o => {
                 const orderId = String(o.id || '');
                 const client = String(o.client || o.clientName || '');
                 const technician = String(o.technician || '');
                 const matchesText = !searchText || [orderId, client, technician].some(value => normText(value).includes(searchText));
                 const matchesClient = matchesClientFilter(client, selectedClient);
-                const matchesStatus = selectedStatus === 'ALL' || hvacOrderState(o) === selectedStatus;
-                return matchesText && matchesClient && matchesStatus;
+                return matchesText && matchesClient;
             }).sort(getHistoryComparator()); // orden elegido (por defecto: más reciente arriba)
 
             const total = filteredHistory.length;
@@ -11125,8 +11030,15 @@ async function attEditSave() {
         const f = q('att-e-file').files[0];
         if (f) {
             const blob = await HVAC.img.compress(f, { maxW: 720, quality: 0.7, maxBytes: 120 * 1024 }), path = 'asistencia/' + fecha.replace(/-/g, '/') + '/' + id + '-adm-' + Date.now() + '.jpg';
-            if (!(await HVAC.storage.upload(path, blob, 'image/jpeg'))) return showToast('No se pudo subir la foto.', 'error');
-            patch.foto_url = HVAC.storage.publicUrl(path);
+            let url = null;
+            try {   // R2 primero; Supabase Storage como respaldo
+                const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+                const up = await Promise.race([r2keep(dataUrl, 'asistencia'), new Promise(res => setTimeout(() => res(null), 12000))]);
+                if (typeof up === 'string' && /^https?:\/\//i.test(up)) url = up;
+            } catch (e) { console.warn('[Asistencia] R2 no disponible:', e); }
+            if (!url && (await HVAC.storage.upload(path, blob, 'image/jpeg'))) url = HVAC.storage.publicUrl(path);
+            if (!url) return showToast('No se pudo subir la foto.', 'error');
+            patch.foto_url = url;
         } else if (q('att-e-rmfoto').checked) patch.foto_url = '';
     } catch (e) { return showToast('Error procesando la foto.', 'error'); }
     const r = await attRpc('admin_asistencia_update', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_id: id, p_patch: patch, p_motivo: motivo || '' });
@@ -11732,7 +11644,6 @@ async function attDelete(id) {
    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
     <input id="hvac-zone-batch-search" type="search" class="input-box" style="flex:1;min-width:170px;min-height:44px" placeholder="Buscar: código, nombre, serial, tipo, marca…" oninput="hvacBatchRender()">
     <select id="hvac-zone-batch-filter" class="input-box" style="min-height:44px" onchange="hvacBatchRender()"><option value="ALL">Todos</option><option value="NONE">Sin zona</option><option value="OTHER">En otra zona</option><option value="SAME">Ya en esta zona</option></select>
-    <select id="hvac-zone-batch-origin" class="input-box" style="min-height:44px" onchange="hvacBatchRender()" title="Zona donde están hoy los equipos"><option value="ALL">Zona de origen: todas</option></select>
    </div>
    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
     <button type="button" onclick="hvacBatchSelectAll(true)" style="min-height:40px;padding:0 12px;border:1px solid var(--line,#cbd5e1);border-radius:10px;font-size:12px;font-weight:800">Seleccionar resultados</button>
@@ -11841,16 +11752,15 @@ async function attDelete(id) {
  // ===== Asignación de equipos a una zona en lote =====
  const batchSel=new Set();let batchClient=null;
  const bNorm=v=>typeof normText==='function'?normText(v):String(v??'').toLowerCase();
- const bEls=()=>({zone:document.getElementById('hvac-zone-batch-zone'),q:document.getElementById('hvac-zone-batch-search'),f:document.getElementById('hvac-zone-batch-filter'),o:document.getElementById('hvac-zone-batch-origin'),list:document.getElementById('hvac-zone-batch-list'),count:document.getElementById('hvac-zone-batch-count')});
+ const bEls=()=>({zone:document.getElementById('hvac-zone-batch-zone'),q:document.getElementById('hvac-zone-batch-search'),f:document.getElementById('hvac-zone-batch-filter'),list:document.getElementById('hvac-zone-batch-list'),count:document.getElementById('hvac-zone-batch-count')});
  const bClientEquipments=()=>{const c=zClient();return c?(equipmentCatalog||[]).filter(e=>eqBelongsToClient(e,c)):[];};
  function bFiltered(){
-   const {zone,q,f,o}=bEls(),zid=String(zone?.value||''),term=bNorm(q?.value||'').trim(),mode=f?.value||'ALL',origin=o?.value||'ALL';
+   const {zone,q,f}=bEls(),zid=String(zone?.value||''),term=bNorm(q?.value||'').trim(),mode=f?.value||'ALL';
    return bClientEquipments().filter(e=>{
      const ez=String(e.zoneId||'');
      if(mode==='NONE'&&ez)return false;
      if(mode==='OTHER'&&(!ez||ez===zid))return false;
      if(mode==='SAME'&&(!zid||ez!==zid))return false;
-     if(origin!=='ALL'&&ez!==String(origin))return false;
      return !term||[e.code,e.name,e.serial,e.type,e.brand,e.model,e.zoneName].some(v=>bNorm(v).includes(term));
    }).sort((a,b)=>String(a.code||'').localeCompare(String(b.code||''),'es',{numeric:true}));
  }
@@ -11861,8 +11771,6 @@ async function attDelete(id) {
    const previous=zone.value,zones=window.HVAC_ZONES_CACHE.filter(z=>String(z.clientName||'')===String(client||'')).sort((a,b)=>String(a.name).localeCompare(String(b.name),'es',{numeric:true}));
    zone.innerHTML='<option value="">Selecciona una zona</option>'+zones.map(z=>`<option value="${escH(z.id)}">${escH(z.name)}</option>`).join('');
    zone.value=zones.some(z=>String(z.id)===String(previous))?previous:(zones.length===1?zones[0].id:'');
-   const og=document.getElementById('hvac-zone-batch-origin');
-   if(og){const prevO=og.value;og.innerHTML='<option value="ALL">Zona de origen: todas</option>'+zones.map(z=>`<option value="${escH(z.id)}">Origen: ${escH(z.name)}</option>`).join('');og.value=[...og.options].some(x=>x.value===prevO)?prevO:'ALL';}
    window.hvacBatchRender();
  };
  window.hvacBatchRender=function(){
@@ -11874,13 +11782,13 @@ async function attDelete(id) {
      const chip=same?'<span style="font-size:10px;font-weight:800;color:#047857;background:#d1fae5;border-radius:999px;padding:2px 8px;white-space:nowrap">En esta zona</span>':(ez?`<span style="font-size:10px;font-weight:800;color:#92400e;background:#fef3c7;border-radius:999px;padding:2px 8px;white-space:nowrap">${escH(e.zoneName||'Otra zona')}</span>`:'<span style="font-size:10px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:999px;padding:2px 8px;white-space:nowrap">Sin zona</span>');
      return `<label style="display:flex;align-items:center;gap:10px;min-height:44px;padding:6px 10px;border:1px solid var(--line,#e2e8f0);border-radius:10px;cursor:${same?'default':'pointer'};opacity:${same?.6:1}"><input type="checkbox" data-id="${escH(id)}" ${checked?'checked':''} ${same?'disabled':''} onchange="hvacBatchToggle(this)" style="width:18px;height:18px;flex:none"><span style="flex:1;min-width:0"><span style="display:block;font-weight:800;font-size:12.5px">${escH(e.code||'-')} <span style="font-weight:600;color:var(--text-2,#334155)">· ${escH(e.name||e.type||'Sin nombre')}</span></span><span style="display:block;font-size:10.5px;color:var(--text-2,#334155);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escH([e.type,e.brand,e.serial].filter(Boolean).join(' · '))}</span></span>${chip}</label>`;
    }).join(''):'<div style="font-size:12px;color:var(--text-2,#334155);padding:14px;text-align:center">No hay equipos que coincidan.</div>';
-   const visSel=rows.filter(e=>batchSel.has(String(e.id))).length;count.textContent=`${batchSel.size} seleccionado(s)${batchSel.size>visSel?` (${batchSel.size-visSel} fuera de esta vista)`:''} · ${rows.length} resultado(s)${rows.length>LIMIT?` (mostrando ${LIMIT}; usa el buscador)`:''}${typeof eqBackgroundLoading!=='undefined'&&eqBackgroundLoading?' · aún cargando equipos…':''}`;
+   count.textContent=`${batchSel.size} seleccionado(s) · ${rows.length} resultado(s)${rows.length>LIMIT?` (mostrando ${LIMIT}; usa el buscador)`:''}${typeof eqBackgroundLoading!=='undefined'&&eqBackgroundLoading?' · aún cargando equipos…':''}`;
  };
  window.hvacBatchToggle=function(cb){const id=cb.dataset.id;if(cb.checked)batchSel.add(id);else batchSel.delete(id);window.hvacBatchRender();};
  window.hvacBatchSelectAll=function(on){
    const zid=String(bEls().zone?.value||'');
    if(!on){batchSel.clear();}
-   else{batchSel.clear();bFiltered().forEach(e=>{if(!zid||String(e.zoneId||'')!==zid)batchSel.add(String(e.id));});}
+   else bFiltered().forEach(e=>{if(!zid||String(e.zoneId||'')!==zid)batchSel.add(String(e.id));});
    window.hvacBatchRender();
  };
  window.hvacBatchAssign=async function(){
@@ -11889,7 +11797,7 @@ async function attDelete(id) {
    const eqs=[...batchSel].map(id=>(equipmentCatalog||[]).find(e=>String(e.id)===id)).filter(e=>e&&String(e.zoneId||'')!==zid);
    if(!eqs.length)return showToast('Marca al menos un equipo que no esté ya en esa zona.','error');
    const moved=eqs.filter(e=>e.zoneId).length;
-   if(!confirm(`Se asignarán ${eqs.length} equipo(s) a "${z.name}"${moved?` (${moved} ya están en otra zona y se moverán)`:''}. ¿Continuar?`))return;
+   if(moved&&!confirm(`${moved} equipo(s) ya están en otra zona y se moverán a "${z.name}". ¿Continuar?`))return;
    const btn=document.getElementById('hvac-zone-batch-save'),lbl=document.getElementById('hvac-zone-batch-save-label'),old=lbl.textContent;
    btn.disabled=true;lbl.textContent='Guardando…';
    let synced=0,pending=0;
@@ -11913,10 +11821,8 @@ async function attDelete(id) {
 <script>
 /* ===== Nueva rutina: zonas, facturación por consecutivo y vista previa ===== */
 (function(){
-  var S={assign:{},values:{},targets:{},touched:false,noSplit:false};
+  var S={assign:{},values:{},targets:{},touched:false};
   function $(id){return document.getElementById(id);}
-  // Con "un solo informe" cada facturación se crea como UNA orden con todas sus zonas
-  function groupsOf(zs){return (S.noSplit&&zs.length>1)?hvacMergeZoneGroups(zs):zs;}
   function checkedIds(){return Array.from(document.querySelectorAll('.nr-eq-checkbox:checked')).map(function(c){return c.value;});}
   function zoneList(){return hvacGroupEquipmentByZone(checkedIds());}
   function zkey(g){return g.zoneId||'__NO_ZONE__';}
@@ -11956,7 +11862,7 @@ async function attDelete(id) {
     return used.map(function(gn){
       var zs=zonesOf(zones,gn), eq=[];
       zs.forEach(function(z){eq=eq.concat(z.ids);});
-      return {n:gn,groups:groupsOf(zs),equipmentIds:eq,value:used.length===1?budget:(Number(S.values[gn])||0),target:targetFor(gn,used.length,mats)};
+      return {n:gn,groups:zs,equipmentIds:eq,value:used.length===1?budget:(Number(S.values[gn])||0),target:targetFor(gn,used.length,mats)};
     });
   };
   function syncTotal(){
@@ -11977,7 +11883,6 @@ async function attDelete(id) {
     h+='<div class="flex items-center justify-between gap-2 flex-wrap mb-2"><p class="font-black text-teal-800 text-xs"><i class="fa-solid fa-layer-group mr-1"></i>Zonas y facturación <span class="font-semibold text-slate-500">· '+zones.length+' zona(s), '+eqCount(zones)+' equipo(s)</span></p>';
     if(zones.length>1) h+='<div class="flex gap-1.5"><button type="button" data-chip="one" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una sola facturación</button><button type="button" data-chip="each" class="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 rounded-lg" style="height:28px">Una por zona</button></div>';
     h+='</div>';
-    if(zones.length>1) h+='<label class="flex items-start gap-2 text-[11px] font-bold text-slate-700 mb-2"><input type="checkbox" data-nosplit class="mt-0.5"'+(S.noSplit?' checked':'')+'><span>Un solo informe con todas las zonas <span class="font-semibold text-slate-500">(sin dividir cada facturación en una orden por zona)</span></span></label>';
     if(zones.length>1){
       h+='<p class="text-[10px] text-slate-500 mb-1.5">Elige a qué facturación va cada zona. Cada facturación tiene su propio consecutivo.</p><div class="mb-3">';
       zones.forEach(function(z){
@@ -11991,9 +11896,9 @@ async function attDelete(id) {
       var zs=zonesOf(zones,gn), tgt=targetFor(gn,used.length,mats), base, label;
       if(tgt==='NEW'){newCount++;base=prevFormat(consecFreeLocal(pref,newCount),pref);label='<b class="font-mono text-teal-800">'+esc(base)+'</b> <span class="text-slate-500">nuevo · estimado</span>';}
       else{var p=mats.filter(function(x){return x.id===tgt;})[0];base=p.zoneBaseId;label='<span class="text-slate-500">Se agrega a</span> <b class="font-mono text-teal-800">'+esc(base)+'</b>';}
-      var zsE=groupsOf(zs), codes=hvacZoneOrderIds(base,zsE);
+      var codes=hvacZoneOrderIds(base,zs);
       h+='<div class="rounded-2xl border border-slate-200 p-3 mb-2"><div class="flex items-center justify-between gap-2 flex-wrap mb-1.5"><span class="font-black text-xs">'+(multi?'Facturación '+gn:'Consecutivo')+'</span><span class="text-[11px]">'+label+'</span></div><ul class="space-y-0.5 mb-1">';
-      zsE.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
+      zs.forEach(function(z,i){h+='<li class="flex justify-between gap-2 text-[11px]"><span><b class="font-mono">'+esc(codes[i].id)+'</b> · '+esc(z.zoneName)+'</span><span class="text-slate-500">'+z.ids.length+' eq.</span></li>';});
       h+='</ul>';
       if(mats.length) h+='<select data-target="'+gn+'" class="input-box text-xs mt-1.5"><option value="NEW"'+(tgt==='NEW'?' selected':'')+'>Consecutivo nuevo</option>'+mats.map(function(p){return '<option value="'+esc(p.id)+'"'+(tgt===p.id?' selected':'')+'>Agregar a '+esc(p.zoneBaseId)+' (mismo mes)</option>';}).join('')+'</select>';
       if(multi&&!isRev) h+='<label class="block text-[10px] font-bold text-slate-500 uppercase mt-2 mb-1">Valor de esta facturación ($)</label><input type="number" data-gv="'+gn+'" value="'+(Number(S.values[gn])||'')+'" class="input-box text-xs font-bold" placeholder="0">';
@@ -12018,8 +11923,7 @@ async function attDelete(id) {
   if(box){
     box.addEventListener('change',function(e){
       var t=e.target; if(!t||!t.dataset) return;
-      if(t.dataset.nosplit!==undefined){S.noSplit=!!t.checked;render();}
-      else if(t.dataset.zone!==undefined){S.assign[t.dataset.zone]=parseInt(t.value,10)||1;S.touched=false;render();}
+      if(t.dataset.zone!==undefined){S.assign[t.dataset.zone]=parseInt(t.value,10)||1;S.touched=false;render();}
       else if(t.dataset.target!==undefined){S.targets[t.dataset.target]=t.value;render();}
     });
     box.addEventListener('input',function(e){
@@ -12045,7 +11949,7 @@ async function attDelete(id) {
   if(picker) new MutationObserver(function(){render();}).observe(picker,{childList:true});
   var modal=$('new-routine-modal-backdrop');
   if(modal) new MutationObserver(function(){
-    if(modal.classList.contains('hidden')){S={assign:{},values:{},targets:{},touched:false,noSplit:false};var b=$('nr-zone-preview');if(b){b.classList.add('hidden');b.innerHTML='';}}
+    if(modal.classList.contains('hidden')){S={assign:{},values:{},targets:{},touched:false};var b=$('nr-zone-preview');if(b){b.classList.add('hidden');b.innerHTML='';}}
   }).observe(modal,{attributes:true,attributeFilter:['class']});
 })();
 </script>
@@ -13182,96 +13086,5 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 })();
 </script>
 
-<script id="modal-outside-click">
-// Cerrar la ventana abierta al hacer clic en la zona borrosa (fuera de la tarjeta).
-// Usa la misma función de cierre de cada ventana; si hay datos escritos sin guardar, pregunta antes.
-(function () {
-    var CLOSERS = {
-        'order-hub-modal-backdrop': 'closeOrderHubModal',
-        'add-eq-job-modal-backdrop': 'closeAddEquipmentToJobModal',
-        'formularios-modal-backdrop': 'closeFormulariosModal',
-        'form-type-editor-modal-backdrop': 'closeFormTypeEditorModal',
-        'batch-projection-modal-backdrop': 'closeBatchProjectionModal',
-        'batch-equipment-modal-backdrop': 'closeBatchEquipmentModal',
-        'schedule-modal-backdrop': 'closeScheduleModal',
-        'schedule-agenda-modal-backdrop': 'closeScheduleAgendaModal',
-        'new-routine-modal-backdrop': 'closeNewRoutineModal',
-        'corrective-client-modal-backdrop': 'closeCorrectiveClientModal',
-        'agenda-item-modal-backdrop': 'closeAgendaItemModal',
-        'caja-modal-backdrop': 'closeCajaModal',
-        'print-legalization-modal-backdrop': 'closePrintLegalizationModal',
-        'legalization-modal-backdrop': 'closeLegalizationModal',
-        'receipt-viewer-modal-backdrop': 'closeReceiptViewerModal',
-        'global-signature-modal-backdrop': 'closeGlobalSignatureModal',
-        'exec-equipment-modal-backdrop': 'closeEquipmentExecutionModal',
-        'equipment-history-modal-backdrop': 'closeEquipmentHistoryModal',
-        'invoice-modal-backdrop': 'closeInvoiceModal',
-        'user-edit-modal-backdrop': 'closeUserEditorModal',
-        'equipment-modal-backdrop': 'closeEquipmentModal',
-        'hvac-zones-modal': 'hvacCloseZonesManager'
-    };
-    var downTarget = null;
-    function isHidden(m) { return m.classList.contains('hidden') || m.style.display === 'none'; }
-    // Para no cerrar si se empezó a arrastrar/seleccionar dentro de la tarjeta y se soltó afuera
-    document.addEventListener('pointerdown', function (e) { downTarget = e.target; }, true);
-    document.addEventListener('mousedown', function (e) { downTarget = e.target; }, true);
-    // Marca "con cambios" cuando se escribe en un campo de la ventana (los buscadores y filtros no cuentan)
-    document.addEventListener('input', function (e) {
-        var t = e.target;
-        if (!t || !t.closest) return;
-        if (t.type === 'search' || /search|buscar|filter|filtro/i.test(t.id || '')) return;
-        var m = t.closest('.modal-backdrop, #hvac-zones-modal');
-        if (m) m.setAttribute('data-hvac-dirty', '1');
-    }, true);
-    document.addEventListener('click', function (e) {
-        var m = e.target;
-        if (!m || !m.id || !CLOSERS[m.id]) return;      // solo si el clic fue en el fondo mismo, no dentro de la tarjeta
-        if (downTarget !== m || isHidden(m)) return;
-        var fn = window[CLOSERS[m.id]];
-        if (typeof fn !== 'function') return;
-        if (m.getAttribute('data-hvac-dirty') === '1' && !window.confirm('Hay datos escritos sin guardar. ¿Cerrar la ventana de todos modos?')) return;
-        m.removeAttribute('data-hvac-dirty');
-        try { fn(); } catch (err) { console.warn('[Ventana] No se pudo cerrar:', err); }
-    }, false);
-    // Al cerrarse (por cualquier vía) se limpia la marca de cambios
-    if (window.MutationObserver) {
-        var mo = new MutationObserver(function (recs) {
-            recs.forEach(function (r) { if (isHidden(r.target)) r.target.removeAttribute('data-hvac-dirty'); });
-        });
-        Object.keys(CLOSERS).forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) mo.observe(el, { attributes: true, attributeFilter: ['class', 'style'] });
-        });
-    }
-})();
-</script>
-
-<script id="select-all-sync">
-// Mantiene el texto "Seleccionar todos / Deseleccionar todos" igual al estado real de las casillas.
-(function () {
-    var pend = false;
-    function sync() { if (pend) return; pend = true; setTimeout(function () { pend = false; try { hvacSyncSelectAllButtons(); } catch (e) {} }, 0); }
-    document.addEventListener('change', function (e) { if (e.target && e.target.type === 'checkbox') sync(); }, true);
-    document.addEventListener('click', sync, true);
-    if (window.MutationObserver) {
-        var mo = new MutationObserver(sync);
-        ['new-routine-modal-backdrop', 'schedule-modal-backdrop', 'schedule-agenda-modal-backdrop', 'corrective-client-modal-backdrop'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) mo.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
-        });
-    }
-    sync();
-})();
-</script>
-<script id="no-split-reset">
-// La casilla "Un solo informe con todas las zonas" de Programar vuelve a desmarcada cada vez que se cierra la ventana.
-(function () {
-    var m = document.getElementById('schedule-modal-backdrop');
-    if (!m || !window.MutationObserver) return;
-    new MutationObserver(function () {
-        if (m.classList.contains('hidden')) { var c = document.getElementById('sch-no-split'); if (c) c.checked = false; }
-    }).observe(m, { attributes: true, attributeFilter: ['class'] });
-})();
-</script>
 </body>
 </html>
