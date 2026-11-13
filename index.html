@@ -2248,27 +2248,50 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
 
     <!-- MODAL: IMPRESIÓN MASIVA DE LEGALIZACIONES -->
     <div id="print-legalization-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10003;">
-        <div class="modal-card max-w-2xl">
+        <div class="modal-card max-w-3xl">
             <div class="flex items-center justify-between border-b pb-3.5 mb-4">
                 <div>
-                    <h3 class="font-black text-slate-900 text-sm"><i class="fa-solid fa-print text-indigo-600 mr-1.5"></i> Imprimir Legalización</h3>
-                    <p class="text-[11px] text-slate-500 mt-1">Selecciona hasta 4 gastos para generar una hoja carta en cuadrícula.</p>
+                    <h3 class="font-black text-slate-900 text-sm"><i class="fa-solid fa-print text-indigo-600 mr-1.5"></i> Impresión masiva de comprobantes</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Genera un solo PDF con todo el lote, distribuido automáticamente en grupos de 4 comprobantes por página.</p>
                 </div>
                 <button onclick="closePrintLegalizationModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
             </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div>
+                    <label for="print-legalization-scope" class="block text-xs font-bold text-slate-700 mb-1">¿Qué deseas imprimir?</label>
+                    <select id="print-legalization-scope" class="input-box text-xs" onchange="applyPrintLegalizationScope()">
+                        <option value="pending">Todos los pendientes por legalizar</option>
+                        <option value="cut">Todas las facturas de un corte</option>
+                        <option value="manual">Selección manual</option>
+                    </select>
+                </div>
+                <div id="print-legalization-cut-wrap" class="hidden">
+                    <label for="print-legalization-cut" class="block text-xs font-bold text-slate-700 mb-1">Selecciona el corte</label>
+                    <select id="print-legalization-cut" class="input-box text-xs" onchange="applyPrintLegalizationScope()">
+                        <option value="">No hay cortes disponibles</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+                <p id="print-legalization-scope-hint" class="text-[11px] text-slate-500">Se marcarán automáticamente todos los gastos pendientes.</p>
+                <button type="button" onclick="selectAllVisiblePrintLegalization()" class="px-3 py-2 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition"><i class="fa-solid fa-check-double mr-1"></i> Seleccionar todos los visibles</button>
+            </div>
+
             <div class="max-h-[55vh] overflow-y-auto border border-slate-100 rounded-xl">
                 <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead><tr><th class="w-10">Elegir</th><th>ID</th><th>Fecha / Cliente</th><th>Centro de Costo #</th><th>Valor</th></tr></thead>
-                    <tbody id="print-legalization-list"></tbody>
-                </table>
+                    <table class="w-full">
+                        <thead><tr><th class="w-10">Elegir</th><th>ID</th><th>Fecha / Cliente</th><th>Centro de Costo #</th><th>Valor</th></tr></thead>
+                        <tbody id="print-legalization-list"></tbody>
+                    </table>
                 </div>
             </div>
             <div class="flex items-center justify-between gap-3 pt-4 flex-wrap">
-                <p class="text-xs text-slate-500"><span id="print-legalization-selected-count" class="font-black text-indigo-700">0</span> de 4 gastos seleccionados</p>
+                <p class="text-xs text-slate-500"><span id="print-legalization-selected-count" class="font-black text-indigo-700">0</span> gastos seleccionados · <span id="print-legalization-page-count" class="font-black text-indigo-700">0</span> páginas estimadas</p>
                 <div class="flex gap-2.5">
                     <button type="button" onclick="closePrintLegalizationModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition">Cancelar</button>
-                    <button type="button" onclick="generateCajaLegalizationPDF()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-sm"><i class="fa-solid fa-file-pdf mr-1"></i> Descargar PDF</button>
+                    <button type="button" onclick="generateCajaLegalizationPDF()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-sm"><i class="fa-solid fa-file-pdf mr-1"></i> Generar PDF del lote</button>
                 </div>
             </div>
         </div>
@@ -6538,34 +6561,106 @@ async function authPedirNuevaClave() {
             document.getElementById('receipt-viewer-modal-backdrop').classList.add('hidden');
         }
 
-        function openPrintLegalizationModal() {
-            ensureCajaConsecutiveIds();
-            if (!cajaMenorItems.length) return showToast("No hay gastos registrados para imprimir.", "error");
+        function getPrintLegalizationCutItems() {
+            const cutSelect = document.getElementById('print-legalization-cut');
+            const cutId = cutSelect ? cutSelect.value : '';
+            const cut = cajaLegalizations.find(l => String(l.id) === String(cutId));
+            const ids = new Set((cut && Array.isArray(cut.expenseIds) ? cut.expenseIds : []).map(id => String(id)));
+            return cajaMenorItems.filter(item => ids.has(String(item.id)));
+        }
+
+        function getPrintLegalizationCandidates() {
+            const scope = (document.getElementById('print-legalization-scope') || {}).value || 'pending';
+            if (scope === 'pending') return cajaMenorItems.filter(item => !item.legalized);
+            if (scope === 'cut') return getPrintLegalizationCutItems();
+            return cajaMenorItems.slice();
+        }
+
+        function updatePrintLegalizationSelectionCount() {
+            const count = document.querySelectorAll('.legalization-print-checkbox:checked').length;
+            const countEl = document.getElementById('print-legalization-selected-count');
+            const pagesEl = document.getElementById('print-legalization-page-count');
+            if (countEl) countEl.innerText = String(count);
+            if (pagesEl) pagesEl.innerText = String(Math.ceil(count / 4));
+        }
+
+        function renderPrintLegalizationCandidates(selectedIds) {
             const tbody = document.getElementById('print-legalization-list');
+            if (!tbody) return;
+            const selected = selectedIds instanceof Set ? selectedIds : new Set();
+            const items = getPrintLegalizationCandidates().slice().sort((a, b) => {
+                const da = Date.parse(a.date || '') || 0;
+                const db = Date.parse(b.date || '') || 0;
+                return db - da || String(a.consecutiveId || '').localeCompare(String(b.consecutiveId || ''), 'es', { numeric: true, sensitivity: 'base' });
+            });
             tbody.innerHTML = '';
-            cajaMenorItems.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(item => {
+            if (!items.length) {
+                const scope = (document.getElementById('print-legalization-scope') || {}).value || 'pending';
+                const message = scope === 'pending' ? 'No hay gastos pendientes por legalizar.' : scope === 'cut' ? 'Este corte no tiene facturas asociadas disponibles.' : 'No hay gastos registrados para seleccionar.';
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-slate-400 font-medium text-xs">${esc(message)}</td></tr>`;
+                updatePrintLegalizationSelectionCount();
+                return;
+            }
+            items.forEach(item => {
                 const clientName = item.clientName || item.client || 'Cliente no asignado';
                 const costCenter = item.costCenterNumber || 'Sin número registrado';
+                const checked = selected.has(String(item.id)) ? 'checked' : '';
                 tbody.insertAdjacentHTML('beforeend', `<tr>
-                    <td><input type="checkbox" value="${esc(item.id)}" class="legalization-print-checkbox rounded text-indigo-600 w-4 h-4" onchange="handlePrintLegalizationSelection(this)"></td>
+                    <td><input type="checkbox" value="${esc(item.id)}" class="legalization-print-checkbox rounded text-indigo-600 w-4 h-4" ${checked} onchange="handlePrintLegalizationSelection(this)"></td>
                     <td class="font-black text-indigo-700">${esc(item.consecutiveId)}</td>
                     <td class="text-xs"><span class="block">${esc(item.date || '-')}</span><span class="font-bold text-teal-700">${esc(clientName)}</span></td>
                     <td class="text-xs">${esc(costCenter)}</td>
-                    <td class="font-mono text-xs">$ ${(item.amount || 0).toLocaleString()}</td>
+                    <td class="font-mono text-xs">$ ${(Number(item.amount) || 0).toLocaleString('es-CO')}</td>
                 </tr>`);
             });
-            document.getElementById('print-legalization-selected-count').innerText = '0';
+            updatePrintLegalizationSelectionCount();
+        }
+
+        function openPrintLegalizationModal() {
+            ensureCajaConsecutiveIds();
+            if (!cajaMenorItems.length) return showToast("No hay gastos registrados para imprimir.", "error");
+
+            const scopeSelect = document.getElementById('print-legalization-scope');
+            const cutSelect = document.getElementById('print-legalization-cut');
+            const cutWrap = document.getElementById('print-legalization-cut-wrap');
+            const cuts = cajaLegalizations.slice().sort((a, b) => (Date.parse(b.date || b.createdAt || '') || 0) - (Date.parse(a.date || a.createdAt || '') || 0));
+            if (cutSelect) {
+                cutSelect.innerHTML = cuts.length
+                    ? cuts.map((cut, index) => `<option value="${esc(cut.id)}">${esc(cut.concept || 'Corte sin concepto')} · ${esc(cut.date || '-')} · ${(Array.isArray(cut.expenseIds) ? cut.expenseIds.length : 0)} facturas</option>`).join('')
+                    : '<option value="">No hay cortes disponibles</option>';
+                if (cuts.length) cutSelect.value = String(cuts[0].id);
+            }
+            if (scopeSelect) scopeSelect.value = 'pending';
+            if (cutWrap) cutWrap.classList.add('hidden');
+            applyPrintLegalizationScope();
             document.getElementById('print-legalization-modal-backdrop').classList.remove('hidden');
         }
 
-        function handlePrintLegalizationSelection(checkbox) {
-            const selected = document.querySelectorAll('.legalization-print-checkbox:checked');
-            if (selected.length > 4) {
-                checkbox.checked = false;
-                showToast("Puedes seleccionar máximo 4 gastos por hoja.", "error");
+        function applyPrintLegalizationScope() {
+            const scope = (document.getElementById('print-legalization-scope') || {}).value || 'pending';
+            const cutWrap = document.getElementById('print-legalization-cut-wrap');
+            const hint = document.getElementById('print-legalization-scope-hint');
+            if (cutWrap) cutWrap.classList.toggle('hidden', scope !== 'cut');
+
+            const candidates = getPrintLegalizationCandidates();
+            const selectedIds = new Set(scope === 'manual' ? [] : candidates.map(item => String(item.id)));
+            if (hint) {
+                hint.textContent = scope === 'pending'
+                    ? `Se seleccionaron automáticamente ${candidates.length} gasto(s) pendientes por legalizar.`
+                    : scope === 'cut'
+                        ? `Se seleccionaron automáticamente ${candidates.length} factura(s) asociada(s) al corte elegido.`
+                        : 'Marca individualmente los comprobantes que deseas incluir; no hay límite de selección.';
             }
-            document.getElementById('print-legalization-selected-count').innerText =
-                String(document.querySelectorAll('.legalization-print-checkbox:checked').length);
+            renderPrintLegalizationCandidates(selectedIds);
+        }
+
+        function handlePrintLegalizationSelection() {
+            updatePrintLegalizationSelectionCount();
+        }
+
+        function selectAllVisiblePrintLegalization() {
+            document.querySelectorAll('.legalization-print-checkbox').forEach(checkbox => { checkbox.checked = true; });
+            updatePrintLegalizationSelectionCount();
         }
 
         function closePrintLegalizationModal() {
@@ -6573,45 +6668,41 @@ async function authPedirNuevaClave() {
         }
 
         async function generateCajaLegalizationPDF() {
-            const selectedIds = Array.from(document.querySelectorAll('.legalization-print-checkbox:checked')).map(el => el.value);
-            if (!selectedIds.length || selectedIds.length > 4) return showToast("Selecciona entre 1 y 4 gastos.", "error");
+            const selectedIds = Array.from(new Set(Array.from(document.querySelectorAll('.legalization-print-checkbox:checked')).map(el => el.value)));
+            if (!selectedIds.length) return showToast("Selecciona al menos un comprobante para generar el PDF.", "error");
             if (!window.jspdf || !window.jspdf.jsPDF) return showToast("No se pudo cargar el generador PDF. Verifica tu conexión e inténtalo de nuevo.", "error");
 
             const selectedItems = selectedIds.map(id => cajaMenorItems.find(item => String(item.id) === String(id))).filter(Boolean);
             if (!selectedItems.length) return showToast("No se encontraron los gastos seleccionados.", "error");
             ensureCajaConsecutiveIds();
-            try { await afcPreloadPhotos(selectedItems.map(i => i.receiptImg).filter(Boolean)); } catch (e) { console.warn('[PDF] fotos de caja', e); }   // fotos en R2 -> base64
+            try { await afcPreloadPhotos(selectedItems.map(i => i.receiptImg).filter(Boolean)); } catch (e) { console.warn('[PDF] fotos de caja', e); }
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('portrait', 'mm', 'letter');
             const pageW = doc.internal.pageSize.getWidth();
             const pageH = doc.internal.pageSize.getHeight();
-            const margin = 5;      // margen mínimo seguro de impresión (antes 9 mm)
-            const gap = 2.5;       // separación entre cuadros (antes 3 mm)
-            const pad = 3;         // espacio interior de cada cuadro (antes 6 mm)
-            const LH = 3.9;        // interlineado de los datos
+            const margin = 5;
+            const gap = 2.5;
+            const pad = 3;
+            const LH = 3.9;
             const cellW = (pageW - margin * 2 - gap) / 2;
             const cellH = (pageH - margin * 2 - gap) / 2;
             const innerW = cellW - pad * 2;
 
-            for (let index = 0; index < 4; index++) {
-                const col = index % 2;
-                const row = Math.floor(index / 2);
+            // Un solo PDF para todo el lote: cada grupo de 4 comprobantes ocupa una página.
+            for (let index = 0; index < selectedItems.length; index++) {
+                if (index > 0 && index % 4 === 0) doc.addPage();
+                const pageSlot = index % 4;
+                const col = pageSlot % 2;
+                const row = Math.floor(pageSlot / 2);
                 const x = margin + col * (cellW + gap);
                 const y = margin + row * (cellH + gap);
                 doc.setDrawColor(148, 163, 184);
                 doc.setLineWidth(0.35);
                 doc.roundedRect(x, y, cellW, cellH, 2, 2);
                 const item = selectedItems[index];
-                if (!item) {
-                    doc.setFont('helvetica', 'normal');
-                    doc.setFontSize(10);
-                    doc.setTextColor(148, 163, 184);
-                    doc.text('Espacio disponible', x + cellW / 2, y + cellH / 2, { align: 'center' });
-                    continue;
-                }
 
-                // 1) Se miden los datos primero: la foto recibe TODO el espacio restante del cuadro.
+                // 1) Se miden los datos primero: la foto recibe todo el espacio restante del cuadro.
                 const centerName = item.clientName || item.client || 'Cliente no asignado';
                 const centerNumber = item.costCenterNumber || 'Sin número registrado';
                 doc.setFont('helvetica', 'bold');
@@ -6644,7 +6735,7 @@ async function authPedirNuevaClave() {
                     doc.text(src ? 'No se pudo cargar la foto' : 'Sin foto de factura / comprobante', x + cellW / 2, boxY + boxH / 2, { align: 'center' });
                 }
 
-                // 3) Datos: consecutivo (9 pt, ya no 11 pt) + fecha en la misma línea, luego centro de costo, número y valor.
+                // 3) Datos del comprobante.
                 doc.setDrawColor(226, 232, 240);
                 doc.setLineWidth(0.2);
                 doc.line(x + pad, textTop - 1.2, x + cellW - pad, textTop - 1.2);
@@ -6672,9 +6763,9 @@ async function authPedirNuevaClave() {
             }
 
             const stamp = new Date().toISOString().slice(0, 10);
-            doc.save(`Legalizacion_Caja_Menor_${stamp}.pdf`);
+            doc.save(`Legalizacion_Caja_Menor_${stamp}_${selectedItems.length}_comprobantes.pdf`);
             closePrintLegalizationModal();
-            showToast("PDF de legalización descargado.");
+            showToast(`PDF del lote descargado: ${selectedItems.length} comprobante(s) en ${Math.ceil(selectedItems.length / 4)} página(s).`);
         }
 
         // ===== Recibo oficial de legalización de Caja Menor (PDF) =====
