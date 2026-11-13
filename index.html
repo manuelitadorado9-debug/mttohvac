@@ -2313,10 +2313,14 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <label class="block text-xs font-bold text-slate-700 mb-1">Concepto / Referencia del Corte *</label>
                     <input type="text" id="leg-f-concept" required class="input-box font-bold text-xs" placeholder="Ej: Legalización Octubre - Fondo Semanal">
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Quién legaliza *</label>
                         <input type="text" id="leg-f-by" required class="input-box font-bold text-xs" placeholder="Nombre completo">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Quién supervisa *</label>
+                        <input type="text" id="leg-f-supervisor" required class="input-box font-bold text-xs" placeholder="Nombre completo">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Quién recibe *</label>
@@ -6561,19 +6565,35 @@ async function authPedirNuevaClave() {
             document.getElementById('receipt-viewer-modal-backdrop').classList.add('hidden');
         }
 
+        // El consecutivo CM-### se reserva al registrar cada gasto y representa el orden
+        // de incorporación del administrador; nunca se ordena por la fecha de la factura.
+        function orderCajaItemsByUploadSequence(items) {
+            return (Array.isArray(items) ? items : []).map((item, index) => {
+                const match = String(item && item.consecutiveId || '').match(/^CM-(\d+)$/i);
+                return { item, index, sequence: match ? Number(match[1]) : null };
+            }).sort((a, b) => {
+                if (a.sequence != null && b.sequence != null) return a.sequence - b.sequence || a.index - b.index;
+                if (a.sequence != null) return -1;
+                if (b.sequence != null) return 1;
+                return a.index - b.index;
+            }).map(entry => entry.item);
+        }
+
         function getPrintLegalizationCutItems() {
             const cutSelect = document.getElementById('print-legalization-cut');
             const cutId = cutSelect ? cutSelect.value : '';
             const cut = cajaLegalizations.find(l => String(l.id) === String(cutId));
-            const ids = new Set((cut && Array.isArray(cut.expenseIds) ? cut.expenseIds : []).map(id => String(id)));
-            return cajaMenorItems.filter(item => ids.has(String(item.id)));
+            // Mantener exactamente la secuencia guardada en el corte (la misma del recibo oficial).
+            return (cut && Array.isArray(cut.expenseIds) ? cut.expenseIds : [])
+                .map(id => cajaMenorItems.find(item => String(item.id) === String(id)))
+                .filter(Boolean);
         }
 
         function getPrintLegalizationCandidates() {
             const scope = (document.getElementById('print-legalization-scope') || {}).value || 'pending';
-            if (scope === 'pending') return cajaMenorItems.filter(item => !item.legalized);
+            if (scope === 'pending') return orderCajaItemsByUploadSequence(cajaMenorItems.filter(item => !item.legalized));
             if (scope === 'cut') return getPrintLegalizationCutItems();
-            return cajaMenorItems.slice();
+            return orderCajaItemsByUploadSequence(cajaMenorItems.slice());
         }
 
         function updatePrintLegalizationSelectionCount() {
@@ -6588,11 +6608,8 @@ async function authPedirNuevaClave() {
             const tbody = document.getElementById('print-legalization-list');
             if (!tbody) return;
             const selected = selectedIds instanceof Set ? selectedIds : new Set();
-            const items = getPrintLegalizationCandidates().slice().sort((a, b) => {
-                const da = Date.parse(a.date || '') || 0;
-                const db = Date.parse(b.date || '') || 0;
-                return db - da || String(a.consecutiveId || '').localeCompare(String(b.consecutiveId || ''), 'es', { numeric: true, sensitivity: 'base' });
-            });
+            // El arreglo ya viene ordenado por consecutivo o por la secuencia propia del corte.
+            const items = getPrintLegalizationCandidates();
             tbody.innerHTML = '';
             if (!items.length) {
                 const scope = (document.getElementById('print-legalization-scope') || {}).value || 'pending';
@@ -6672,7 +6689,10 @@ async function authPedirNuevaClave() {
             if (!selectedIds.length) return showToast("Selecciona al menos un comprobante para generar el PDF.", "error");
             if (!window.jspdf || !window.jspdf.jsPDF) return showToast("No se pudo cargar el generador PDF. Verifica tu conexión e inténtalo de nuevo.", "error");
 
-            const selectedItems = selectedIds.map(id => cajaMenorItems.find(item => String(item.id) === String(id))).filter(Boolean);
+            const selectedSet = new Set(selectedIds.map(String));
+            // Filtrar sobre la lista ordenada, no sobre la selección del DOM ni sobre la fecha de factura.
+            // Así la impresión por corte coincide con el detalle del recibo oficial.
+            const selectedItems = getPrintLegalizationCandidates().filter(item => selectedSet.has(String(item.id)));
             if (!selectedItems.length) return showToast("No se encontraron los gastos seleccionados.", "error");
             ensureCajaConsecutiveIds();
             try { await afcPreloadPhotos(selectedItems.map(i => i.receiptImg).filter(Boolean)); } catch (e) { console.warn('[PDF] fotos de caja', e); }
@@ -6867,9 +6887,11 @@ async function authPedirNuevaClave() {
                 ['Fecha de legalización', formatReceiptDate(leg.date)],
                 ['Concepto', leg.concept || '-'],
                 ['Quién legaliza', leg.legalizedBy || 'Sin registrar'],
+                ['Quién supervisa', leg.supervisedBy || 'Sin registrar'],
                 ['Quién recibe', leg.receivedBy || 'Sin registrar'],
                 ['Capital recibido', money(capital)],
-                ['Facturas asociadas', String(expenses.length)]
+                ['Facturas asociadas', String(expenses.length)],
+                ['Total gastado', money(totalSpent)]
             ];
             const colW = CW / 2;
             for (let i = 0; i < info.length; i += 2) {
@@ -6916,18 +6938,24 @@ async function authPedirNuevaClave() {
             );
             y += 4;
 
-            // --- Firmas
-            ensure(34);
-            y += 18;
+            // --- Tres espacios de firma: legaliza, supervisa y recibe.
+            ensure(38);
+            y += 15;
             doc.setDrawColor(100, 116, 139); doc.setLineWidth(0.3);
-            const sigW = (CW - 20) / 2;
-            [['Quién legaliza', leg.legalizedBy], ['Quién recibe', leg.receivedBy]].forEach(([role, person], k) => {
-                const x = M + k * (sigW + 20);
+            const sigGap = 7;
+            const sigW = (CW - sigGap * 2) / 3;
+            [
+                ['Quién legaliza', leg.legalizedBy],
+                ['Quién supervisa', leg.supervisedBy || leg.supervisor],
+                ['Quién recibe', leg.receivedBy]
+            ].forEach(([role, person], k) => {
+                const x = M + k * (sigW + sigGap);
                 doc.line(x, y, x + sigW, y);
-                doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(15, 23, 42);
-                doc.text(person || '', x + sigW / 2, y + 4.5, { align: 'center' });
-                doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
-                doc.text(role + ' · Firma', x + sigW / 2, y + 8.5, { align: 'center' });
+                doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(15, 23, 42);
+                const nameLines = doc.splitTextToSize(String(person || ''), sigW - 2).slice(0, 2);
+                if (nameLines.length) doc.text(nameLines, x + sigW / 2, y + 4.2, { align: 'center' });
+                doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
+                doc.text(role + ' · Firma', x + sigW / 2, y + 12.5, { align: 'center' });
             });
 
             // --- Numeración de páginas
@@ -6954,6 +6982,7 @@ async function authPedirNuevaClave() {
             document.getElementById('leg-f-date').value = new Date().toISOString().split('T')[0];
             const me = systemUsers.find(u => String(u.id) === String(activeUser));
             document.getElementById('leg-f-by').value = me ? (me.name || me.username || '') : '';
+            document.getElementById('leg-f-supervisor').value = '';
             document.getElementById('leg-f-receiver').value = '';
         }
 
@@ -6966,14 +6995,16 @@ async function authPedirNuevaClave() {
             const capital = parseFloat(document.getElementById('leg-f-capital').value) || 0;
             const date = document.getElementById('leg-f-date').value;
             const legalizedBy = document.getElementById('leg-f-by').value.trim();
+            const supervisedBy = document.getElementById('leg-f-supervisor').value.trim();
             const receivedBy = document.getElementById('leg-f-receiver').value.trim();
-            if (!legalizedBy || !receivedBy) return showToast("Indica quién legaliza y quién recibe.", "error");
-            const pending = cajaMenorItems.filter(c => !c.legalized);
+            if (!legalizedBy || !supervisedBy || !receivedBy) return showToast("Indica quién legaliza, quién supervisa y quién recibe.", "error");
+            // Congelar el corte en el orden de consecutivo (orden de incorporación de los gastos).
+            const pending = orderCajaItemsByUploadSequence(cajaMenorItems.filter(c => !c.legalized));
             const totalSpent = pending.reduce((acc, curr) => acc + (curr.amount || 0), 0);
             const expenseIds = pending.map(c => c.id);
 
             pending.forEach(c => c.legalized = true);
-            const legObj = { id: `LEG-${Date.now()}`, createdAt: new Date().toISOString(), concept, capital, totalSpent, date, expenseIds, legalizedBy, receivedBy };
+            const legObj = { id: `LEG-${Date.now()}`, createdAt: new Date().toISOString(), concept, capital, totalSpent, date, expenseIds, legalizedBy, supervisedBy, receivedBy };
             cajaLegalizations.push(legObj);
             registrarAuditoria('LEGALIZAR', 'hvac_legalizaciones', legObj.id);
 
