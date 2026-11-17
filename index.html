@@ -1675,6 +1675,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina. Solo aparecen las rutinas completadas al 100% por el técnico y las ya facturadas.</p>
                 </div>
                 <div class="flex items-end gap-2 flex-wrap">
+                    <button type="button" onclick="openInvoiceUploadOptions()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"><i class="fa-solid fa-file-invoice-dollar mr-1"></i> Cargar facturas</button>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
                             <option value="ALL" selected>Completadas y facturadas</option>
@@ -1713,6 +1714,24 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                             </tr>
                         </thead>
                         <tbody id="billing-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="manual-invoices-panel" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-file-invoice-dollar text-indigo-600 mr-2"></i>Facturas históricas / manuales</h3>
+                        <p class="text-xs text-slate-500 mt-1">Registros de facturas emitidas antes de utilizar la aplicación. No crean órdenes ni rutinas de mantenimiento.</p>
+                    </div>
+                    <input id="manual-invoices-search" type="search" oninput="renderManualInvoicesModule()" class="input-box text-xs w-64" placeholder="Buscar cliente, concepto o factura">
+                </div>
+                <div id="manual-invoices-summary" class="grid grid-cols-2 md:grid-cols-3 gap-3 p-4"></div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead><tr>
+                            <th>Fecha factura</th><th>Cliente</th><th>Concepto</th><th>Factura #</th><th>Valor facturado</th><th>Gastos reales</th><th>PDF</th><th class="text-right">Acciones</th>
+                        </tr></thead>
+                        <tbody id="manual-invoices-table-body"></tbody>
                     </table>
                 </div>
             </div>
@@ -1795,7 +1814,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <table>
                         <thead>
                             <tr>
-                                <th>Orden</th>
+                                <th>Orden / registro</th>
                                 <th>Cliente</th>
                                 <th>Fecha</th>
                                 <th>Factura #</th>
@@ -2538,6 +2557,120 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         </div>
     </div>
 
+    <!-- MODAL: MANUAL / HISTORICAL INVOICE -->
+    <div id="manual-invoice-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10004;">
+        <div class="modal-card max-w-lg">
+            <div class="flex items-center justify-between border-b pb-3.5 mb-4">
+                <div>
+                    <h3 id="manual-invoice-modal-title" class="font-black text-slate-900 text-sm">Registrar factura histórica</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">No se vincula a una orden ni genera una rutina.</p>
+                </div>
+                <button type="button" onclick="closeManualInvoiceModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="event.preventDefault(); saveManualInvoiceRecord();" class="space-y-3.5">
+                <input type="hidden" id="manual-inv-id">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Cliente *</label>
+                    <input type="text" id="manual-inv-client" list="manual-inv-clients" required maxlength="160" class="input-box text-xs" placeholder="Selecciona un cliente registrado">
+                    <datalist id="manual-inv-clients"></datalist>
+                    <p class="text-[10px] text-slate-500 mt-1">Solo se aceptan clientes existentes en Gestión de Clientes.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Concepto / Servicio facturado *</label>
+                    <input type="text" id="manual-inv-concept" required maxlength="220" class="input-box text-xs" placeholder="Ej. Mantenimiento preventivo realizado en marzo">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Número de factura *</label>
+                        <input type="text" id="manual-inv-number" required maxlength="80" class="input-box font-bold text-xs" placeholder="FAC-10293">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Fecha de emisión *</label>
+                        <input type="date" id="manual-inv-date" required class="input-box text-xs">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Valor facturado antes de IVA ($) *</label>
+                        <input type="number" id="manual-inv-amount" min="1" step="1" required class="input-box font-bold text-xs" placeholder="1500000">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Gastos reales ($)</label>
+                        <input type="number" id="manual-inv-expenses" min="0" step="1" class="input-box font-bold text-xs text-rose-600" placeholder="0">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Adjuntar PDF (opcional)</label>
+                    <input type="file" id="manual-inv-pdf" accept=".pdf,application/pdf" class="text-xs text-slate-600">
+                    <p id="manual-inv-pdf-notice" class="text-[11px] text-teal-600 font-bold mt-1.5 hidden"></p>
+                </div>
+                <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 flex-wrap">
+                    <button type="button" onclick="closeManualInvoiceModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl transition flex-1 sm:flex-none justify-center">Cancelar</button>
+                    <button type="submit" class="btn-teal text-xs flex-1 sm:flex-none justify-center"><i class="fa-solid fa-floppy-disk"></i> Guardar factura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: INVOICE UPLOAD OPTIONS -->
+    <div id="invoice-upload-options-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10005;">
+        <div class="modal-card max-w-xl">
+            <div class="flex items-center justify-between border-b pb-3.5 mb-4">
+                <div>
+                    <h3 class="font-black text-slate-900 text-sm">Cargar facturas</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Elige cómo deseas registrar las facturas históricas que no nacieron de una rutina de la aplicación.</p>
+                </div>
+                <button type="button" onclick="closeInvoiceUploadOptions()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button type="button" onclick="chooseManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition">
+                    <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 inline-flex items-center justify-center mb-3"><i class="fa-solid fa-pen-to-square text-lg"></i></span>
+                    <span class="block text-sm font-black text-slate-900">Carga manual</span>
+                    <span class="block text-xs text-slate-500 mt-1">Registrar una factura a la vez, diligenciando sus datos y adjuntando opcionalmente el PDF.</span>
+                </button>
+                <button type="button" onclick="chooseBulkManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition">
+                    <span class="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 inline-flex items-center justify-center mb-3"><i class="fa-solid fa-file-excel text-lg"></i></span>
+                    <span class="block text-sm font-black text-slate-900">Carga masiva por Excel</span>
+                    <span class="block text-xs text-slate-500 mt-1">Importar varias facturas desde una plantilla Excel, revisar los datos y confirmar la carga.</span>
+                </button>
+            </div>
+            <div class="flex justify-end pt-4 border-t border-slate-100 mt-4">
+                <button type="button" onclick="closeInvoiceUploadOptions()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: BULK HISTORICAL INVOICE IMPORT -->
+    <div id="manual-invoices-bulk-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10006;">
+        <div class="modal-card max-w-3xl">
+            <div class="flex items-center justify-between border-b pb-3.5 mb-4">
+                <div>
+                    <h3 class="font-black text-slate-900 text-sm">Carga masiva de facturas por Excel</h3>
+                    <p class="text-[11px] text-slate-500 mt-1">Las facturas importadas quedarán como registros históricos independientes, sin crear órdenes ni rutinas.</p>
+                </div>
+                <button type="button" onclick="closeManualInvoicesBulkModal()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 mb-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="text-xs text-indigo-900"><b>Primero descarga la plantilla.</b> Usa una fila por factura y no cambies los encabezados.</div>
+                    <button type="button" onclick="downloadManualInvoicesTemplate()" class="px-3 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"><i class="fa-solid fa-download mr-1"></i> Descargar plantilla Excel</button>
+                </div>
+                <p class="text-[11px] text-indigo-800 mt-2">Columnas obligatorias: Cliente, Concepto, NumeroFactura, Fecha y ValorFacturado. GastosReales es opcional y, si queda vacío, se toma como $0. La fecha puede ir como AAAA-MM-DD o como fecha de Excel.</p>
+                <p class="text-[11px] text-indigo-900 mt-2 font-semibold">El cliente debe existir en Gestión de Clientes. La app compara el nombre ignorando mayúsculas, tildes y espacios extra, asigna su ID de cliente y rechaza los que no encuentre. No crea clientes desde Excel.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Seleccionar archivo Excel (.xlsx o .xls)</label>
+                <input type="file" id="manual-invoices-excel-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onchange="previewManualInvoicesExcel(this)" class="input-box text-xs">
+                <p class="text-[11px] text-slate-500 mt-1">La aplicación validará campos obligatorios y posibles duplicados antes de guardar. Los PDF se pueden adjuntar individualmente después, desde la edición de cada factura.</p>
+            </div>
+            <div id="manual-invoices-bulk-preview" class="mt-4 rounded-xl border border-slate-200 p-3 text-xs text-slate-500">Selecciona un archivo para revisar su contenido antes de importarlo.</div>
+            <div class="flex justify-end gap-2.5 pt-4 border-t border-slate-100 mt-4 flex-wrap">
+                <button type="button" onclick="closeManualInvoicesBulkModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cancelar</button>
+                <button type="button" id="manual-invoices-bulk-submit" onclick="importManualInvoicesExcel()" disabled class="btn-teal text-xs flex-1 sm:flex-none justify-center opacity-50"><i class="fa-solid fa-file-import mr-1"></i> Importar facturas válidas</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: USER EDITOR -->
     <div id="user-edit-modal-backdrop" class="modal-backdrop hidden" style="z-index: 10003;">
         <div class="modal-card max-w-sm">
@@ -3065,6 +3198,7 @@ function reservePrevId(tipo = 'PREVENTIVO') {
             clientsCatalog.forEach(c => add(c && c.name));
             equipmentCatalog.forEach(e => add(eqClientName(e)));
             workOrders.forEach(o => add(o && (o.client || o.clientName)));
+            if (typeof hvacManualInvoicesRead === 'function') hvacManualInvoicesRead().forEach(item => add(item && hvacManualInvoiceClientName(item)));
             return [...seen.values()].sort(compareClientNames);
         }
         function canonicalClientName(name) {
@@ -3803,6 +3937,15 @@ async function authPedirNuevaClave() {
             const invoice = { number, amount, expenses, pdfUrl: pdfUrl || null, date: (yaFacturada && previa.date) ? previa.date : new Date().toISOString() }; // ya sin pdfData (base64)
             // La factura vive en la parte titular; las demás partes -P# la referencian (sin duplicar valores)
             for (const p of (chk.parts.length ? chk.parts : [order])) {
+                // Congela únicamente el conteo técnico al momento de facturar; el estado
+                // BILLED no debe borrar ni alterar la barra de avance del histórico.
+                const technicalProgress = hvacOrderProgress(p);
+                p.progressSnapshot = {
+                    total: technicalProgress.total,
+                    done: technicalProgress.done,
+                    percent: technicalProgress.percent,
+                    capturedAt: invoice.date
+                };
                 p.invoice = (p === holder) ? invoice
                     : { matrixRef: chk.base, number, pdfUrl: invoice.pdfUrl, amount: 0, expenses: 0, date: invoice.date };
                 p.status = 'BILLED';
@@ -4558,9 +4701,9 @@ async function authPedirNuevaClave() {
             'admin-caja': { tables: ['hvac_clients'], state: ['HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] },
             'admin-history': { tables: ['hvac_clients'], state: [], historyPage: true },      // órdenes: solo las más recientes, por páginas
             'admin-equipment': { tables: ['hvac_clients'], state: ['HVAC_FORMS_CONFIG_BACKUP'], equipmentsProgressive: true }, // equipos: por páginas
-            'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: [] },        // los equipos se piden por orden al abrirla
+            'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_MANUAL_INVOICES_BACKUP'] }, // facturas históricas independientes
             'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
-            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] }
+            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP'] }
         };
         // Vencida = pasó el TTL, o no hay copia local con la que pintar (p. ej. tras limpiar el almacenamiento).
         const CLOUD_CATALOG_TTL = 10 * 60 * 1000;   // catálogos cambian poco; "Sincronizar" siempre fuerza
@@ -4755,7 +4898,7 @@ async function authPedirNuevaClave() {
             if (!navigator.onLine || !Array.isArray(list)) return false;
             const now = Date.now();
             // Todas las filas visibles (no solo las "resumen"): una orden con detalle guardado localmente se quedaba con el % viejo.
-            const eligible = [...new Set(list.filter(o => o && o.id && !String(o.id).startsWith('HIST-') && String(o.status || '').toUpperCase() !== 'BILLED').map(o => String(o.id)))];
+            const eligible = [...new Set(list.filter(o => o && o.id && !String(o.id).startsWith('HIST-')).map(o => String(o.id)))]; // también consulta FACTURADAS: facturar no debe ocultar ni modificar el avance técnico
             const liteOnly = new Set(list.filter(o => o && o._hvacSummaryOnly).map(o => String(o.id)));
             // Detalle local AL DÍA (no marcado como viejo): el avance sale de ese detalle con la misma regla que usa el técnico; no se consulta la nube.
             const freshDetail = new Set(list.filter(o => o && o._hvacSummaryOnly !== true && o._hvacDetailStale !== true && o.executions && typeof o.executions === 'object' && Object.keys(o.executions).length).map(o => String(o.id)));
@@ -7722,6 +7865,26 @@ async function authPedirNuevaClave() {
             return [{ zoneId: '', zoneName: names.join(' · '), zoneNames: names, ids: groups.reduce((a, g) => a.concat(g.ids || []), []) }];
         }
 
+        // Compara semanas calendario ISO usando fechas locales YYYY-MM-DD (sin desfases de zona horaria).
+        function hvacIsoWeekKey(value) {
+            if (!value) return '';
+            const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+            const d = m ? new Date(Date.UTC(+m[1], +m[2]-1, +m[3])) : new Date(value);
+            if (isNaN(d.getTime())) return '';
+            d.setUTCHours(0,0,0,0);
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+            return d.getUTCFullYear() + '-W' + String(week).padStart(2,'0');
+        }
+        function hvacProjectionDate(proj) {
+            if (!proj) return '';
+            if (proj.date) return proj.date;
+            const ids = (proj.orderIds || [proj.orderId]).filter(Boolean).map(String);
+            const linked = (workOrders || []).find(o => ids.includes(String(o.id)) && o.date);
+            return linked ? linked.date : '';
+        }
+
         async function saveNewRoutineManual() {
             if (nrSaving) return;
             if (nrEditingId !== null) return saveEditedRoutine();
@@ -7740,10 +7903,17 @@ async function authPedirNuevaClave() {
             try {
                 const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
                 const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
-                // Equipos ya programados en este cliente y periodo (en cualquiera de sus consecutivos)
-                const periodProjs=monthlyProjections.filter(p=>p&&p.client===client&&Number(p.month)===month&&Number(p.year)===year&&p.zoneBaseId&&(p.maintenanceType||'PREVENTIVO')===routineType);
+                // Preventivos/correctivos conservan la regla mensual. Las revisiones se controlan
+                // por semana: una revisión anterior de otra semana (incluso si falló) no bloquea
+                // una nueva revisión del mismo equipo en la semana actual.
+                const selectedWeek = hvacIsoWeekKey(date);
+                const periodProjs=monthlyProjections.filter(p=>{
+                    if(!p || p.client!==client || !p.zoneBaseId || (p.maintenanceType||'PREVENTIVO')!==routineType) return false;
+                    if(routineType==='REVISION') return hvacIsoWeekKey(hvacProjectionDate(p))===selectedWeek && !!selectedWeek;
+                    return Number(p.month)===month && Number(p.year)===year;
+                });
                 const already=new Set();periodProjs.forEach(p=>(p.scheduledEquipmentIds||p.equipmentIds||[]).forEach(id=>already.add(String(id))));
-                if(equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
+                if(equipmentIds.some(id=>already.has(String(id))))return showToast(routineType==='REVISION'?'Uno o más equipos ya tienen una revisión programada en esta semana para este cliente.':'Uno o más equipos ya están programados en este periodo para este cliente.','error');
                 // Plan de facturación: cada grupo = un consecutivo (PRE-000X) con una parte -P# por zona. Sin selección: un solo grupo.
                 const plan=(typeof hvacNrGetPlan==='function'&&hvacNrGetPlan())||[{n:1,groups:hvacGroupEquipmentByZone(equipmentIds),equipmentIds,value:budget,target:periodProjs.length?periodProjs[0].id:'NEW'}];
                 const orderObjs=[];
@@ -7759,7 +7929,7 @@ async function authPedirNuevaClave() {
                         sameProj.scheduledEquipmentIds=[...new Set([...(sameProj.scheduledEquipmentIds||[]).map(String),...pg.equipmentIds.map(String)])];
                         sameProj.budget=(Number(sameProj.budget)||0)+(Number(pg.value)||0);
                     }else{
-                        monthlyProjections.push({id:plan.length>1?`${projId}-${k}`:projId,client,periodicity,month,year,budget:Number(pg.value)||0,equipmentIds:pg.equipmentIds,status:'SCHEDULED',orderId:objs[0].id,orderIds:objs.map(o=>o.id),zoneBaseId:baseId,maintenanceType:routineType});
+                        monthlyProjections.push({id:plan.length>1?`${projId}-${k}`:projId,client,periodicity,month,year,date,budget:Number(pg.value)||0,equipmentIds:pg.equipmentIds,scheduledEquipmentIds:pg.equipmentIds,status:'SCHEDULED',orderId:objs[0].id,orderIds:objs.map(o=>o.id),zoneBaseId:baseId,maintenanceType:routineType});
                     }
                     orderObjs.push(...objs);
                 }
@@ -9468,6 +9638,649 @@ async function authPedirNuevaClave() {
                 });
             } catch (e) { console.warn('[Facturación] No se pudieron verificar las partes de la matriz:', e); }
         }
+        // =====================================================================
+        // FACTURAS HISTÓRICAS / MANUALES (sin orden ni rutina de mantenimiento)
+        // Se respaldan en hvac_app_state usando la sincronización genérica existente.
+        // =====================================================================
+        const HVAC_MANUAL_INVOICES_KEY = 'HVAC_MANUAL_INVOICES_BACKUP';
+
+        function hvacManualInvoiceClientRecord(item) {
+            if (!item) return null;
+            const byId = item.clientId != null
+                ? clientsCatalog.find(c => String(c.id) === String(item.clientId))
+                : null;
+            return byId || findClientRecord(item.client || item.clientName || '');
+        }
+        function hvacManualInvoiceClientName(item) {
+            const client = hvacManualInvoiceClientRecord(item);
+            return client && client.name ? client.name : String(item && (item.client || item.clientName) || '');
+        }
+        function hvacManualInvoicesRead() {
+            const data = readLocalBackup(HVAC_MANUAL_INVOICES_KEY, []);
+            if (!Array.isArray(data)) return [];
+            return data.filter(item => item && item.id && item.invoice).map(item => {
+                const client = hvacManualInvoiceClientRecord(item);
+                // Reenlaza registros históricos por clientId (o por nombre exacto normalizado en el directorio).
+                return client ? { ...item, client: client.name, clientId: client.id } : item;
+            });
+        }
+
+        function hvacManualInvoicesWrite(items) {
+            try {
+                const key = HVAC_MANUAL_INVOICES_KEY;
+                localStorage.setItem(key, JSON.stringify(Array.isArray(items) ? items : []));
+                localStorage.setItem('HVAC_TS_' + key, String(Date.now()));
+                if (typeof cloudScheduleStatePush === 'function') cloudScheduleStatePush(key, true);
+                return true;
+            } catch (err) {
+                console.error('[Facturas manuales] No se pudo guardar el respaldo local:', err);
+                showToast('No se pudo guardar la factura en este dispositivo. Revisa el espacio disponible.', 'error');
+                return false;
+            }
+        }
+
+        function hvacLocalDateValue(date) {
+            const d = date instanceof Date ? date : new Date();
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        }
+
+        function openManualInvoiceModal(id) {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede registrar facturas históricas.', 'error');
+            const list = hvacManualInvoicesRead();
+            const item = id ? list.find(x => String(x.id) === String(id)) : null;
+            if (id && !item) return showToast('No se encontró la factura histórica.', 'error');
+            const inv = item && item.invoice ? item.invoice : {};
+            const title = document.getElementById('manual-invoice-modal-title');
+            document.getElementById('manual-inv-id').value = item ? item.id : '';
+            const linkedClient = item && item.clientId != null
+                ? clientsCatalog.find(c => String(c.id) === String(item.clientId))
+                : null;
+            document.getElementById('manual-inv-client').value = item ? ((linkedClient && linkedClient.name) || item.client || '') : '';
+            document.getElementById('manual-inv-concept').value = item ? (item.concept || '') : '';
+            document.getElementById('manual-inv-number').value = inv.number || '';
+            document.getElementById('manual-inv-date').value = String(inv.date || item?.date || hvacLocalDateValue()).slice(0, 10);
+            document.getElementById('manual-inv-amount').value = (inv.amount == null ? '' : inv.amount);
+            document.getElementById('manual-inv-expenses').value = (inv.expenses == null ? '' : inv.expenses);
+            document.getElementById('manual-inv-pdf').value = '';
+            const notice = document.getElementById('manual-inv-pdf-notice');
+            if (inv.pdfUrl) {
+                notice.textContent = 'Esta factura ya tiene un PDF adjunto. Sube otro únicamente si deseas reemplazarlo.';
+                notice.classList.remove('hidden');
+            } else {
+                notice.textContent = '';
+                notice.classList.add('hidden');
+            }
+            if (title) title.textContent = item ? 'Editar factura histórica' : 'Registrar factura histórica';
+            const datalist = document.getElementById('manual-inv-clients');
+            if (datalist) datalist.innerHTML = getSortedClientRecords(clientsCatalog).map(c => `<option value="${esc(c.name)}"></option>`).join('');
+            document.getElementById('manual-invoice-modal-backdrop').classList.remove('hidden');
+        }
+
+        function closeManualInvoiceModal() {
+            document.getElementById('manual-invoice-modal-backdrop').classList.add('hidden');
+        }
+
+        // El botón único "Cargar facturas" ofrece carga individual o masiva.
+        function openInvoiceUploadOptions() {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede cargar facturas históricas.', 'error');
+            document.getElementById('invoice-upload-options-modal-backdrop').classList.remove('hidden');
+        }
+        function closeInvoiceUploadOptions() {
+            document.getElementById('invoice-upload-options-modal-backdrop').classList.add('hidden');
+        }
+        function chooseManualInvoiceUpload() {
+            closeInvoiceUploadOptions();
+            openManualInvoiceModal();
+        }
+        function chooseBulkManualInvoiceUpload() {
+            closeInvoiceUploadOptions();
+            openManualInvoicesBulkModal();
+        }
+
+        let hvacManualInvoicesExcelPreview = null;
+        let hvacManualInvoicesExcelResultShown = false;
+
+        function openManualInvoicesBulkModal() {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede importar facturas históricas.', 'error');
+            hvacManualInvoicesExcelPreview = null;
+            hvacManualInvoicesExcelResultShown = false;
+            const input = document.getElementById('manual-invoices-excel-file');
+            if (input) input.value = '';
+            const preview = document.getElementById('manual-invoices-bulk-preview');
+            if (preview) preview.innerHTML = 'Selecciona un archivo para revisar su contenido antes de importarlo.';
+            const submit = document.getElementById('manual-invoices-bulk-submit');
+            if (submit) {
+                submit.disabled = true;
+                submit.classList.add('opacity-50');
+                submit.innerHTML = '<i class="fa-solid fa-file-import mr-1"></i> Importar facturas válidas';
+            }
+            document.getElementById('manual-invoices-bulk-modal-backdrop').classList.remove('hidden');
+        }
+        function closeManualInvoicesBulkModal() {
+            document.getElementById('manual-invoices-bulk-modal-backdrop').classList.add('hidden');
+            hvacManualInvoicesExcelPreview = null;
+            hvacManualInvoicesExcelResultShown = false;
+        }
+
+        function downloadManualInvoicesTemplate() {
+            if (!window.XLSX) return showToast('No se ha cargado el componente Excel. Recarga la página e inténtalo de nuevo.', 'error');
+            const wb = XLSX.utils.book_new();
+            const data = [['Cliente', 'Concepto', 'NumeroFactura', 'Fecha', 'ValorFacturado', 'GastosReales']];
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            ws['!cols'] = [{ wch: 32 }, { wch: 48 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
+            XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
+            const help = [
+                ['INSTRUCCIONES PARA CARGAR FACTURAS HISTÓRICAS'],
+                ['En la hoja Facturas, registra una factura por fila debajo de los encabezados.'],
+                ['Cliente', 'Nombre de un cliente existente en Gestión de Clientes. Se valida contra el directorio oficial; no se crean clientes desde este archivo.'],
+                ['Concepto', 'Servicio o concepto facturado. Obligatorio.'],
+                ['NumeroFactura', 'Número exacto de la factura. Obligatorio.'],
+                ['Fecha', 'Fecha real de emisión. Formato recomendado: AAAA-MM-DD. Obligatorio.'],
+                ['ValorFacturado', 'Valor antes de IVA, numérico y mayor que cero. Obligatorio.'],
+                ['GastosReales', 'Gastos asociados a esa factura. Opcional; si queda vacío se registra como cero.'],
+                ['Validación de cliente', 'Debe existir en Gestión de Clientes. Se ignoran mayúsculas, tildes y espacios extra, pero el nombre debe corresponder a un registro del directorio.'],
+                ['Importante', 'No agregues símbolos de moneda si puedes evitarlo. No repitas la misma factura para el mismo cliente. Las filas rechazadas se mostrarán con su motivo.'],
+                ['Ejemplo', 'Nombre registrado en Gestión de Clientes', 'Mantenimiento de equipos', 'FE-1001', '2026-03-15', 1500000, 250000]
+            ];
+            const helpSheet = XLSX.utils.aoa_to_sheet(help);
+            helpSheet['!cols'] = [{ wch: 24 }, { wch: 92 }, { wch: 28 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
+            XLSX.utils.book_append_sheet(wb, helpSheet, 'Instrucciones');
+            XLSX.writeFile(wb, 'Plantilla_facturas_historicas.xlsx');
+        }
+
+        function hvacExcelHeaderKey(value) {
+            return String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+        function hvacExcelColumnIndex(headers, aliases) {
+            const keys = headers.map(hvacExcelHeaderKey);
+            for (const alias of aliases) {
+                const i = keys.indexOf(hvacExcelHeaderKey(alias));
+                if (i >= 0) return i;
+            }
+            return -1;
+        }
+        function hvacParseExcelMoney(value) {
+            if (value === '' || value == null) return null;
+            if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+            let raw = String(value).trim().replace(/[\s$\u00a0]/g, '').replace(/COP/ig, '');
+            if (!raw) return null;
+            const comma = raw.lastIndexOf(',');
+            const dot = raw.lastIndexOf('.');
+            if (comma >= 0 && dot >= 0) {
+                raw = comma > dot ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+            } else if (comma >= 0) {
+                const tail = raw.length - comma - 1;
+                raw = tail > 0 && tail <= 2 ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+            } else if ((raw.match(/\./g) || []).length > 1 || /\.\d{3}$/.test(raw)) {
+                raw = raw.replace(/\./g, '');
+            }
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
+        function hvacParseExcelDate(value) {
+            if (value instanceof Date && !isNaN(value.getTime())) return hvacLocalDateValue(value);
+            if (typeof value === 'number' && window.XLSX && XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
+                const d = XLSX.SSF.parse_date_code(value);
+                if (d && d.y && d.m && d.d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+            }
+            const str = String(value == null ? '' : value).trim();
+            if (!str) return '';
+            let m = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+            if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+            m = str.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+            if (m) return `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+            return '';
+        }
+        function hvacManualInvoiceDuplicateKey(client, number) {
+            return normText(String(client || '')) + '|' + normText(String(number || ''));
+        }
+        function hvacExistingInvoiceKeys() {
+            const keys = new Set();
+            hvacManualInvoicesRead().forEach(item => {
+                if (hvacManualInvoiceClientName(item) && item.invoice && item.invoice.number) keys.add(hvacManualInvoiceDuplicateKey(hvacManualInvoiceClientName(item), item.invoice.number));
+            });
+            (workOrders || []).forEach(order => {
+                const inv = order && order.invoice;
+                if (order && String(order.status || '').toUpperCase() === 'BILLED' && inv && inv.number && !inv.matrixRef) {
+                    keys.add(hvacManualInvoiceDuplicateKey(order.client || order.clientName, inv.number));
+                }
+            });
+            return keys;
+        }
+
+        function hvacRenderManualInvoicesExcelCheck(rows, finalResult) {
+            const preview = document.getElementById('manual-invoices-bulk-preview');
+            const submit = document.getElementById('manual-invoices-bulk-submit');
+            if (!preview) return;
+            const ready = rows.filter(x => finalResult ? x.imported : x.ok).length;
+            const notReady = rows.length - ready;
+            const noClient = rows.filter(x => x.clientMissing).length;
+            const duplicates = rows.filter(x => x.duplicate).length;
+            const invalid = rows.filter(x => x.errors && x.errors.length).length;
+            const card = (label, value, cls) => `<div class="rounded-lg ${cls} p-2"><div class="text-[10px] uppercase font-bold">${label}</div><div class="text-xl font-black">${value}</div></div>`;
+            const rowHtml = rows.map(item => {
+                let statusHtml = '';
+                if (finalResult && item.imported) {
+                    statusHtml = '<span class="text-emerald-700 font-bold">Cargada correctamente</span>';
+                } else {
+                    const reasons = [];
+                    if (item.clientMissing) reasons.push('Cliente no registrado en Gestión de Clientes');
+                    if (item.duplicate) reasons.push('Factura duplicada para este cliente');
+                    if (item.errors && item.errors.length) reasons.push(...item.errors);
+                    if (item.importReason) reasons.push(item.importReason);
+                    if (reasons.length) {
+                        statusHtml = `<span class="text-rose-700 font-bold">No se cargó</span><div class="text-[10px] text-rose-600">${esc(reasons.join(' · '))}</div>`;
+                    } else if (finalResult) {
+                        statusHtml = '<span class="text-rose-700 font-bold">No se cargó</span>';
+                    } else {
+                        statusHtml = '<span class="text-emerald-700 font-bold">Lista para importar</span>';
+                    }
+                }
+                const clientLabel = item.clientMatched ? (item.canonicalClient || item.client) : (item.client || '-');
+                return `<tr>
+                    <td class="px-2 py-2 align-top">${item.rowNumber}</td>
+                    <td class="px-2 py-2 align-top">${esc(clientLabel)}</td>
+                    <td class="px-2 py-2 align-top">${esc(item.concept || '-')}</td>
+                    <td class="px-2 py-2 align-top">${esc(item.number || '-')}</td>
+                    <td class="px-2 py-2 align-top">${esc(item.date || '-')}</td>
+                    <td class="px-2 py-2 align-top text-right">${item.amount == null ? '-' : Number(item.amount).toLocaleString('es-CO')}</td>
+                    <td class="px-2 py-2 align-top text-right">${Number(item.expenses || 0).toLocaleString('es-CO')}</td>
+                    <td class="px-2 py-2 align-top">${statusHtml}</td>
+                </tr>`;
+            }).join('');
+            const title = finalResult ? 'Resultado de la importación' : 'Comprobación antes de importar';
+            const summary = finalResult
+                ? `${ready} facturas cargadas correctamente. ${notReady} filas no se cargaron y se detallan abajo.`
+                : `${rows.length} filas revisadas. Solo se cargarán las que estén listas y vinculadas a un cliente del directorio oficial.`;
+            preview.innerHTML = `
+                <div class="mb-2 text-sm font-black text-slate-800">${title}</div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                    ${card(finalResult ? 'Cargadas' : 'Listas para cargar', ready, 'bg-emerald-50 text-emerald-800')}
+                    ${card('Cliente no registrado', noClient, 'bg-rose-50 text-rose-800')}
+                    ${card('Duplicadas', duplicates, 'bg-amber-50 text-amber-800')}
+                    ${card('Otros errores', invalid, 'bg-slate-100 text-slate-700')}
+                </div>
+                <p class="text-[11px] text-slate-600 mb-2">${esc(summary)}${!finalResult ? ' Los nombres se comparan ignorando mayúsculas, tildes y espacios extra, pero deben corresponder a un cliente existente en Gestión de Clientes.' : ''}</p>
+                <div class="overflow-auto max-h-[48vh] rounded-lg border border-slate-200"><table class="text-[11px] min-w-[980px]"><thead class="sticky top-0"><tr><th class="px-2 py-2">Fila</th><th class="px-2 py-2">Cliente</th><th class="px-2 py-2">Concepto</th><th class="px-2 py-2">Factura</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-right">Valor</th><th class="px-2 py-2 text-right">Gastos</th><th class="px-2 py-2">Resultado</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
+            if (submit) {
+                submit.disabled = finalResult ? false : ready === 0;
+                submit.classList.toggle('opacity-50', !finalResult && ready === 0);
+                submit.innerHTML = finalResult
+                    ? '<i class="fa-solid fa-check mr-1"></i> Cerrar comprobación'
+                    : `<i class="fa-solid fa-file-import mr-1"></i> Importar ${ready} facturas válidas`;
+            }
+        }
+
+        async function previewManualInvoicesExcel(input) {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede importar facturas históricas.', 'error');
+            const file = input && input.files && input.files[0];
+            const preview = document.getElementById('manual-invoices-bulk-preview');
+            const submit = document.getElementById('manual-invoices-bulk-submit');
+            hvacManualInvoicesExcelPreview = null;
+            hvacManualInvoicesExcelResultShown = false;
+            if (submit) {
+                submit.disabled = true;
+                submit.classList.add('opacity-50');
+                submit.innerHTML = '<i class="fa-solid fa-file-import mr-1"></i> Importar facturas válidas';
+            }
+            if (!file) { if (preview) preview.textContent = 'Selecciona un archivo para revisar su contenido antes de importarlo.'; return; }
+            if (!/\.(xlsx|xls)$/i.test(file.name)) { if (preview) preview.textContent = 'Formato no válido. Selecciona un archivo Excel .xlsx o .xls.'; return showToast('Selecciona un archivo Excel .xlsx o .xls.', 'error'); }
+            if (file.size > 10 * 1024 * 1024) { if (preview) preview.textContent = 'El archivo supera el límite de 10 MB.'; return showToast('El Excel supera 10 MB.', 'error'); }
+            if (!window.XLSX) { if (preview) preview.textContent = 'No se pudo cargar el componente Excel. Recarga la página.'; return showToast('No se ha cargado el componente Excel.', 'error'); }
+            if (!Array.isArray(clientsCatalog) || !getSortedClientRecords(clientsCatalog).length) {
+                if (preview) preview.innerHTML = '<span class="text-rose-700 font-bold">No se pudo validar el archivo: el directorio de Gestión de Clientes no está cargado o no tiene clientes. Sincroniza Gestión de Clientes y vuelve a intentarlo.</span>';
+                return showToast('No hay clientes oficiales disponibles para validar. Sincroniza Gestión de Clientes.', 'error');
+            }
+            if (preview) preview.innerHTML = '<div class="flex items-center gap-2"><span class="processing-spinner"></span> Leyendo y validando el archivo…</div>';
+            try {
+                const buffer = await file.arrayBuffer();
+                const book = XLSX.read(buffer, { type: 'array', cellDates: true });
+                const sheetName = book.SheetNames && book.SheetNames[0];
+                if (!sheetName) throw new Error('El libro no contiene hojas.');
+                const sheet = book.Sheets[sheetName];
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+                if (!rows.length || !Array.isArray(rows[0])) throw new Error('La primera hoja está vacía.');
+                const headers = rows[0];
+                const cols = {
+                    client: hvacExcelColumnIndex(headers, ['Cliente', 'NombreCliente', 'RazonSocial']),
+                    concept: hvacExcelColumnIndex(headers, ['Concepto', 'Servicio', 'Detalle', 'Descripcion']),
+                    number: hvacExcelColumnIndex(headers, ['NumeroFactura', 'NumeroDeFactura', 'Factura', 'NroFactura', 'NoFactura']),
+                    date: hvacExcelColumnIndex(headers, ['Fecha', 'FechaEmision', 'FechaFactura']),
+                    amount: hvacExcelColumnIndex(headers, ['ValorFacturado', 'Valor', 'ValorDeLaFactura', 'Subtotal', 'MontoFactura']),
+                    expenses: hvacExcelColumnIndex(headers, ['GastosReales', 'Gastos', 'GastosOperativos', 'Costos'])
+                };
+                const missing = ['client', 'concept', 'number', 'date', 'amount'].filter(k => cols[k] < 0);
+                if (missing.length) throw new Error('Faltan encabezados obligatorios. Descarga y utiliza la plantilla oficial.');
+
+                const existingKeys = hvacExistingInvoiceKeys();
+                const seenInFile = new Set();
+                const parsed = [];
+                rows.slice(1).forEach((row, index) => {
+                    if (!Array.isArray(row) || row.every(v => v === '' || v == null)) return;
+                    const get = key => cols[key] >= 0 ? row[cols[key]] : '';
+                    const client = String(get('client') == null ? '' : get('client')).trim();
+                    const concept = String(get('concept') == null ? '' : get('concept')).trim();
+                    const number = String(get('number') == null ? '' : get('number')).trim();
+                    const date = hvacParseExcelDate(get('date'));
+                    const amount = hvacParseExcelMoney(get('amount'));
+                    const expRaw = get('expenses');
+                    const expenses = expRaw === '' || expRaw == null ? 0 : hvacParseExcelMoney(expRaw);
+                    const clientRecord = client ? findClientRecord(client) : null; // SOLO Gestión de Clientes
+                    const errors = [];
+                    if (!client) errors.push('Cliente vacío');
+                    if (!concept) errors.push('Concepto vacío');
+                    if (!number) errors.push('Número de factura vacío');
+                    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push('Fecha inválida');
+                    if (amount == null || amount <= 0) errors.push('Valor facturado inválido');
+                    if (expenses == null || expenses < 0) errors.push('Gastos inválidos');
+                    const clientMissing = !!client && !clientRecord;
+                    const canonicalClient = clientRecord ? clientRecord.name : client;
+                    const key = clientRecord && number ? hvacManualInvoiceDuplicateKey(clientRecord.name, number) : '';
+                    const duplicate = !!key && (existingKeys.has(key) || seenInFile.has(key));
+                    if (key) seenInFile.add(key);
+                    parsed.push({
+                        rowNumber: index + 2,
+                        client,
+                        canonicalClient,
+                        clientId: clientRecord ? clientRecord.id : null,
+                        clientMatched: !!clientRecord,
+                        clientMissing,
+                        concept,
+                        number,
+                        date,
+                        amount,
+                        expenses: expenses == null ? 0 : expenses,
+                        errors,
+                        duplicate,
+                        ok: errors.length === 0 && !!clientRecord && !duplicate
+                    });
+                });
+                if (!parsed.length) throw new Error('No se encontraron filas con facturas. Verifica que los datos estén debajo de los encabezados.');
+                hvacManualInvoicesExcelPreview = parsed;
+                hvacRenderManualInvoicesExcelCheck(parsed, false);
+            } catch (err) {
+                console.error('[Facturas históricas] Error al leer Excel:', err);
+                hvacManualInvoicesExcelPreview = null;
+                if (preview) preview.innerHTML = `<span class="text-rose-600 font-bold">No se pudo procesar el archivo: ${esc(err && err.message ? err.message : err)}</span>`;
+                showToast('No se pudo leer el Excel. Verifica que uses la plantilla de facturas.', 'error');
+            }
+        }
+
+        async function importManualInvoicesExcel() {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede importar facturas históricas.', 'error');
+            if (hvacManualInvoicesExcelResultShown) return closeManualInvoicesBulkModal();
+            if (window.hvacManualInvoicesBulkSaving) return;
+            const preview = Array.isArray(hvacManualInvoicesExcelPreview) ? hvacManualInvoicesExcelPreview : [];
+            const valid = preview.filter(item => item.ok);
+            if (!valid.length) return showToast('No hay facturas válidas para importar. Revisa los motivos de rechazo en la comprobación.', 'error');
+            if (!window.confirm(`Se cargarán ${valid.length} facturas cuyo cliente existe en Gestión de Clientes. Las filas sin cliente registrado, duplicadas o con errores no se cargarán. ¿Continuar?`)) return;
+
+            window.hvacManualInvoicesBulkSaving = true;
+            const button = document.getElementById('manual-invoices-bulk-submit');
+            if (button) { button.disabled = true; button.classList.add('opacity-50'); }
+            try {
+                const current = hvacManualInvoicesRead();
+                const existingKeys = hvacExistingInvoiceKeys();
+                const now = new Date().toISOString();
+                const finalRows = preview.map(row => {
+                    if (!row.ok) return { ...row, imported: false };
+                    const clientRecord = findClientRecord(row.canonicalClient || row.client);
+                    if (!clientRecord) return { ...row, clientMissing: true, clientMatched: false, imported: false, importReason: 'El cliente ya no aparece en Gestión de Clientes.' };
+                    const key = hvacManualInvoiceDuplicateKey(clientRecord.name, row.number);
+                    if (existingKeys.has(key)) return { ...row, duplicate: true, imported: false, importReason: 'La factura ya existe para este cliente.' };
+                    existingKeys.add(key);
+                    return { ...row, canonicalClient: clientRecord.name, clientId: clientRecord.id, clientMatched: true, imported: true };
+                });
+                const rowsToSave = finalRows.filter(row => row.imported);
+                if (!rowsToSave.length) {
+                    hvacManualInvoicesExcelPreview = finalRows;
+                    hvacManualInvoicesExcelResultShown = true;
+                    hvacRenderManualInvoicesExcelCheck(finalRows, true);
+                    return;
+                }
+                const newItems = rowsToSave.map(row => {
+                    const clientRecord = findClientRecord(row.canonicalClient || row.client);
+                    const id = window.crypto && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'MANUAL-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+                    return {
+                        id,
+                        manual: true,
+                        importSource: 'EXCEL',
+                        client: clientRecord.name,
+                        clientId: clientRecord.id,
+                        concept: row.concept,
+                        date: row.date,
+                        invoice: { number: row.number, amount: row.amount, expenses: row.expenses, date: row.date, pdfUrl: null },
+                        createdAt: now,
+                        updatedAt: now
+                    };
+                });
+                if (!hvacManualInvoicesWrite(current.concat(newItems))) {
+                    const failedRows = finalRows.map(row => row.imported ? { ...row, imported: false, importReason: 'No se pudo guardar el lote en el almacenamiento local.' } : row);
+                    hvacManualInvoicesExcelPreview = failedRows;
+                    hvacManualInvoicesExcelResultShown = true;
+                    hvacRenderManualInvoicesExcelCheck(failedRows, true);
+                    return;
+                }
+                registrarAuditoria('IMPORTAR_FACTURAS_HISTORICAS_EXCEL', 'hvac_app_state', String(newItems.length));
+                hvacManualInvoicesExcelPreview = finalRows;
+                hvacManualInvoicesExcelResultShown = true;
+                populateClientDropdowns();
+                renderManualInvoicesModule();
+                renderFinancialModule();
+                hvacRenderManualInvoicesExcelCheck(finalRows, true);
+                showToast(`${newItems.length} facturas cargadas. ${finalRows.length - newItems.length} filas no se cargaron; consulta el detalle del resultado.`);
+            } catch (err) {
+                console.error('[Facturas históricas] Error durante importación masiva:', err);
+                showToast('No se pudo completar la importación: ' + (err && err.message ? err.message : err), 'error');
+            } finally {
+                window.hvacManualInvoicesBulkSaving = false;
+                if (button && !hvacManualInvoicesExcelResultShown) { button.disabled = false; button.classList.remove('opacity-50'); }
+            }
+        }
+
+        async function saveManualInvoiceRecord() {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede registrar facturas históricas.', 'error');
+            if (window.hvacManualInvoiceSaving) return;
+            window.hvacManualInvoiceSaving = true;
+            try {
+                const idInput = document.getElementById('manual-inv-id').value;
+                const all = hvacManualInvoicesRead();
+                const old = idInput ? all.find(x => String(x.id) === String(idInput)) : null;
+                const clientRaw = document.getElementById('manual-inv-client').value.trim();
+                const clientRecord = findClientRecord(clientRaw);
+                if (!clientRecord) return showToast('El cliente no existe en Gestión de Clientes. Regístralo primero o selecciona uno del listado oficial.', 'error');
+                const concept = document.getElementById('manual-inv-concept').value.trim();
+                const number = document.getElementById('manual-inv-number').value.trim();
+                const date = document.getElementById('manual-inv-date').value;
+                const amountRaw = document.getElementById('manual-inv-amount').value;
+                const expensesRaw = document.getElementById('manual-inv-expenses').value;
+                const amount = Number(amountRaw);
+                const expenses = expensesRaw === '' ? 0 : Number(expensesRaw);
+                const fileInput = document.getElementById('manual-inv-pdf');
+                const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+                if (!clientRaw || !concept || !number || !date || amountRaw === '' || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(expenses) || expenses < 0) {
+                    return showToast('Completa cliente, concepto, número, fecha y un valor facturado mayor que cero.', 'error');
+                }
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return showToast('La fecha de la factura no es válida.', 'error');
+                if (file) {
+                    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) return showToast('El archivo adjunto debe ser un PDF.', 'error');
+                    if (file.size > FACTURA_MAX_MB * 1024 * 1024) return showToast('El PDF supera ' + FACTURA_MAX_MB + ' MB. Comprímelo e inténtalo de nuevo.', 'error');
+                }
+
+                const id = old ? old.id : (window.crypto && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'MANUAL-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10));
+                const previousInvoice = old && old.invoice ? old.invoice : {};
+                let pdfUrl = previousInvoice.pdfUrl || null;
+                if (file) {
+                    try { pdfUrl = await storageSubirFacturaPdf(id, file); }
+                    catch (err) {
+                        console.error('[Facturas manuales] Error al subir el PDF:', err);
+                        return showToast('No se pudo subir el PDF: ' + (err && err.message ? err.message : err), 'error');
+                    }
+                }
+
+                const now = new Date().toISOString();
+                const record = {
+                    id,
+                    manual: true,
+                    client: clientRecord.name,
+                    clientId: clientRecord.id,
+                    concept,
+                    date,
+                    invoice: { number, amount, expenses, date, pdfUrl },
+                    createdAt: old && old.createdAt ? old.createdAt : now,
+                    updatedAt: now
+                };
+                const next = all.filter(x => String(x.id) !== String(id));
+                next.push(record);
+                if (!hvacManualInvoicesWrite(next)) return;
+
+                if (file && previousInvoice.pdfUrl && previousInvoice.pdfUrl !== pdfUrl) storageBorrarPorUrl(previousInvoice.pdfUrl);
+                registrarAuditoria(old ? 'EDITAR_FACTURA_HISTORICA' : 'CREAR_FACTURA_HISTORICA', 'hvac_app_state', id);
+                closeManualInvoiceModal();
+                populateClientDropdowns();
+                renderManualInvoicesModule();
+                renderFinancialModule();
+                showToast(old ? 'Factura histórica actualizada.' : 'Factura histórica registrada.');
+            } catch (err) {
+                console.error('[Facturas manuales] Error al guardar:', err);
+                showToast('No se pudo guardar la factura histórica: ' + (err && err.message ? err.message : err), 'error');
+            } finally {
+                window.hvacManualInvoiceSaving = false;
+            }
+        }
+
+        function renderManualInvoicesModule() {
+            const tbody = document.getElementById('manual-invoices-table-body');
+            const summary = document.getElementById('manual-invoices-summary');
+            if (!tbody || !summary) return;
+            const query = (document.getElementById('manual-invoices-search')?.value || '').trim().toLocaleLowerCase('es-CO');
+            const all = hvacManualInvoicesRead();
+            const visible = all.filter(item => {
+                const inv = item.invoice || {};
+                const haystack = [hvacManualInvoiceClientName(item), item.concept, inv.number, inv.date].join(' ').toLocaleLowerCase('es-CO');
+                return !query || haystack.includes(query);
+            }).sort((a, b) => String((b.invoice || {}).date || b.date || '').localeCompare(String((a.invoice || {}).date || a.date || '')));
+            const total = all.reduce((acc, item) => {
+                const inv = item.invoice || {};
+                acc.amount += Number(inv.amount || 0);
+                acc.expenses += Number(inv.expenses || 0);
+                return acc;
+            }, { amount: 0, expenses: 0 });
+            const fmt = value => '$ ' + Number(value || 0).toLocaleString('es-CO');
+            summary.innerHTML = `
+                <div class="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Facturas manuales</span><p class="text-xl font-black text-indigo-900 mt-1">${all.length}</p></div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Valor facturado</span><p class="text-lg font-black text-slate-900 mt-1">${fmt(total.amount)}</p></div>
+                <div class="rounded-xl border border-rose-100 bg-rose-50 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-rose-700">Gastos reales</span><p class="text-lg font-black text-rose-700 mt-1">${fmt(total.expenses)}</p></div>`;
+            tbody.innerHTML = '';
+            if (!visible.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-slate-400 text-xs font-medium py-8">${all.length ? 'No hay facturas históricas que coincidan con la búsqueda.' : 'Todavía no has registrado facturas históricas.'}</td></tr>`;
+                return;
+            }
+            visible.forEach(item => {
+                const inv = item.invoice || {};
+                tbody.insertAdjacentHTML('beforeend', `<tr>
+                    <td class="text-xs">${esc(inv.date || item.date || '-')}</td>
+                    <td class="font-bold text-teal-700">${esc(hvacManualInvoiceClientName(item) || '-')}</td>
+                    <td class="text-xs">${esc(item.concept || '-')}</td>
+                    <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
+                    <td class="font-bold text-slate-900">${fmt(inv.amount)}</td>
+                    <td class="font-bold text-rose-600">${fmt(inv.expenses)}</td>
+                    <td>${inv.pdfUrl ? `<button onclick="downloadManualInvoicePDF('${escJs(item.id)}')" class="text-xs text-blue-600 font-bold hover:underline"><i class="fa-solid fa-file-pdf"></i> Ver PDF</button>` : '<span class="text-xs text-slate-400">Sin PDF</span>'}</td>
+                    <td class="text-right"><div class="inline-flex items-center justify-end gap-1">
+                        <button onclick="openManualInvoiceModal('${escJs(item.id)}')" class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700"><i class="fa-solid fa-pen"></i> Editar</button>
+                        <button onclick="deleteManualInvoiceRecord('${escJs(item.id)}')" class="px-2.5 py-1.5 text-xs font-bold rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                    </div></td>
+                </tr>`);
+            });
+        }
+
+        async function downloadManualInvoicePDF(id) {
+            const item = hvacManualInvoicesRead().find(x => String(x.id) === String(id));
+            const url = item && item.invoice && item.invoice.pdfUrl;
+            if (!url) return showToast('Esta factura histórica no tiene PDF adjunto.', 'error');
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }
+
+        async function deleteManualInvoiceRecord(id) {
+            if (typeof isCurrentAdmin === 'function' && !isCurrentAdmin()) return showToast('Solo el administrador puede eliminar facturas históricas.', 'error');
+            const all = hvacManualInvoicesRead();
+            const item = all.find(x => String(x.id) === String(id));
+            if (!item) return showToast('No se encontró la factura histórica.', 'error');
+            if (!window.confirm(`¿Eliminar la factura ${item.invoice?.number || ''} de ${item.client || ''}? Esta acción no se puede deshacer.`)) return;
+            if (!hvacManualInvoicesWrite(all.filter(x => String(x.id) !== String(id)))) return;
+            if (item.invoice && item.invoice.pdfUrl) storageBorrarPorUrl(item.invoice.pdfUrl);
+            registrarAuditoria('ELIMINAR_FACTURA_HISTORICA', 'hvac_app_state', id);
+            renderManualInvoicesModule();
+            renderFinancialModule();
+            showToast('Factura histórica eliminada.');
+        }
+
+        // Revierte una factura asociada a una orden/matriz y devuelve todas sus partes
+        // a COMPLETED, que es el estado que Facturación presenta como pendiente.
+        async function revertInvoiceRecord(orderId) {
+            if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede revertir facturas.', 'error');
+            if (window.hvacInvoiceReverting) return;
+            window.hvacInvoiceReverting = true;
+            try {
+            let order = workOrders.find(o => String(o.id) === String(orderId));
+            if (!order) return showToast('No se encontró la orden seleccionada.', 'error');
+            if (order._hvacSummaryOnly && typeof hvacEnsureFullOrder === 'function') order = await hvacEnsureFullOrder(orderId);
+            if (!order) return showToast('No se pudo cargar el detalle de la orden.', 'error');
+
+            if (hvacIsMatrixOrder(order)) {
+                await hvacLoadMatrixParts(order);
+            }
+            let parts = hvacIsMatrixOrder(order) ? hvacMatrixParts(order) : [order];
+            if (!parts.length) parts = [order];
+            if (hvacIsMatrixOrder(order)) {
+                const expected = Math.max(Number(order.zoneParts || 1), parts.length);
+                if (parts.length < expected) return showToast('No se pudieron cargar todas las zonas de esta orden. Sincroniza e inténtalo de nuevo para evitar una reversión parcial.', 'error');
+            }
+            const holder = parts.find(p => p.invoice && !p.invoice.matrixRef && (p.invoice.number || p.invoice.amount)) || hvacMatrixHolder(order) || order;
+            const snapshot = holder.invoice && !holder.invoice.matrixRef ? JSON.parse(JSON.stringify(holder.invoice)) : null;
+            if (!parts.some(p => String(p.status || '').toUpperCase() === 'BILLED') && !snapshot) {
+                return showToast('La orden no tiene una factura activa para revertir.', 'error');
+            }
+            const label = hvacIsMatrixOrder(order) ? hvacMatrixBase(order) : order.id;
+            const invoiceNumber = snapshot && snapshot.number ? snapshot.number : 'sin número';
+            if (!window.confirm(`¿Revertir la factura ${invoiceNumber} de la orden ${label}? La factura dejará de aparecer en Finanzas y la orden volverá a Pendiente por facturar. El soporte PDF no se borrará.`)) return;
+
+            const now = new Date().toISOString();
+            if (snapshot) {
+                holder.invoiceHistory = Array.isArray(holder.invoiceHistory) ? holder.invoiceHistory : [];
+                holder.invoiceHistory.push({ ...snapshot, reversedAt: now, reversedBy: (systemUsers.find(u => String(u.id) === String(activeUser)) || {}).name || String(activeUser || '') });
+                holder.invoiceHistory = holder.invoiceHistory.slice(-20);
+            }
+            parts.forEach(part => {
+                delete part.invoice;
+                part.status = 'COMPLETED';
+                part.updatedAt = now;
+            });
+            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+
+            let allSaved = true;
+            for (const part of parts) {
+                try { if (!(await cloudSaveOrder(part))) allSaved = false; }
+                catch (err) { allSaved = false; console.warn('[Facturación] Reversión pendiente de sincronizar:', part.id, err); }
+            }
+            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+            registrarAuditoria('REVERTIR_FACTURA', 'hvac_orders', label);
+            renderBillingModule();
+            renderFinancialModule();
+            renderAdminDashboard();
+            showToast(allSaved ? 'Factura revertida. La orden quedó pendiente por facturar.' : 'Reversión guardada en este dispositivo; queda pendiente de sincronización con Supabase.', allSaved ? 'success' : 'error');
+            } finally {
+                window.hvacInvoiceReverting = false;
+            }
+        }
+
         function renderBillingModule() {
             const status = document.getElementById('billing-filter-status').value || 'ALL';
             const execMonth = document.getElementById('billing-filter-exec-month').value || '';
@@ -9475,6 +10288,7 @@ async function authPedirNuevaClave() {
             const typeFilter = document.getElementById('billing-filter-type').value || 'ALL';
             const tbody = document.getElementById('billing-table-body');
             tbody.innerHTML = '';
+            renderManualInvoicesModule(); // las facturas históricas no se mezclan con órdenes ni rutinas
 
             // Solo se listan rutinas que el técnico dejó COMPLETADAS al 100% (o las ya facturadas): nunca las programadas, en proceso o con avance parcial
             const billingReady = o => {
@@ -9612,9 +10426,12 @@ async function authPedirNuevaClave() {
                     <td class="font-bold text-rose-600">$ ${Number(inv.expenses || 0).toLocaleString()}</td>
                     <td>${(inv.pdfUrl || inv.pdfData) ? `<button onclick="downloadInvoicePDF('${escJs(o.id)}')" class="text-xs text-blue-600 font-bold hover:underline inline-flex items-center gap-1"><i class="fa-solid fa-file-pdf"></i> Descargar</button>` : '<span class="text-slate-400 text-xs font-medium">Sin PDF</span>'}</td>
                     <td class="text-right">
-                        <button onclick="openInvoiceModal('${escJs(o.id)}')" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition ${isBilled ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'btn-teal'}">
-                            ${isBilled ? '<i class="fa-solid fa-pen"></i> Editar' : '<i class="fa-solid fa-receipt"></i> Facturar'}
-                        </button>
+                        <div class="inline-flex items-center justify-end gap-1.5 flex-wrap">
+                            <button onclick="openInvoiceModal('${escJs(o.id)}')" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition ${isBilled ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'btn-teal'}">
+                                ${isBilled ? '<i class="fa-solid fa-pen"></i> Editar' : '<i class="fa-solid fa-receipt"></i> Facturar'}
+                            </button>
+                            ${isBilled ? `<button onclick="revertInvoiceRecord('${escJs(o.id)}')" class="px-3 py-1.5 text-xs font-bold rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700" title="Revertir a pendiente por facturar"><i class="fa-solid fa-rotate-left"></i> Revertir</button>` : ''}
+                        </div>
                     </td>
                 </tr>`);
             });
@@ -9664,22 +10481,27 @@ async function authPedirNuevaClave() {
             const type = document.getElementById('fin-period-type').value || 'YTD';
             const selectedClient = document.getElementById('fin-filter-client').value || 'ALL';
             const selMonth = document.getElementById('fin-filter-month').value;
-            const selYear = parseInt(document.getElementById('fin-filter-year').value);
+            const selYear = parseInt(document.getElementById('fin-filter-year').value, 10);
             const currentYear = new Date().getFullYear();
 
-            const billedOrders = workOrders.filter(o => o.status === 'BILLED' && o.invoice);
-            const filtered = billedOrders.filter(o => {
-                if (!matchesClientFilter(o.client, selectedClient)) return false;
-                const dateStr = o.invoice.date || o.date;
-                if (!dateStr) return true;
-                const d = new Date(dateStr);
-                const orderYear = d.getFullYear();
-                const orderMonthStr = `${orderYear}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-
-                if (type === 'YTD') return orderYear === currentYear;
-                if (type === 'MONTH') return !selMonth || orderMonthStr === selMonth;
-                if (type === 'YEAR') return !selYear || orderYear === selYear;
+            const inSelectedPeriod = dateValue => {
+                const monthKey = billingMonthKey(dateValue);
+                if (!monthKey) return true;
+                const recordYear = parseInt(monthKey.slice(0, 4), 10);
+                if (type === 'YTD') return recordYear === currentYear;
+                if (type === 'MONTH') return !selMonth || monthKey === selMonth;
+                if (type === 'YEAR') return !selYear || recordYear === selYear;
                 return true;
+            };
+
+            const billedOrders = workOrders.filter(o => o.status === 'BILLED' && o.invoice);
+            const filteredOrders = billedOrders.filter(o =>
+                matchesClientFilter(o.client, selectedClient) && inSelectedPeriod(o.invoice.date || o.date)
+            );
+            const manualInvoices = hvacManualInvoicesRead();
+            const filteredManual = manualInvoices.filter(item => {
+                const inv = item && item.invoice ? item.invoice : {};
+                return !!inv.number && matchesClientFilter(hvacManualInvoiceClientName(item), selectedClient) && inSelectedPeriod(inv.date || item.date);
             });
 
             let totalBilled = 0;
@@ -9687,34 +10509,46 @@ async function authPedirNuevaClave() {
             const tbody = document.getElementById('financial-table-body');
             tbody.innerHTML = '';
 
-            filtered.forEach(o => {
-                const inv = o.invoice;
-                const b = inv.amount || 0;
-                const e = inv.expenses || 0;
-                const net = b - e;
-                const margin = b > 0 ? Math.round((net / b) * 100) : 0;
+            const rows = [
+                ...filteredOrders.map(order => ({ kind: 'order', item: order, invoice: order.invoice })),
+                ...filteredManual.map(item => ({ kind: 'manual', item: { ...item, client: hvacManualInvoiceClientName(item) }, invoice: item.invoice }))
+            ];
 
-                totalBilled += b;
-                totalExpenses += e;
+            rows.forEach(record => {
+                const item = record.item;
+                const inv = record.invoice || {};
+                const billed = Number(inv.amount || 0);
+                const expenses = Number(inv.expenses || 0);
+                const net = billed - expenses;
+                const margin = billed > 0 ? Math.round((net / billed) * 100) : 0;
+                totalBilled += billed;
+                totalExpenses += expenses;
 
+                const firstCell = record.kind === 'manual'
+                    ? `<span class="font-bold text-indigo-700">Factura manual</span><div class="text-[10px] text-slate-500 mt-0.5">${esc(item.concept || 'Registro histórico')}</div>`
+                    : `<span class="font-bold text-slate-900">${esc(item.id)}</span>`;
+                const dateCell = record.kind === 'manual' ? esc(inv.date || item.date || '-') : esc(item.date || '-');
                 tbody.insertAdjacentHTML('beforeend', `<tr>
-                    <td class="font-bold text-slate-900">${esc(o.id)}</td>
-                    <td class="font-bold text-teal-700">${esc(o.client)}</td>
-                    <td>${esc(o.date)}</td>
-                    <td class="font-mono font-bold text-xs">${esc(inv.number)}</td>
-                    <td class="font-bold text-slate-900">$ ${b.toLocaleString()}</td>
-                    <td class="font-bold text-rose-600">$ ${e.toLocaleString()}</td>
-                    <td class="font-bold text-emerald-600">$ ${net.toLocaleString()}</td>
+                    <td>${firstCell}</td>
+                    <td class="font-bold text-teal-700">${esc(hvacManualInvoiceClientName(item) || '-')}</td>
+                    <td>${dateCell}</td>
+                    <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
+                    <td class="font-bold text-slate-900">$ ${billed.toLocaleString('es-CO')}</td>
+                    <td class="font-bold text-rose-600">$ ${expenses.toLocaleString('es-CO')}</td>
+                    <td class="font-bold text-emerald-600">$ ${net.toLocaleString('es-CO')}</td>
                     <td class="font-bold text-teal-600">${margin}%</td>
                 </tr>`);
             });
 
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 text-xs font-medium py-8">No hay facturas para el periodo y cliente seleccionados.</td></tr>';
+            }
+
             const netTotal = totalBilled - totalExpenses;
             const totalMargin = totalBilled > 0 ? Math.round((netTotal / totalBilled) * 100) : 0;
-
-            document.getElementById('kpi-fin-billed').innerText = `$ ${totalBilled.toLocaleString()}`;
-            document.getElementById('kpi-fin-expenses').innerText = `$ ${totalExpenses.toLocaleString()}`;
-            document.getElementById('kpi-fin-net').innerText = `$ ${netTotal.toLocaleString()}`;
+            document.getElementById('kpi-fin-billed').innerText = `$ ${totalBilled.toLocaleString('es-CO')}`;
+            document.getElementById('kpi-fin-expenses').innerText = `$ ${totalExpenses.toLocaleString('es-CO')}`;
+            document.getElementById('kpi-fin-net').innerText = `$ ${netTotal.toLocaleString('es-CO')}`;
             document.getElementById('kpi-fin-margin').innerText = `${totalMargin}%`;
         }
 
@@ -10121,6 +10955,10 @@ async function authPedirNuevaClave() {
                         doneCount = Math.min(Math.max(0, pc.done), eqIds.length);
                         percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
                         progressTitle = pc.source === 'rpc' ? 'Avance actualizado desde RPC.' : 'Avance actualizado desde la vista ligera.';
+                    } else if (o.progressSnapshot && Number(o.progressSnapshot.total) === eqIds.length && Number.isFinite(Number(o.progressSnapshot.done))) {
+                        doneCount = Math.min(Math.max(0, Number(o.progressSnapshot.done)), eqIds.length);
+                        percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                        progressTitle = 'Avance técnico conservado al momento de facturar.';
                     } else if (o.executions && Object.keys(o.executions).length) {
                         const localProgress = hvacOrderProgress(o);
                         doneCount = localProgress.done;
@@ -10206,11 +11044,12 @@ async function authPedirNuevaClave() {
                 const active = document.querySelector('main > section[id^="view-"]:not(.hidden)');
                 const tabId = active && active.id ? active.id.replace(/^view-/, '') : '';
                 const cfg = CLOUD_SECTION_CONFIG[tabId];
-                if (!cfg || !cfg.state || !cfg.state.length || !['admin-caja', 'admin-agenda', 'admin-financial'].includes(tabId)) return;
+                if (!cfg || !cfg.state || !cfg.state.length || !['admin-caja', 'admin-agenda', 'admin-billing', 'admin-financial'].includes(tabId)) return;
                 if (appBusyCount > 0) return;
-                const keys = cfg.state.filter(k => ESTADO_TABLAS[k]);
-                if (!keys.length) return;
-                const changed = await estadoPullKeys(keys, true);
+                const tableKeys = cfg.state.filter(k => ESTADO_TABLAS[k]);
+                const genericKeys = cfg.state.filter(k => !ESTADO_TABLAS[k]);
+                let changed = tableKeys.length ? await estadoPullKeys(tableKeys, true) : false;
+                if (genericKeys.length) changed = (await loadCloudStateKeys(genericKeys, true)) || changed;
                 if (changed) { restoreLocalAppData(); if (document.getElementById('view-' + tabId) && !document.getElementById('view-' + tabId).classList.contains('hidden')) renderSection(tabId); }
             } catch (e) { console.warn('[Estado] Refresco periódico omitido:', e); }
         }
@@ -10283,6 +11122,8 @@ async function authPedirNuevaClave() {
             ['saveUserRecord', 'Guardando usuario…'],
             ['deleteUserRecord', 'Eliminando usuario…'],
             ['saveInvoiceRecord', 'Guardando factura…'],
+            ['saveManualInvoiceRecord', 'Guardando factura histórica…'],
+            ['revertInvoiceRecord', 'Revirtiendo factura…', true],
             ['submitGlobalSignature', 'Guardando firma y cierre…'],
             ['finalizeRoutineWithoutSignature', 'Cerrando rutina…'],
             ['deleteRoutineFromHistory', 'Eliminando rutina…'],
@@ -12119,7 +12960,12 @@ async function attDelete(id) {
   function periodMatrices(){
     var c=($('nr-client')||{}).value, d=($('nr-date')||{}).value; if(!c||!d) return [];
     var dt=new Date(d+'T00:00:00'), m=dt.getMonth()+1, y=dt.getFullYear();
-    return (monthlyProjections||[]).filter(function(p){return p&&p.client===c&&Number(p.month)===m&&Number(p.year)===y&&p.zoneBaseId;});
+    var rt=String(($('nr-type')||{}).value||'PREVENTIVO').toUpperCase(), wk=typeof hvacIsoWeekKey==='function'?hvacIsoWeekKey(d):'';
+    return (monthlyProjections||[]).filter(function(p){
+      if(!p||p.client!==c||!p.zoneBaseId||(p.maintenanceType||'PREVENTIVO').toUpperCase()!==rt) return false;
+      if(rt==='REVISION') return !!wk && typeof hvacProjectionDate==='function' && hvacIsoWeekKey(hvacProjectionDate(p))===wk;
+      return Number(p.month)===m&&Number(p.year)===y;
+    });
   }
   function normalize(zones){
     var keys={}; zones.forEach(function(z){keys[zkey(z)]=1;});
