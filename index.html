@@ -2544,6 +2544,15 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <label class="block text-xs font-bold text-slate-700 mb-1">Gastos Operativos Reales ($)</label>
                     <input type="number" id="inv-f-expenses" class="input-box font-bold text-xs text-rose-600" placeholder="Materiales, viáticos, repuestos...">
                 </div>
+                <div id="inv-smart-suggestion" class="hidden rounded-xl border border-teal-200 bg-teal-50 p-3 space-y-2">
+                    <div class="flex items-center gap-2 text-teal-800 text-xs font-black"><i class="fa-solid fa-lightbulb"></i> Referencia de una facturación similar</div>
+                    <p id="inv-smart-suggestion-detail" class="text-[11px] text-slate-600"></p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="rounded-lg bg-white border border-teal-100 p-2"><div class="text-[10px] text-slate-500 font-bold">Último valor facturado</div><div id="inv-smart-amount" class="text-sm font-black text-slate-800">-</div><button type="button" onclick="applyInvoiceSuggestion('amount')" class="mt-1 text-[10px] font-black text-teal-700 hover:underline">Usar valor</button></div>
+                        <div class="rounded-lg bg-white border border-teal-100 p-2"><div class="text-[10px] text-slate-500 font-bold">Últimos gastos reales</div><div id="inv-smart-expenses" class="text-sm font-black text-rose-700">-</div><button type="button" onclick="applyInvoiceSuggestion('expenses')" class="mt-1 text-[10px] font-black text-teal-700 hover:underline">Usar gastos</button></div>
+                    </div>
+                    <p class="text-[10px] text-slate-500">Es una referencia editable; no se copiará hasta que la confirmes.</p>
+                </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Adjuntar PDF de la Factura</label>
                     <input type="file" id="inv-f-pdf" accept=".pdf" class="text-xs text-slate-600">
@@ -7913,7 +7922,9 @@ async function authPedirNuevaClave() {
                     return Number(p.month)===month && Number(p.year)===year;
                 });
                 const already=new Set();periodProjs.forEach(p=>(p.scheduledEquipmentIds||p.equipmentIds||[]).forEach(id=>already.add(String(id))));
-                if(equipmentIds.some(id=>already.has(String(id))))return showToast(routineType==='REVISION'?'Uno o más equipos ya tienen una revisión programada en esta semana para este cliente.':'Uno o más equipos ya están programados en este periodo para este cliente.','error');
+                // Las revisiones nunca se bloquean por duplicidad: se pueden repetir
+                // para el mismo equipo incluso dentro de la misma semana.
+                if(routineType!=='REVISION' && equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
                 // Plan de facturación: cada grupo = un consecutivo (PRE-000X) con una parte -P# por zona. Sin selección: un solo grupo.
                 const plan=(typeof hvacNrGetPlan==='function'&&hvacNrGetPlan())||[{n:1,groups:hvacGroupEquipmentByZone(equipmentIds),equipmentIds,value:budget,target:periodProjs.length?periodProjs[0].id:'NEW'}];
                 const orderObjs=[];
@@ -10437,6 +10448,73 @@ async function authPedirNuevaClave() {
             });
         }
 
+        // Recomendaciones de facturación: solo compara el mismo cliente y tipo de mantenimiento.
+        // Se prioriza la coincidencia de equipos y, en caso de empate, la factura más reciente.
+        let hvacInvoiceSuggestionCurrent = null;
+        function hvacInvoiceNormalizeClient(value) {
+            return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase();
+        }
+        function hvacInvoiceEquipmentSet(order) {
+            const ids = new Set((order && order.equipmentIds || []).map(String).filter(Boolean));
+            try {
+                const parts = hvacIsMatrixOrder(order) ? hvacMatrixParts(order) : [order];
+                parts.forEach(part => (part && part.equipmentIds || []).forEach(id => ids.add(String(id))));
+            } catch (_) {}
+            return ids;
+        }
+        function hvacFindInvoiceSuggestion(order) {
+            const clientKey = hvacInvoiceNormalizeClient(order && order.client);
+            const type = billingRoutineType(order);
+            // Las sugerencias históricas se habilitan exclusivamente para preventivos.
+            // COR y REV siempre se facturan/registran manualmente, sin referencias anteriores.
+            if (type !== 'PREVENTIVO') return null;
+            const currentIds = hvacInvoiceEquipmentSet(order);
+            if (!clientKey || !currentIds.size) return null;
+            const candidates = [];
+            (workOrders || []).forEach(candidate => {
+                if (!candidate || candidate === order || candidate._hvacSummaryOnly || String(candidate.status || '').toUpperCase() !== 'BILLED') return;
+                if (hvacInvoiceNormalizeClient(candidate.client) !== clientKey) return;
+                if (billingRoutineType(candidate) !== 'PREVENTIVO') return;
+                const holder = hvacMatrixHolder(candidate);
+                const inv = holder && holder.invoice;
+                if (!inv || !(Number(inv.amount) > 0)) return;
+                const otherIds = hvacInvoiceEquipmentSet(candidate);
+                if (!otherIds.size) return;
+                let intersection = 0;
+                currentIds.forEach(id => { if (otherIds.has(id)) intersection++; });
+                const union = new Set([...currentIds, ...otherIds]).size;
+                const similarity = union ? intersection / union : 0;
+                if (similarity <= 0) return;
+                const date = inv.date || candidate.updatedAt || candidate.date || candidate.createdAt || '';
+                candidates.push({ order: candidate, invoice: inv, similarity, intersection, timestamp: Date.parse(date) || 0 });
+            });
+            candidates.sort((a,b) => b.similarity - a.similarity || b.timestamp - a.timestamp || b.intersection - a.intersection);
+            return candidates[0] || null;
+        }
+        function renderInvoiceSuggestion(order) {
+            const box = document.getElementById('inv-smart-suggestion');
+            const detail = document.getElementById('inv-smart-suggestion-detail');
+            if (!box || !detail) return;
+            const match = hvacFindInvoiceSuggestion(order);
+            hvacInvoiceSuggestionCurrent = match;
+            if (!match) { box.classList.add('hidden'); return; }
+            const inv = match.invoice;
+            const date = inv.date ? new Date(inv.date).toLocaleDateString('es-CO') : 'fecha no disponible';
+            detail.textContent = `Referencia: ${match.order.id} · Factura ${inv.number || 'sin número'} · ${date} · Coincidencia de equipos: ${Math.round(match.similarity * 100)}%.`;
+            document.getElementById('inv-smart-amount').textContent = '$ ' + Number(inv.amount || 0).toLocaleString('es-CO');
+            document.getElementById('inv-smart-expenses').textContent = '$ ' + Number(inv.expenses || 0).toLocaleString('es-CO');
+            box.classList.remove('hidden');
+        }
+        function applyInvoiceSuggestion(field) {
+            const match = hvacInvoiceSuggestionCurrent;
+            if (!match || !match.invoice) return;
+            const target = document.getElementById(field === 'amount' ? 'inv-f-amount' : 'inv-f-expenses');
+            if (!target) return;
+            target.value = Number(field === 'amount' ? match.invoice.amount : match.invoice.expenses) || 0;
+            target.dispatchEvent(new Event('input', { bubbles: true }));
+            showToast(field === 'amount' ? 'Valor de factura sugerido aplicado.' : 'Gastos sugeridos aplicados.');
+        }
+
         async function openInvoiceModal(orderId) {
             let order = workOrders.find(o => o.id === orderId);
             if (!order) return;
@@ -10453,6 +10531,7 @@ async function authPedirNuevaClave() {
             document.getElementById('inv-f-number').value = inv.number || '';
             document.getElementById('inv-f-amount').value = inv.amount || (projInv && projInv.budget) || '';
             document.getElementById('inv-f-expenses').value = inv.expenses || '';
+            renderInvoiceSuggestion(order);
 
             const notice = document.getElementById('inv-pdf-current-notice');
             if (inv.pdfUrl || inv.pdfData) {
@@ -10465,6 +10544,9 @@ async function authPedirNuevaClave() {
 
         function closeInvoiceModal() {
             document.getElementById('invoice-modal-backdrop').classList.add('hidden');
+            hvacInvoiceSuggestionCurrent = null;
+            const suggestion = document.getElementById('inv-smart-suggestion');
+            if (suggestion) suggestion.classList.add('hidden');
         }
 
         function handleFinancePeriodChange() {
