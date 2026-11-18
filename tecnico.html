@@ -3188,9 +3188,12 @@ async function authPedirNuevaClave() {
                 const awaitingSignature = progress.known && progress.allDone && techSignatureDecision(o) === 'PENDING';
                 const isCompleted = techEffectiveStatus(o) === 'COMPLETED';
                 const eqIds = o.equipmentIds || [];
+                const routineRaw = String(o.maintenanceType || o.tipoRutina || o.routineType || o.type || 'PREVENTIVO').toUpperCase();
+                const routineLabel = (routineRaw.includes('COR') ? 'Correctivo' : (routineRaw.includes('REV') ? 'Revisión' : 'Preventivo'));
                 return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
                     <div class="r-top">
                         <span class="r-id">${esc(o.id)}</span>
+                        <span class="pill ${routineLabel === 'Correctivo' ? 'pill-warn' : (routineLabel === 'Revisión' ? 'pill-idle' : 'pill-pend')}">${routineLabel}</span>
                         <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Rutina cerrada' : (awaitingSignature ? 'Equipos listos · firma pendiente' : 'Pendiente · continuar rutina')}</span>
                     </div>
                     <h3 class="r-client">${esc(o.client)}</h3>
@@ -4910,7 +4913,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
 </div></div>
 
 <script id="last-maint">
-/* ===== Historial rápido: último mantenimiento del equipo (solo lectura) ===== */
+/* ===== Historial completo de mantenimientos del equipo (solo lectura) ===== */
 (function () {
   const dt = v => { const d = new Date(v); return isNaN(d) ? '-' : d.toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }); };
   const norm = s => String(s == null ? '' : s).trim().toLowerCase();
@@ -4921,7 +4924,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
   if (head && !document.getElementById('exec-last-btn')) {
     const b = document.createElement('button');
     b.type = 'button'; b.id = 'exec-last-btn'; b.className = 'icon-btn lm-btn';
-    b.title = 'Ver último mantenimiento'; b.setAttribute('aria-label', 'Ver último mantenimiento');
+    b.title = 'Ver historial completo del equipo'; b.setAttribute('aria-label', 'Ver historial completo del equipo');
     b.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i>';
     b.onclick = () => window.lmOpen();
     head.appendChild(b);
@@ -4929,94 +4932,80 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
 
   const execOf = (o, keys) => { if (!o || !o.executions) return null; for (const k of keys) if (k && o.executions[k]) return o.executions[k]; return null; };
 
-  async function findLast(eq, eqId, curOrderId) {
+  async function findAll(eq, eqId, curOrderId) {
     const keys = [...new Set([eqId, eq && eq.id, eq && eq.code, cloudCleanId(eqId)].filter(Boolean).map(String))];
     const found = new Map();
-    const add = o => { if (o && o.id && String(o.id) !== String(curOrderId) && execOf(o, keys)) found.set(o.id, o); };
-    (workOrders || []).forEach(add);                                  // copia local (sirve sin señal)
+    const add = o => {
+      if (!o || !o.id || String(o.id) === String(curOrderId)) return;
+      const ids = (o.equipmentIds || []).map(String);
+      const ex = execOf(o, keys);
+      if (ex || ids.some(id => keys.includes(id))) found.set(String(o.id), o);
+    };
+    (workOrders || []).forEach(add);
     if (navigator.onLine) {
-      for (const k of keys.slice(0, 3)) {
-        const hkey = 'hist:' + k;
-        let list; const hit = egressGet(hkey, EGRESS.HIST_TTL_MS);
-        if (hit) list = JSON.parse(hit);
-        else {
+      for (const k of keys) {
+        const hkey = 'hist:all:' + k;
+        let cached = egressGet(hkey, EGRESS.HIST_TTL_MS);
+        let rows = cached ? JSON.parse(cached) : null;
+        if (!Array.isArray(rows)) {
+          rows = [];
           const cs = encodeURIComponent(JSON.stringify([k]));
-          let rows = null;
-          if (!EGRESS.liteViewMissing) {          // vista liviana: trae parámetros y checklist, sin fotos
-            rows = await supabaseFetch(EGRESS.LITE_VIEW + '?select=payload&equipment_ids=cs.' + cs + '&order=date.desc&limit=10', 'GET', null, null, { quiet: true });
-            if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
+          // Paginación real: no limitar el historial a las últimas 10 órdenes.
+          for (let offset = 0; offset < 20000; offset += 500) {
+            let page = null;
+            if (!EGRESS.liteViewMissing) {
+              page = await supabaseFetch(EGRESS.LITE_VIEW + '?select=payload&equipment_ids=cs.' + cs + '&order=date.desc&limit=500&offset=' + offset, 'GET', null, null, { quiet: true, noStore: true });
+              if (!Array.isArray(page) && Number(cloudCtl.lastStatus) === 404) EGRESS.liteViewMissing = true;
+            }
+            if (!Array.isArray(page)) {
+              const sel = 'select=id,date:payload->>date,client:payload->>client,technician:payload->>technician,technicians:payload->technicians,equipmentIds:payload->equipmentIds,maintenanceType:payload->>maintenanceType,type:payload->>type,executions:payload->executions';
+              page = await supabaseFetch('hvac_orders?' + sel + '&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=500&offset=' + offset, 'GET', null, null, { quiet: true, noStore: true });
+              if (Array.isArray(page)) page = page.map(r => ({payload:{id:r.id,date:r.date,client:r.client,technician:r.technician,technicians:r.technicians,equipmentIds:r.equipmentIds||[],maintenanceType:r.maintenanceType,type:r.type,executions:r.executions||{}}}));
+            }
+            if (!Array.isArray(page) || !page.length) break;
+            rows.push(...page.map(r => r && r.payload).filter(Boolean));
+            if (page.length < 500) break;
           }
-          if (!Array.isArray(rows) && EGRESS.liteViewMissing) {   // respaldo sin la vista: SOLO la ejecución de este equipo (no la orden completa con todas las fotos)
-            const sel = 'select=id,date:payload->>date,client:payload->>client,technician:payload->>technician,ex:payload->executions->' + encodeURIComponent(k);
-            rows = await supabaseFetch('hvac_orders?' + sel + '&payload->equipmentIds=cs.' + cs + '&order=payload->>date.desc&limit=3', 'GET', null, null, { quiet: true });
-            if (!Array.isArray(rows)) rows = await supabaseFetch('hvac_orders?' + sel + '&payload->equipmentIds=cs.' + cs + '&limit=3', 'GET', null, null, { quiet: true });
-            if (Array.isArray(rows)) rows = rows.filter(r => r && r.ex).map(r => ({ payload: { id: r.id, date: r.date, client: r.client, technician: r.technician, equipmentIds: [k], executions: { [k]: r.ex } } }));
-          }
-          list = Array.isArray(rows) ? rows.map(r => r && r.payload).filter(Boolean) : null;
-          if (list) egressSet(hkey, JSON.stringify(list));
+          if (rows.length) egressSet(hkey, JSON.stringify(rows));
         }
-        if (Array.isArray(list)) list.forEach(add);
+        rows.forEach(add);
       }
     }
-    const cands = [...found.values()].map(o => ({ o, ex: execOf(o, keys) }))
-      .sort((a, b) => new Date(b.ex.timestamp || b.o.date) - new Date(a.ex.timestamp || a.o.date));
-    return cands.find(c => !c.ex.partial) || cands[0] || null;
+    return [...found.values()].map(o => ({o, ex:execOf(o,keys)})).sort((a,b)=>new Date((b.ex&&b.ex.timestamp)||b.o.date||0)-new Date((a.ex&&a.ex.timestamp)||a.o.date||0));
   }
 
   function render(eq, c) {
-    const { o, ex } = c;
-    const typeKey = (eq && eq.type ? eq.type : 'EXTRACTOR').trim().toUpperCase();
-    const cfg = ex.formConfigSnapshot || equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'] || { params: '', checklist: '' };
-    const pNames = list(cfg.params), cNames = String(cfg.checklist || '').split('\n').map(x => x.trim()).filter(Boolean);
-    const pv = ex.paramsValues || {};
-    // valores que el técnico lleva escritos ahora (para comparar), por nombre del parámetro
-    const curCfg = equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'] || { params: '' };
-    const curByName = {}; list(curCfg.params).forEach((n, i) => { const el = document.querySelector('.exec-param-input[data-param-key="param_' + i + '"]'); if (el) curByName[norm(n)] = el.value; });
-    const techs = (o.technicians && o.technicians.length ? o.technicians.join(', ') : o.technician) || '-';
-
-    let h = '<div class="lm-meta"><span class="lm-ro"><i class="fa-solid fa-lock"></i> Solo lectura</span>' +
-      '<span>Fecha: <b>' + esc(dt(ex.timestamp || o.date)) + '</b></span><span>Técnico: <b>' + esc(techs) + '</b></span>' +
-      '<span>Orden: <b>' + esc(o.id) + '</b></span></div>';
-    if (ex.partial) h += '<div class="mx-alert warn" style="margin:0 0 8px">Ese registro quedó en progreso (incompleto).</div>';
-
-    h += '<div class="lm-sec">Parámetros registrados</div>';
-    if (pNames.length) {
-      h += '<table class="lm-tbl"><thead><tr><th>Parámetro</th><th>Anterior</th><th>Ahora</th></tr></thead><tbody>';
-      pNames.forEach((n, i) => {
-        const prev = pv['param_' + i], cur = curByName[norm(n)];
-        h += '<tr><td>' + esc(n) + '</td><td class="v">' + esc(prev == null || prev === '' ? '-' : prev) + '</td><td class="cur">' + esc(cur == null || cur === '' ? '·' : cur) + '</td></tr>';
-      });
-      h += '</tbody></table>';
-    } else h += '<div class="lm-empty">Sin parámetros registrados.</div>';
-
-    if (cNames.length) {
-      h += '<div class="lm-sec">Check-list</div>';
-      const ck = ex.checklist || {};
-      cNames.forEach((n, i) => { const ok = !!ck['chk_' + (i + 1)]; h += '<div class="lm-chk"><i class="fa-solid ' + (ok ? 'fa-circle-check ok' : 'fa-circle-minus no') + '"></i><span>' + esc(n) + '</span></div>'; });
-    }
-
-    const technicalObs = ex.observaciones_tecnicas || ex.observaciones || ex.notas_tecnicas || ex.obs || '';
-    if (String(ex.tipoRutina || '').toUpperCase() !== 'REVISION') h += '<div class="lm-sec">Observaciones técnicas</div><div class="lm-note">' + esc(String(technicalObs).trim() || 'Sin observaciones adicionales.') + '</div>';
-    if (ex.corrective) h += '<div class="lm-sec">Correctivo reportado</div><div class="lm-note warn">' + esc(ex.correctiveDesc || 'Se reportó un correctivo sin descripción.') + '</div>';
-    const nPh = Array.isArray(ex.photos) ? ex.photos.length : (Number(ex.photosCount) || 0);
-    if (nPh) h += '<div class="lm-meta" style="margin-top:10px"><span><i class="fa-solid fa-camera"></i> ' + nPh + ' foto(s) en ese registro</span></div>';
+    const {o,ex} = c;
+    if (!ex) return '<div class="lm-meta"><span>Fecha: <b>'+esc(dt(o.date))+'</b></span><span>Orden: <b>'+esc(o.id)+'</b></span></div><div class="lm-note">La orden incluye este equipo, pero no tiene una ejecución técnica individual guardada.</div>';
+    const typeRaw = String(ex.tipoRutina || o.maintenanceType || o.type || '').toUpperCase();
+    const typeName = typeRaw.includes('COR') ? 'Correctivo' : (typeRaw.includes('REV') ? 'Revisión' : 'Preventivo');
+    const typeKey = String((eq && eq.type) || 'EXTRACTOR').trim().toUpperCase();
+    const cfg = ex.formConfigSnapshot || equipmentFormsConfig[typeKey] || equipmentFormsConfig.EXTRACTOR || {params:'',checklist:''};
+    const pNames=list(cfg.params), cNames=String(cfg.checklist||'').split('\n').map(x=>x.trim()).filter(Boolean), pv=ex.paramsValues||{};
+    const techs=(o.technicians&&o.technicians.length?o.technicians.join(', '):o.technician)||'-';
+    let h='<div class="lm-meta"><span class="lm-ro"><i class="fa-solid fa-lock"></i> Solo lectura</span><span>Tipo: <b>'+esc(typeName)+'</b></span><span>Fecha: <b>'+esc(dt(ex.timestamp||o.date))+'</b></span><span>Técnico: <b>'+esc(techs)+'</b></span><span>Orden: <b>'+esc(o.id)+'</b></span></div>';
+    if(ex.partial) h+='<div class="mx-alert warn" style="margin:0 0 8px">Registro en progreso (incompleto).</div>';
+    h+='<div class="lm-sec">Parámetros registrados</div>';
+    if(pNames.length){h+='<table class="lm-tbl"><thead><tr><th>Parámetro</th><th>Valor anterior</th></tr></thead><tbody>';pNames.forEach((n,i)=>h+='<tr><td>'+esc(n)+'</td><td class="v">'+esc(pv['param_'+i]??'-')+'</td></tr>');h+='</tbody></table>';}else h+='<div class="lm-empty">Sin parámetros registrados.</div>';
+    if(cNames.length){h+='<div class="lm-sec">Check-list</div>';const ck=ex.checklist||{};cNames.forEach((n,i)=>{const ok=!!(ck['chk_'+(i+1)]||ck['check_'+(i+1)]||ck[i]);h+='<div class="lm-chk"><i class="fa-solid '+(ok?'fa-circle-check ok':'fa-circle-minus no')+'"></i><span>'+esc(n)+'</span></div>';});}
+    const obs=ex.observaciones_tecnicas||ex.observaciones||ex.notas_tecnicas||ex.obs||ex.notes||'';
+    h+='<div class="lm-sec">Observaciones y hallazgos</div><div class="lm-note">'+esc(String(obs).trim()||'Sin observaciones registradas.')+'</div>';
+    if(ex.corrective||ex.correctiveDesc)h+='<div class="lm-sec">Novedad / correctivo reportado</div><div class="lm-note warn">'+esc(ex.correctiveDesc||'Se reportó un correctivo.')+'</div>';
+    const nPh=Array.isArray(ex.photos)?ex.photos.length:(Number(ex.photosCount)||0);if(nPh)h+='<div class="lm-meta"><span><i class="fa-solid fa-camera"></i> '+nPh+' foto(s) registradas</span></div>';
     return h;
   }
 
   window.lmOpen = async function () {
-    const body = document.getElementById('lm-body');
-    body.innerHTML = '<div class="lm-empty"><i class="fa-solid fa-spinner fa-spin"></i> Buscando el último mantenimiento…</div>';
+    const body=document.getElementById('lm-body');
+    body.innerHTML='<div class="lm-empty"><i class="fa-solid fa-spinner fa-spin"></i> Cargando historial completo del equipo…</div>';
     mxOpen('mx-last');
-    const eqId = currentExecEqId, eq = techFindEq(eqId) || { code: eqId };
+    const eqId=currentExecEqId, eq=techFindEq(eqId)||{code:eqId};
     try {
-      const c = await findLast(eq, eqId, currentExecOrderId);
-      if (!document.getElementById('mx-last').classList.contains('open')) return;
-      body.innerHTML = c ? render(eq, c)
-        : '<div class="lm-empty"><i class="fa-regular fa-folder-open" style="font-size:28px;display:block;margin-bottom:8px"></i>Este equipo aún no tiene un mantenimiento anterior registrado.' + (navigator.onLine ? '' : '<br><small>Sin conexión: solo se revisaron datos de este dispositivo.</small>') + '</div>';
-    } catch (e) {
-      console.warn('[Último mantenimiento]', e);
-      body.innerHTML = '<div class="lm-empty">No se pudo consultar el historial. Revisa tu conexión e inténtalo de nuevo.</div>';
-    }
+      const records=await findAll(eq,eqId,currentExecOrderId);
+      if(!document.getElementById('mx-last').classList.contains('open'))return;
+      if(!records.length){body.innerHTML='<div class="lm-empty"><i class="fa-regular fa-folder-open"></i> No hay intervenciones anteriores registradas para este equipo.'+(!navigator.onLine?'<br><small>Sin conexión: se muestran únicamente los datos guardados en este dispositivo.</small>':'')+'</div>';return;}
+      body.innerHTML='<div class="lm-meta"><b>'+records.length+' intervención(es) encontradas</b><span>Preventivos · Correctivos · Revisiones</span></div>'+records.map((r,i)=>'<section class="lm-history-item" style="border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0"><div class="lm-sec">Intervención '+(i+1)+' de '+records.length+'</div>'+render(eq,r)+'</section>').join('');
+    } catch(e){console.warn('[Historial completo equipo]',e);body.innerHTML='<div class="lm-empty">No se pudo cargar todo el historial. Verifica la conexión e inténtalo nuevamente.</div>';}
   };
 })();
 </script>
