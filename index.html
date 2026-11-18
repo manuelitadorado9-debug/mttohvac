@@ -43,7 +43,7 @@
     <!-- CSS compilado (se genera con "npm run build:css"). Si el CDN de abajo está bloqueado en el celular, esto mantiene los estilos. -->
     <link rel="stylesheet" href="/tailwind.css?v=1">
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-    <script src="common.js?v=20261118-1"></script>
+    <script src="common.js?v=9"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- FontAwesome Icons -->
@@ -186,6 +186,15 @@ label.block{letter-spacing:.01em}
 .rail-foot{flex:0 0 auto;margin:.3rem .9rem max(.9rem,var(--safe-b));padding:.75rem .9rem;border-radius:1rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;gap:.5rem;font-size:.7rem;color:#9fb0d1}
 .rail-foot button{display:inline-flex;align-items:center;gap:.35rem;color:#fda4af;font-weight:800}
 .rail-foot button:hover{color:#fff}
+.rail-foot .rail-settings-btn{
+  flex:0 0 36px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  border-radius:.75rem;border:1px solid rgba(165,180,252,.22);background:rgba(99,102,241,.10);
+  color:#c7d2fe;font-size:.95rem;transition:background .18s,border-color .18s,color .18s,transform .15s;
+}
+.rail-foot .rail-settings-btn:hover{background:rgba(99,102,241,.24);border-color:rgba(165,180,252,.48);color:#fff}
+.rail-foot .rail-settings-btn:active{transform:scale(.94)}
+.rail-foot .rail-settings-btn.is-active{background:linear-gradient(135deg,#6366f1,#8b5cf6);border-color:rgba(199,210,254,.55);color:#fff;box-shadow:0 6px 16px -8px rgba(99,102,241,.85)}
+.rail-foot #sidebar-sync-badge{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 @media (min-width:1024px){
   body{padding-left:var(--rail)}
@@ -1189,7 +1198,8 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         <nav class="flex-1 overflow-y-auto" id="sidebar-nav-list"></nav>
         <div class="rail-foot">
             <span id="sidebar-sync-badge" role="status" aria-live="polite" class="flex items-center gap-1.5 font-medium"><i class="fa-solid fa-circle-check text-emerald-400"></i> Cloud Enlazado</span>
-            <button onclick="logoutSession()" class="transition"><i class="fa-solid fa-power-off"></i> Salir</button>
+            <button type="button" id="sidebar-settings-btn" class="rail-settings-btn" onclick="switchTab('admin-settings'); toggleSidebar(false);" title="Configuración" aria-label="Abrir configuración" aria-controls="view-admin-settings"><i class="fa-solid fa-gear" aria-hidden="true"></i></button>
+            <button type="button" onclick="logoutSession()" class="transition" title="Salir"><i class="fa-solid fa-power-off"></i> Salir</button>
         </div>
     </aside>
 
@@ -1764,81 +1774,89 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             </div>
         </section>
 
-        <section id="view-admin-financial" class="hidden space-y-4">
-            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
-                <div>
-                    <h2 class="text-base font-black text-slate-900 tracking-tight">Finanzas</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Métricas de facturación, gastos operativos reales y rentabilidad neta.</p>
+        <section id="view-admin-financial" class="hidden space-y-3">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm page-head space-y-3">
+                <div class="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h2 class="text-base font-black text-slate-900 tracking-tight">Finanzas</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Métricas de facturación, gastos operativos reales y rentabilidad neta.</p>
+                    </div>
+                    <button type="button" id="btn-financial-projection-upload" onclick="openFinancialProjectionModal()" class="px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition whitespace-nowrap"><i class="fa-solid fa-file-excel mr-1"></i> Cargar proyección</button>
                 </div>
-                <div class="flex items-center gap-2 flex-wrap">
-                    <button type="button" id="btn-financial-projection-upload" onclick="openFinancialProjectionModal()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"><i class="fa-solid fa-file-excel mr-1"></i> Cargar proyección anual</button>
-                    <label class="text-xs font-bold text-slate-600 uppercase">Periodo:</label>
-                    <select id="fin-period-type" onchange="handleFinancePeriodChange()" class="input-box font-bold text-xs w-48">
-                        <option value="YTD" selected>Lo transcurrido del año (YTD)</option>
-                        <option value="MONTH">Por Mes Específico</option>
-                        <option value="YEAR">Por Año Completo</option>
-                        <option value="ALL">Todo el Historial</option>
-                    </select>
-                    <label class="text-xs font-bold text-slate-600 uppercase">Cliente:</label>
-                    <select id="fin-filter-client" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-52">
-                        <option value="ALL">Todos</option>
-                    </select>
-                    <label class="text-xs font-bold text-slate-600 uppercase">Tipo mtto:</label>
-                    <select id="fin-filter-maintenance-type" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-40">
-                        <option value="ALL">Todos</option>
-                        <option value="PREVENTIVO">Preventivo</option>
-                        <option value="CORRECTIVO">Correctivo</option>
-                        <option value="REVISION">Revisión</option>
-                        <option value="SIN_CLASIFICAR">Sin clasificar</option>
-                    </select>
-                    <input type="month" id="fin-filter-month" onchange="renderFinancialModule()" class="input-box text-xs w-36 hidden">
-                    <input type="number" id="fin-filter-year" onchange="renderFinancialModule()" placeholder="Año" min="2020" max="2035" class="input-box text-xs w-24 hidden font-bold">
+                <div class="flex flex-wrap gap-2 items-end">
+                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Periodo
+                        <select id="fin-period-type" onchange="handleFinancePeriodChange()" class="input-box font-bold text-xs w-full">
+                            <option value="YTD" selected>Lo transcurrido del año (YTD)</option>
+                            <option value="MONTH">Por Mes Específico</option>
+                            <option value="YEAR">Por Año Completo</option>
+                            <option value="ALL">Todo el Historial</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Cliente
+                        <select id="fin-filter-client" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-full">
+                            <option value="ALL">Todos</option>
+                        </select>
+                    </label>
+                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Tipo mtto
+                        <select id="fin-filter-maintenance-type" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-full">
+                            <option value="ALL">Todos</option>
+                            <option value="PREVENTIVO">Preventivo</option>
+                            <option value="CORRECTIVO">Correctivo</option>
+                            <option value="REVISION">Revisión</option>
+                            <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                        </select>
+                    </label>
+                    <label id="fin-filter-month-field" class="hidden flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Mes
+                        <input type="month" id="fin-filter-month" onchange="renderFinancialModule()" class="input-box text-xs w-full">
+                    </label>
+                    <label id="fin-filter-year-field" class="hidden flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Año
+                        <input type="number" id="fin-filter-year" onchange="renderFinancialModule()" placeholder="Año" min="2020" max="2100" class="input-box text-xs w-full font-bold">
+                    </label>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-billed">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-billed">
                     <span class="text-xs text-slate-500 font-bold uppercase tracking-wider">Facturación Total</span>
                     <p id="kpi-fin-billed" class="text-3xl font-black text-slate-900 mt-2">$ 0</p>
                 </div>
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-expenses">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-expenses">
                     <span class="text-xs text-rose-500 font-bold uppercase tracking-wider">Gastos Operativos Reales</span>
                     <p id="kpi-fin-expenses" class="text-3xl font-black text-rose-600 mt-2">$ 0</p>
                 </div>
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-net">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-net">
                     <span class="text-xs text-emerald-600 font-bold uppercase tracking-wider">Utilidad Neta Real</span>
                     <p id="kpi-fin-net" class="text-3xl font-black text-emerald-600 mt-2">$ 0</p>
                 </div>
-                <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-margin">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-margin">
                     <span class="text-xs text-teal-600 font-bold uppercase tracking-wider">% Margen Real</span>
                     <p id="kpi-fin-margin" class="text-3xl font-black text-teal-600 mt-2">0%</p>
                 </div>
             </div>
 
             <section id="financial-projection-comparison" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                    <div>
+                <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                    <div class="min-w-0">
                         <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-chart-column text-indigo-600 mr-2"></i>Facturado vs. proyectado</h3>
-                        <p class="text-xs text-slate-500 mt-1">Comparación global por mes. Incluye facturas de órdenes y facturas históricas/manuales, sin aplicar los filtros de cliente o tipo de mantenimiento de la tabla inferior.</p>
+                        <p id="fin-proj-period-label" class="text-[11px] text-slate-500 mt-0.5">Comparación global del periodo seleccionado.</p>
                     </div>
-                    <div class="flex items-center gap-2">
-                        <label for="fin-projection-year" class="text-[11px] font-bold uppercase text-slate-500">Año</label>
-                        <select id="fin-projection-year" onchange="renderFinancialProjectionComparison()" class="input-box text-xs font-bold w-28"></select>
+                    <span class="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">Comparativo global</span>
+                </div>
+                <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 p-3" id="fin-projection-summary">
+                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3"><span id="fin-proj-label" class="text-[9px] font-bold uppercase text-indigo-700">Proyectado del periodo</span><p id="fin-proj-total" class="text-base sm:text-lg font-black text-indigo-900 mt-1">$ 0</p></div>
+                    <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3"><span id="fin-actual-label" class="text-[9px] font-bold uppercase text-sky-700">Facturado del periodo</span><p id="fin-actual-total" class="text-base sm:text-lg font-black text-sky-900 mt-1">$ 0</p></div>
+                    <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3"><span id="fin-proj-diff-label" class="text-[9px] font-bold uppercase text-amber-700">Diferencia</span><p id="fin-proj-difference" class="text-base sm:text-lg font-black text-amber-900 mt-1">—</p></div>
+                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3"><span id="fin-proj-compliance-label" class="text-[9px] font-bold uppercase text-emerald-700">Cumplimiento</span><p id="fin-proj-compliance" class="text-base sm:text-lg font-black text-emerald-900 mt-1">—</p></div>
+                    <p id="fin-proj-months-note" class="col-span-2 xl:col-span-4 text-[10px] text-slate-500 leading-4">La comparación utiliza el periodo seleccionado y requiere una proyección cargada para cada mes del periodo.</p>
+                </div>
+                <details id="fin-projection-details" class="border-t border-slate-100">
+                    <summary class="cursor-pointer select-none px-4 py-2.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50/50">Ver detalle mensual de la comparación</summary>
+                    <div class="overflow-x-auto px-3 pb-3">
+                        <table class="w-full">
+                            <thead><tr><th>Mes</th><th class="text-right">Proyectado</th><th class="text-right">Facturado</th><th class="text-right">Diferencia</th><th class="text-right">Cumplimiento</th></tr></thead>
+                            <tbody id="fin-projection-table-body"></tbody>
+                        </table>
                     </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-4" id="fin-projection-summary">
-                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3"><span class="text-[10px] font-bold uppercase text-indigo-700">Proyectado anual</span><p id="fin-proj-total" class="text-lg font-black text-indigo-900 mt-1">$ 0</p></div>
-                    <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3"><span class="text-[10px] font-bold uppercase text-sky-700">Facturado anual</span><p id="fin-actual-total" class="text-lg font-black text-sky-900 mt-1">$ 0</p></div>
-                    <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3"><span class="text-[10px] font-bold uppercase text-amber-700">Diferencia anual</span><p id="fin-proj-difference" class="text-lg font-black text-amber-900 mt-1">—</p></div>
-                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3"><span class="text-[10px] font-bold uppercase text-emerald-700">Cumplimiento global</span><p id="fin-proj-compliance" class="text-lg font-black text-emerald-900 mt-1">—</p></div>
-                    <p id="fin-proj-months-note" class="sm:col-span-2 xl:col-span-4 text-[11px] text-slate-500">Carga la proyección de los 12 meses para calcular la comparación anual completa.</p>
-                </div>
-                <div class="overflow-x-auto">
-                    <table>
-                        <thead><tr><th>Mes</th><th class="text-right">Proyectado</th><th class="text-right">Facturado</th><th class="text-right">Diferencia</th><th class="text-right">Cumplimiento</th></tr></thead>
-                        <tbody id="fin-projection-table-body"></tbody>
-                    </table>
-                </div>
+                </details>
             </section>
 
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -5853,6 +5871,8 @@ async function authPedirNuevaClave() {
             const list = document.getElementById('sidebar-nav-list');
             list.innerHTML = '';
             const u = systemUsers.find(x => String(x.id) === String(activeUser));
+            const settingsButton = document.getElementById('sidebar-settings-btn');
+            if (settingsButton) settingsButton.classList.toggle('hidden', !(u && sessionAuthenticated && u.role === 'ADMIN'));
             if (!u || !sessionAuthenticated) return;
 
             const makeLink = (icon, label, tabId, highlight = false) => {
@@ -5903,7 +5923,6 @@ async function authPedirNuevaClave() {
                 list.appendChild(toolsLink);
                 list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
-                list.appendChild(makeLink('fa-sliders', 'Configuración', 'admin-settings'));
                 if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
             }
         }
@@ -5930,6 +5949,8 @@ async function authPedirNuevaClave() {
             }
             document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
             const target = document.getElementById(`view-${tabId}`);
+            const settingsButton = document.getElementById('sidebar-settings-btn');
+            if (settingsButton) settingsButton.classList.toggle('is-active', tabId === 'admin-settings');
             if (target) {
                 target.classList.remove('hidden');
                 renderSection(tabId); // pintado inmediato con la caché local
@@ -10788,12 +10809,18 @@ async function authPedirNuevaClave() {
         }
 
         function handleFinancePeriodChange() {
-            const type = document.getElementById('fin-period-type').value;
+            const type = document.getElementById('fin-period-type')?.value || 'YTD';
             const monthInput = document.getElementById('fin-filter-month');
             const yearInput = document.getElementById('fin-filter-year');
-
-            monthInput.classList.toggle('hidden', type !== 'MONTH');
-            yearInput.classList.toggle('hidden', type !== 'YEAR');
+            const monthField = document.getElementById('fin-filter-month-field');
+            const yearField = document.getElementById('fin-filter-year-field');
+            const now = new Date();
+            if (monthInput && type === 'MONTH' && !monthInput.value) monthInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+            if (yearInput && type === 'YEAR' && !yearInput.value) yearInput.value = String(now.getFullYear());
+            if (monthInput) monthInput.classList.toggle('hidden', type !== 'MONTH');
+            if (yearInput) yearInput.classList.toggle('hidden', type !== 'YEAR');
+            if (monthField) monthField.classList.toggle('hidden', type !== 'MONTH');
+            if (yearField) yearField.classList.toggle('hidden', type !== 'YEAR');
             renderFinancialModule();
         }
 
@@ -10934,47 +10961,119 @@ async function authPedirNuevaClave() {
             showToast(`Proyección financiera guardada: ${count} mes(es).`);
         }
         function renderFinancialProjectionComparison() {
-            const body = document.getElementById('fin-projection-table-body'); if (!body) return;
-            const projections = hvacFinancialProjectionsRead(), currentYear = new Date().getFullYear();
-            const years = new Set([currentYear]);
-            projections.forEach(p => { const y = Number(p.year || String(p.id || '').slice(0,4)); if (y) years.add(y); });
-            const addInvoiceYear = date => { const key = billingMonthKey(date); if (key) years.add(Number(key.slice(0,4))); };
-            workOrders.filter(o => o && o.status === 'BILLED' && o.invoice).forEach(o => addInvoiceYear(o.invoice.date || o.date));
-            hvacManualInvoicesRead().forEach(x => { const inv = x && x.invoice || {}; if (inv.number) addInvoiceYear(inv.date || x.date); });
-            const sel = document.getElementById('fin-projection-year');
-            const prev = Number(sel && sel.value) || currentYear;
-            if (sel) {
-                sel.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join('');
-                sel.value = years.has(prev) ? String(prev) : String(currentYear);
+            const section = document.getElementById('financial-projection-comparison');
+            const body = document.getElementById('fin-projection-table-body');
+            if (!section || !body) return;
+
+            const periodType = document.getElementById('fin-period-type')?.value || 'YTD';
+            const selectedClient = document.getElementById('fin-filter-client')?.value || 'ALL';
+            const selectedMaintenanceType = document.getElementById('fin-filter-maintenance-type')?.value || 'ALL';
+            const note = document.getElementById('fin-proj-months-note');
+
+            // La proyección que se importa es un presupuesto global por mes: no está segmentada por cliente ni por tipo.
+            // Ocultar la comparación cuando esos filtros se usan evita enfrentar un presupuesto global con una parte de la facturación.
+            if (selectedClient !== 'ALL' || selectedMaintenanceType !== 'ALL') {
+                section.classList.add('hidden');
+                return;
             }
-            const year = Number(sel && sel.value) || currentYear, projectedMap = new Map(), actualMap = new Map();
-            projections.filter(p => Number(p.year || String(p.id || '').slice(0,4)) === year).forEach(p => projectedMap.set(Number(p.month || String(p.id || '').slice(5,7)), Number(p.projectedAmount ?? p.amount ?? p.value) || 0));
-            const addActual = (date, amount) => { const key = billingMonthKey(date); if (!key || Number(key.slice(0,4)) !== year) return; const month = Number(key.slice(5,7)); actualMap.set(month, (actualMap.get(month) || 0) + (Number(amount) || 0)); };
-            workOrders.filter(o => o && o.status === 'BILLED' && o.invoice).forEach(o => addActual(o.invoice.date || o.date, o.invoice.amount));
-            hvacManualInvoicesRead().forEach(x => { const inv = x && x.invoice || {}; if (inv.number) addActual(inv.date || x.date, inv.amount); });
-            let sumProjected = 0, sumActual = 0, hasProjection = false;
-            body.innerHTML = '';
-            FIN_PROJ_MONTHS.forEach((monthName, i) => {
-                const m = i + 1, has = projectedMap.has(m), projected = has ? projectedMap.get(m) : null, actual = actualMap.get(m) || 0;
-                if (has) { hasProjection = true; sumProjected += projected; }
-                sumActual += actual;
-                const difference = has ? actual - projected : null, percent = has && projected > 0 ? actual / projected * 100 : null;
-                const diffClass = difference == null ? 'text-slate-400' : difference >= 0 ? 'text-emerald-600' : 'text-rose-600';
-                body.insertAdjacentHTML('beforeend', `<tr><td class="font-bold capitalize">${monthName}</td><td class="text-right font-mono">${has ? '$ ' + projected.toLocaleString('es-CO') : '<span class="text-slate-400">Sin proyección</span>'}</td><td class="text-right font-mono font-bold">$ ${actual.toLocaleString('es-CO')}</td><td class="text-right font-mono font-bold ${diffClass}">${has ? (difference < 0 ? '- $ ' + Math.abs(difference).toLocaleString('es-CO') : '$ ' + difference.toLocaleString('es-CO')) : '—'}</td><td class="text-right font-bold">${percent == null ? '—' : percent.toFixed(1).replace('.', ',') + '%'}</td></tr>`);
+            section.classList.remove('hidden');
+
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth() + 1;
+            const monthInput = document.getElementById('fin-filter-month');
+            const yearInput = document.getElementById('fin-filter-year');
+            if (periodType === 'MONTH' && monthInput && !monthInput.value) monthInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0');
+            if (periodType === 'YEAR' && yearInput && !yearInput.value) yearInput.value = String(currentYear);
+
+            const projectionMap = new Map();
+            hvacFinancialProjectionsRead().forEach(p => {
+                const id = String(p.id || '');
+                const year = Number(p.year || id.slice(0, 4));
+                const month = Number(p.month || id.slice(5, 7));
+                const amount = Number(p.projectedAmount ?? p.amount ?? p.value);
+                if (Number.isInteger(year) && month >= 1 && month <= 12 && Number.isFinite(amount) && amount >= 0) {
+                    projectionMap.set(year + '-' + String(month).padStart(2, '0'), amount);
+                }
             });
+
+            const actualMap = new Map();
+            const addActual = (date, amount) => {
+                const key = billingMonthKey(date);
+                if (!/^\d{4}-\d{2}$/.test(key)) return;
+                actualMap.set(key, (actualMap.get(key) || 0) + (Number(amount) || 0));
+            };
+            workOrders.filter(o => o && String(o.status || '').toUpperCase() === 'BILLED' && o.invoice && String(o.invoice.number || '').trim())
+                .forEach(o => addActual(o.invoice.date || o.date, o.invoice.amount));
+            hvacManualInvoicesRead().forEach(x => {
+                const inv = x && x.invoice || {};
+                if (String(inv.number || '').trim()) addActual(inv.date || x.date, inv.amount);
+            });
+
+            let keys = [];
+            let periodLabel = '';
+            if (periodType === 'MONTH') {
+                const selected = String(monthInput?.value || (currentYear + '-' + String(currentMonth).padStart(2, '0')));
+                if (/^\d{4}-\d{2}$/.test(selected)) keys = [selected];
+                const [yy, mm] = selected.split('-').map(Number);
+                periodLabel = Number.isFinite(yy) && mm >= 1 && mm <= 12 ? FIN_PROJ_MONTHS[mm - 1] + ' ' + yy : 'Mes seleccionado';
+            } else if (periodType === 'YEAR') {
+                const year = Number(yearInput?.value) || currentYear;
+                keys = Array.from({ length: 12 }, (_, i) => year + '-' + String(i + 1).padStart(2, '0'));
+                periodLabel = 'Año completo ' + year;
+            } else if (periodType === 'ALL') {
+                keys = [...new Set([...projectionMap.keys(), ...actualMap.keys()])].sort();
+                periodLabel = 'Todo el historial';
+            } else {
+                keys = Array.from({ length: currentMonth }, (_, i) => currentYear + '-' + String(i + 1).padStart(2, '0'));
+                periodLabel = 'YTD · Enero a ' + FIN_PROJ_MONTHS[currentMonth - 1] + ' ' + currentYear;
+            }
+
+            const label = document.getElementById('fin-proj-period-label');
+            if (label) label.textContent = 'Comparación global · ' + periodLabel;
+            const actualLabel = document.getElementById('fin-actual-label');
+            if (actualLabel) actualLabel.textContent = 'Facturado del periodo';
+            const projLabel = document.getElementById('fin-proj-label');
+            if (projLabel) projLabel.textContent = 'Proyectado del periodo';
+
+            body.innerHTML = '';
+            let sumProjected = 0, sumActual = 0, projectedCount = 0;
+            keys.forEach(key => {
+                const [year, month] = key.split('-').map(Number);
+                const has = projectionMap.has(key);
+                const projected = has ? projectionMap.get(key) : null;
+                const actual = actualMap.get(key) || 0;
+                if (has) { sumProjected += projected; projectedCount++; }
+                sumActual += actual;
+                const difference = has ? actual - projected : null;
+                const percent = has && projected > 0 ? actual / projected * 100 : null;
+                const diffClass = difference == null ? 'text-slate-400' : difference >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                const monthLabel = (FIN_PROJ_MONTHS[month - 1] || 'Mes') + (periodType === 'ALL' ? ' ' + year : '');
+                body.insertAdjacentHTML('beforeend', `<tr><td class="font-bold capitalize">${monthLabel}</td><td class="text-right font-mono">${has ? '$ ' + projected.toLocaleString('es-CO') : '<span class="text-slate-400">Sin proyección</span>'}</td><td class="text-right font-mono font-bold">$ ${actual.toLocaleString('es-CO')}</td><td class="text-right font-mono font-bold ${diffClass}">${has ? (difference < 0 ? '- $ ' + Math.abs(difference).toLocaleString('es-CO') : '$ ' + difference.toLocaleString('es-CO')) : '—'}</td><td class="text-right font-bold">${percent == null ? '—' : percent.toFixed(1).replace('.', ',') + '%'}</td></tr>`);
+            });
+            if (!keys.length) body.innerHTML = '<tr><td colspan="5" class="text-center text-slate-400 text-xs py-5">No hay meses con proyección ni facturación para el periodo seleccionado.</td></tr>';
+
             const fmt = n => '$ ' + Number(n || 0).toLocaleString('es-CO');
-            const diff = sumActual - sumProjected;
-            const projTotal = document.getElementById('fin-proj-total'), actualTotal = document.getElementById('fin-actual-total'), compliance = document.getElementById('fin-proj-compliance');
-            const fullYearProjection = projectedMap.size === 12;
-            if (projTotal) projTotal.textContent = hasProjection ? fmt(sumProjected) : 'Sin cargar';
-            if (actualTotal) actualTotal.textContent = fmt(sumActual);
+            const completeProjection = keys.length > 0 && projectedCount === keys.length;
+            const projectedEl = document.getElementById('fin-proj-total');
+            const actualEl = document.getElementById('fin-actual-total');
             const differenceEl = document.getElementById('fin-proj-difference');
-            if (differenceEl) { differenceEl.textContent = fullYearProjection ? (diff < 0 ? '- ' + fmt(Math.abs(diff)) : fmt(diff)) : '—'; differenceEl.className = 'text-lg font-black mt-1 ' + (fullYearProjection && diff < 0 ? 'text-rose-700' : 'text-amber-900'); }
-            if (compliance) compliance.textContent = !fullYearProjection || sumProjected <= 0 ? '—' : (sumActual / sumProjected * 100).toFixed(1).replace('.', ',') + '%';
-            const monthsNote = document.getElementById('fin-proj-months-note');
-            if (monthsNote) monthsNote.textContent = fullYearProjection ? 'Proyección completa: 12 de 12 meses. La diferencia anual y el cumplimiento comparan el total facturado de todo el año contra la meta anual.' : (hasProjection ? `Proyección cargada para ${projectedMap.size} de 12 meses. Completa los meses faltantes para calcular la diferencia anual y el cumplimiento global.` : 'Todavía no hay proyección cargada para este año. Importa el Excel anual para comparar los meses.');
+            const complianceEl = document.getElementById('fin-proj-compliance');
+            if (projectedEl) projectedEl.textContent = projectedCount ? fmt(sumProjected) : 'Sin cargar';
+            if (actualEl) actualEl.textContent = fmt(sumActual);
+            const diff = sumActual - sumProjected;
+            if (differenceEl) {
+                differenceEl.textContent = completeProjection ? (diff < 0 ? '- ' + fmt(Math.abs(diff)) : fmt(diff)) : '—';
+                differenceEl.className = 'text-base sm:text-lg font-black mt-1 ' + (completeProjection && diff < 0 ? 'text-rose-700' : 'text-amber-900');
+            }
+            if (complianceEl) complianceEl.textContent = !completeProjection || sumProjected <= 0 ? '—' : (sumActual / sumProjected * 100).toFixed(1).replace('.', ',') + '%';
+            if (note) {
+                if (!keys.length) note.textContent = 'No hay datos para comparar en este periodo. Puedes importar la proyección del año desde el botón superior.';
+                else if (completeProjection) note.textContent = `Proyección completa: ${projectedCount} de ${keys.length} mes(es). Diferencia = facturado menos proyectado; cumplimiento = facturado / proyectado.`;
+                else note.textContent = `Proyección cargada para ${projectedCount} de ${keys.length} mes(es). Se muestra el proyectado disponible, pero la diferencia y el cumplimiento quedan pendientes hasta completar todos los meses del periodo.`;
+            }
             const summary = document.getElementById('fin-projection-summary');
-            if (summary) summary.setAttribute('data-difference', String(fullYearProjection ? diff : ''));
+            if (summary) summary.setAttribute('data-difference', String(completeProjection ? diff : ''));
         }
 
         // ================= CONFIGURACIÓN: APARIENCIA Y ACCESOS =================
@@ -11688,6 +11787,16 @@ async function authPedirNuevaClave() {
         ].forEach(([name, label, instant]) => wrapWithGlobalProcessing(name, label, instant));
 
         window.addEventListener('DOMContentLoaded', async () => {
+            // Finanzas abre por defecto en YTD (hasta la fecha actual).
+            const finPeriodDefault = document.getElementById('fin-period-type');
+            if (finPeriodDefault) finPeriodDefault.value = 'YTD';
+            const finMonthDefault = document.getElementById('fin-filter-month');
+            const finYearDefault = document.getElementById('fin-filter-year');
+            const finNow = new Date();
+            if (finMonthDefault && !finMonthDefault.value) finMonthDefault.value = finNow.getFullYear() + '-' + String(finNow.getMonth() + 1).padStart(2, '0');
+            if (finYearDefault && !finYearDefault.value) finYearDefault.value = String(finNow.getFullYear());
+            document.getElementById('fin-filter-month-field')?.classList.add('hidden');
+            document.getElementById('fin-filter-year-field')?.classList.add('hidden');
             await hvacStorageReady;
             await hvacFlushStorageWrites();
             restoreLocalAppData();
@@ -14862,17 +14971,5 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     }).observe(m, { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
-
-<script id="hvac-update-sync-hook">
-/* Antes de una actualización obligatoria: confirmar la cola administrativa y auditoría. */
-window.HVAC_UPDATE_SYNC = async function () {
-  try { if (typeof hvacStorageReady !== 'undefined') await hvacStorageReady; } catch (_) {}
-  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
-  if (typeof cloudFlushOutbox === 'function') await cloudFlushOutbox();
-  if (typeof auditEnviarCola === 'function') await auditEnviarCola();
-  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
-};
-</script>
-
 </body>
 </html>
