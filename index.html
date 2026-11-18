@@ -43,7 +43,7 @@
     <!-- CSS compilado (se genera con "npm run build:css"). Si el CDN de abajo está bloqueado en el celular, esto mantiene los estilos. -->
     <link rel="stylesheet" href="/tailwind.css?v=1">
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-    <script src="common.js?v=9"></script>
+    <script src="common.js?v=20261118-1"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
     <!-- FontAwesome Icons -->
@@ -1187,10 +1187,6 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         </div>
         <div class="rail-label">Navegación</div>
         <nav class="flex-1 overflow-y-auto" id="sidebar-nav-list"></nav>
-        <div class="theme-switch" role="group" aria-label="Tema de la aplicación">
-            <button type="button" id="theme-btn-light" onclick="setTheme('light')" aria-pressed="false" title="Modo Día"><i class="fa-solid fa-sun"></i><span>Día</span></button>
-            <button type="button" id="theme-btn-dark" onclick="setTheme('dark')" aria-pressed="false" title="Modo Noche"><i class="fa-solid fa-moon"></i><span>Noche</span></button>
-        </div>
         <div class="rail-foot">
             <span id="sidebar-sync-badge" role="status" aria-live="polite" class="flex items-center gap-1.5 font-medium"><i class="fa-solid fa-circle-check text-emerald-400"></i> Cloud Enlazado</span>
             <button onclick="logoutSession()" class="transition"><i class="fa-solid fa-power-off"></i> Salir</button>
@@ -1320,6 +1316,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                                 <th>Correo</th>
                                 <th>Dirección</th>
                                 <th>Centro de Costo</th>
+                                <th>Estado</th>
                                 <th class="text-right">Acciones</th>
                             </tr>
                         </thead>
@@ -1675,7 +1672,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <p class="text-xs text-slate-500 mt-0.5">Asigna números de factura, soportes en PDF y registra los gastos de cada rutina. Solo aparecen las rutinas completadas al 100% por el técnico y las ya facturadas.</p>
                 </div>
                 <div class="flex items-end gap-2 flex-wrap">
-                    <button type="button" onclick="openInvoiceUploadOptions()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"><i class="fa-solid fa-file-invoice-dollar mr-1"></i> Cargar facturas</button>
+                    <button type="button" id="btn-manual-invoice-upload" onclick="openInvoiceUploadOptions()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"><i class="fa-solid fa-file-invoice-dollar mr-1"></i> Cargar facturas</button>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="billing-filter-status" onchange="renderBillingModule()" class="input-box font-bold text-xs w-48">
                             <option value="ALL" selected>Completadas y facturadas</option>
@@ -1774,6 +1771,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <p class="text-xs text-slate-500 mt-0.5">Métricas de facturación, gastos operativos reales y rentabilidad neta.</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
+                    <button type="button" id="btn-financial-projection-upload" onclick="openFinancialProjectionModal()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"><i class="fa-solid fa-file-excel mr-1"></i> Cargar proyección anual</button>
                     <label class="text-xs font-bold text-slate-600 uppercase">Periodo:</label>
                     <select id="fin-period-type" onchange="handleFinancePeriodChange()" class="input-box font-bold text-xs w-48">
                         <option value="YTD" selected>Lo transcurrido del año (YTD)</option>
@@ -1817,6 +1815,32 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 </div>
             </div>
 
+            <section id="financial-projection-comparison" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-chart-column text-indigo-600 mr-2"></i>Facturado vs. proyectado</h3>
+                        <p class="text-xs text-slate-500 mt-1">Comparación global por mes. Incluye facturas de órdenes y facturas históricas/manuales, sin aplicar los filtros de cliente o tipo de mantenimiento de la tabla inferior.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="fin-projection-year" class="text-[11px] font-bold uppercase text-slate-500">Año</label>
+                        <select id="fin-projection-year" onchange="renderFinancialProjectionComparison()" class="input-box text-xs font-bold w-28"></select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 p-4" id="fin-projection-summary">
+                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3"><span class="text-[10px] font-bold uppercase text-indigo-700">Proyectado anual</span><p id="fin-proj-total" class="text-lg font-black text-indigo-900 mt-1">$ 0</p></div>
+                    <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3"><span class="text-[10px] font-bold uppercase text-sky-700">Facturado anual</span><p id="fin-actual-total" class="text-lg font-black text-sky-900 mt-1">$ 0</p></div>
+                    <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3"><span class="text-[10px] font-bold uppercase text-amber-700">Diferencia anual</span><p id="fin-proj-difference" class="text-lg font-black text-amber-900 mt-1">—</p></div>
+                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3"><span class="text-[10px] font-bold uppercase text-emerald-700">Cumplimiento global</span><p id="fin-proj-compliance" class="text-lg font-black text-emerald-900 mt-1">—</p></div>
+                    <p id="fin-proj-months-note" class="sm:col-span-2 xl:col-span-4 text-[11px] text-slate-500">Carga la proyección de los 12 meses para calcular la comparación anual completa.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead><tr><th>Mes</th><th class="text-right">Proyectado</th><th class="text-right">Facturado</th><th class="text-right">Diferencia</th><th class="text-right">Cumplimiento</th></tr></thead>
+                        <tbody id="fin-projection-table-body"></tbody>
+                    </table>
+                </div>
+            </section>
+
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
                 <div class="overflow-x-auto">
                     <table>
@@ -1840,6 +1864,42 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         </section>
 
     
+        <section id="view-admin-settings" class="hidden space-y-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
+                <h2 class="text-base font-black text-slate-900 tracking-tight">Configuración de la aplicación</h2>
+                <p class="text-xs text-slate-500 mt-1">Personaliza la apariencia y decide qué accesos de carga quieres mostrar en cada momento. Ocultar un botón no elimina información ni registros.</p>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
+                <div>
+                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-palette text-indigo-600 mr-2"></i>Apariencia</h3>
+                    <p class="text-xs text-slate-500 mt-1">Selecciona el tema visual de toda la aplicación.</p>
+                </div>
+                <div class="theme-switch max-w-sm" role="group" aria-label="Tema de la aplicación">
+                    <button type="button" id="theme-btn-light" onclick="setTheme('light')" aria-pressed="false" title="Modo claro"><i class="fa-solid fa-sun"></i><span>Claro</span></button>
+                    <button type="button" id="theme-btn-dark" onclick="setTheme('dark')" aria-pressed="false" title="Modo oscuro"><i class="fa-solid fa-moon"></i><span>Oscuro</span></button>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4">
+                <div>
+                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-eye-slash text-amber-600 mr-2"></i>Mostrar u ocultar funciones</h3>
+                    <p class="text-xs text-slate-500 mt-1">Puedes ocultar temporalmente los accesos que no estés utilizando. Los datos ya cargados permanecen guardados.</p>
+                </div>
+                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                    <span><b class="block text-xs text-slate-800">Carga manual de facturas</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar la opción para registrar una factura histórica individual.</small></span>
+                    <input type="checkbox" id="setting-show-manual-invoice" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                    <span><b class="block text-xs text-slate-800">Carga masiva de facturas por Excel</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar la opción para importar varias facturas de una vez.</small></span>
+                    <input type="checkbox" id="setting-show-bulk-invoice" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
+                </label>
+                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                    <span><b class="block text-xs text-slate-800">Carga de proyección anual</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar el acceso para importar las metas mensuales de facturación.</small></span>
+                    <input type="checkbox" id="setting-show-financial-projection" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
+                </label>
+                <div class="flex justify-end"><button type="button" onclick="resetAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700">Restablecer accesos</button></div>
+            </div>
+        </section>
+
         <footer class="app-footer" role="contentinfo">
             <p>© <span class="js-year">2026</span> <strong>HVAC Management System</strong>. Todos los derechos reservados.</p>
         </footer>
@@ -2650,12 +2710,12 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <button type="button" onclick="closeInvoiceUploadOptions()" class="modal-close" aria-label="Cerrar" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button type="button" onclick="chooseManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition">
+                <button type="button" id="btn-choice-manual-invoice" onclick="chooseManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition">
                     <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 inline-flex items-center justify-center mb-3"><i class="fa-solid fa-pen-to-square text-lg"></i></span>
                     <span class="block text-sm font-black text-slate-900">Carga manual</span>
                     <span class="block text-xs text-slate-500 mt-1">Registrar una factura a la vez, diligenciando sus datos y adjuntando opcionalmente el PDF.</span>
                 </button>
-                <button type="button" onclick="chooseBulkManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition">
+                <button type="button" id="btn-choice-bulk-invoice" onclick="chooseBulkManualInvoiceUpload()" class="text-left p-4 rounded-2xl border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition">
                     <span class="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 inline-flex items-center justify-center mb-3"><i class="fa-solid fa-file-excel text-lg"></i></span>
                     <span class="block text-sm font-black text-slate-900">Carga masiva por Excel</span>
                     <span class="block text-xs text-slate-500 mt-1">Importar varias facturas desde una plantilla Excel, revisar los datos y confirmar la carga.</span>
@@ -2695,6 +2755,26 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <button type="button" onclick="closeManualInvoicesBulkModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cancelar</button>
                 <button type="button" id="manual-invoices-bulk-submit" onclick="importManualInvoicesExcel()" disabled class="btn-teal text-xs flex-1 sm:flex-none justify-center opacity-50"><i class="fa-solid fa-file-import mr-1"></i> Importar facturas válidas</button>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ANNUAL FINANCIAL PROJECTION IMPORT -->
+    <div id="financial-projection-modal-backdrop" class="modal-backdrop hidden" style="z-index:10007;">
+        <div class="modal-card max-w-2xl">
+            <div class="flex items-center justify-between border-b pb-3.5 mb-4">
+                <div><h3 class="font-black text-slate-900 text-sm">Cargar proyección anual de facturación</h3><p class="text-[11px] text-slate-500 mt-1">Importa el valor proyectado para cada mes. La comparación se hará contra lo facturado en ese mismo mes.</p></div>
+                <button type="button" onclick="closeFinancialProjectionModal()" class="modal-close" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3 mb-4">
+                <div class="flex items-center justify-between gap-2 flex-wrap"><div class="text-xs text-indigo-900"><b>Descarga primero la plantilla.</b> Una fila por mes, con año, mes y valor proyectado.</div><button type="button" onclick="downloadFinancialProjectionTemplate()" class="px-3 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"><i class="fa-solid fa-download mr-1"></i> Plantilla Excel</button></div>
+                <p class="text-[11px] text-indigo-800 mt-2">Columnas: Año, Mes, ValorProyectado. También acepta una tabla con columnas Enero a Diciembre. Si el archivo no trae año, se utilizará el año indicado abajo.</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Año predeterminado del archivo</label><input type="number" id="fin-proj-import-year" class="input-box text-xs" min="2000" max="2100" value="2026"></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Archivo Excel (.xlsx, .xls o .csv)</label><input type="file" id="fin-proj-import-file" accept=".xlsx,.xls,.csv" onchange="previewFinancialProjectionFile(this)" class="input-box text-xs"></div>
+            </div>
+            <div id="fin-proj-import-preview" class="mt-4 rounded-xl border border-slate-200 p-3 text-xs text-slate-500">Selecciona el archivo para validar los 12 meses antes de guardar.</div>
+            <div class="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-4"><button type="button" onclick="closeFinancialProjectionModal()" class="px-4 py-2.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 rounded-xl">Cancelar</button><button type="button" id="fin-proj-import-submit" onclick="importFinancialProjectionExcel()" disabled class="btn-teal text-xs opacity-50"><i class="fa-solid fa-cloud-arrow-up mr-1"></i> Guardar proyección</button></div>
         </div>
     </div>
 
@@ -2767,6 +2847,10 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <label class="block text-xs font-bold text-slate-700 mb-1">Centro de Costo (número)</label>
                     <input type="text" id="cli-f-costcenter-number" class="input-box text-xs" placeholder="Ej: 100245">
                 </div>
+                <label class="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700">
+                    <input type="checkbox" id="cli-f-active" checked class="h-4 w-4 accent-teal-600">
+                    <span><span class="block">Cliente activo</span><small class="block font-medium text-slate-500 mt-0.5">Si lo desactivas, seguirá en el directorio y facturación, pero no aparecerá para crear rutinas ni para marcaciones GPS de técnicos.</small></span>
+                </label>
                 <div class="geo-card space-y-2">
                     <div class="text-xs font-black text-slate-800"><i class="fa-solid fa-location-dot text-teal-600"></i> Ubicación de la sede (control de asistencia)</div>
                     <div class="text-[11px] text-slate-500">Escribe la <b>Dirección</b> arriba y pulsa <b>Buscar</b>. Si el pin no queda exacto, <b>arrástralo o toca el mapa</b>.</div>
@@ -2876,7 +2960,9 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             return err;
         }
         // ===== Almacenamiento local con respaldo IndexedDB (sin pérdida al agotar localStorage) =====
-        const CLOUD_STATE_KEYS = ['HVAC_PROJECTIONS_BACKUP', 'HVAC_AGENDA_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_CAJA_SEQUENCE', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP'];
+        const HVAC_FINANCIAL_PROJECTIONS_KEY = 'HVAC_FINANCIAL_PROJECTIONS_BACKUP';
+        const HVAC_UI_SETTINGS_KEY = 'HVAC_UI_SETTINGS_BACKUP';
+        const CLOUD_STATE_KEYS = ['HVAC_PROJECTIONS_BACKUP', 'HVAC_AGENDA_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_CAJA_SEQUENCE', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP', HVAC_FINANCIAL_PROJECTIONS_KEY];
         const cloudStateCtl = { muted: false, disabled: false, timers: {}, quotaWarnedAt: 0 };
         const hvacMemoryStorage = new Map();
         let hvacDbPromise = null;
@@ -3044,6 +3130,20 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         function getSortedUniqueClientNames(source) {
             return [...new Set((Array.isArray(source) ? source : []).map(cleanSpaces).filter(Boolean))]
                 .sort(compareClientNames);
+        }
+        // Ausencia de estado = cliente activo (compatibilidad con el catálogo histórico).
+        // Un cliente NO ACTIVO se conserva en el directorio, facturación e histórico, pero no en selectores operativos.
+        function isClientActiveRecord(client) {
+            if (!client) return false;
+            const raw = client.active !== undefined ? client.active : (client.isActive !== undefined ? client.isActive : client.activo);
+            if (raw === false || raw === 0 || ['false','0','no','no activo','inactivo','inactive','desactivado','disabled'].includes(normText(raw))) return false;
+            const status = normText(client.estado || client.status || client.estatus || '');
+            return !['no activo','inactivo','inactive','desactivado','disabled'].includes(status);
+        }
+        function getActiveOfficialClientNames() {
+            const seen = new Map();
+            clientsCatalog.filter(isClientActiveRecord).forEach(c => { const n = cleanSpaces(c && c.name), k = normText(n); if (k && !seen.has(k)) seen.set(k, n); });
+            return [...seen.values()].sort(compareClientNames);
         }
         const clientRootLabel = name => cleanSpaces(name).replace(CLIENT_SUFFIX_RE, '').trim() || cleanSpaces(name);
         const clientRootKey = name => normText(clientRootLabel(name));
@@ -4730,7 +4830,8 @@ async function authPedirNuevaClave() {
             'admin-equipment': { tables: ['hvac_clients'], state: ['HVAC_FORMS_CONFIG_BACKUP'], equipmentsProgressive: true }, // equipos: por páginas
             'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_MANUAL_INVOICES_BACKUP'] }, // facturas históricas independientes
             'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
-            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP'] }
+            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_FINANCIAL_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP'] },
+            'admin-settings': { tables: [], state: [] }
         };
         // Vencida = pasó el TTL, o no hay copia local con la que pintar (p. ej. tras limpiar el almacenamiento).
         const CLOUD_CATALOG_TTL = 10 * 60 * 1000;   // catálogos cambian poco; "Sincronizar" siempre fuerza
@@ -4758,7 +4859,8 @@ async function authPedirNuevaClave() {
             'admin-equipment': () => renderEquipmentCatalog(),
             'admin-billing': () => renderBillingModule(),
             'admin-tools': () => renderToolsModule(),
-            'admin-financial': () => renderFinancialModule()
+            'admin-financial': () => renderFinancialModule(),
+            'admin-settings': () => renderSettingsModule()
         };
         // Renderiza únicamente el módulo visible (nunca los ocultos).
         function renderSection(tabId) {
@@ -5801,6 +5903,7 @@ async function authPedirNuevaClave() {
                 list.appendChild(toolsLink);
                 list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
+                list.appendChild(makeLink('fa-sliders', 'Configuración', 'admin-settings'));
                 if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
             }
         }
@@ -5934,18 +6037,72 @@ async function authPedirNuevaClave() {
                 clientsCatalog.find(c => c.name === (item.clientName || item.client)) || null;
         }
 
+        // Finanzas: solo clientes oficiales del directorio que tengan al menos una factura numerada.
+        // No se toman nombres sueltos de equipos, órdenes antiguas ni registros huérfanos.
+        function hvacFinancialOrderClientName(order) {
+            if (!order) return '';
+            const byId = order.clientId != null
+                ? clientsCatalog.find(c => c && String(c.id) === String(order.clientId))
+                : null;
+            const record = byId || findClientRecord(order.client || order.clientName || '');
+            return record && record.name ? record.name : cleanSpaces(order.client || order.clientName || '');
+        }
+
+        function getFinancialInvoiceClientNames() {
+            const found = new Map();
+            const addInvoiceClient = source => {
+                if (!source) return;
+                let client = null;
+                if (source.clientId != null && source.clientId !== '') {
+                    client = clientsCatalog.find(c => c && String(c.id) === String(source.clientId)) || null;
+                }
+                if (!client) client = findClientRecord(source.client || source.clientName || '');
+                if (!client || !cleanSpaces(client.name)) return; // sin registro oficial = no mostrar
+                const name = cleanSpaces(client.name), key = normText(name);
+                if (key && !found.has(key)) found.set(key, name);
+            };
+            (workOrders || []).forEach(order => {
+                const invoice = order && order.invoice;
+                if (String(order && order.status || '').toUpperCase() === 'BILLED' && invoice && String(invoice.number || '').trim()) {
+                    addInvoiceClient(order);
+                }
+            });
+            (typeof hvacManualInvoicesRead === 'function' ? hvacManualInvoicesRead() : []).forEach(item => {
+                const invoice = item && item.invoice;
+                if (invoice && String(invoice.number || '').trim()) addInvoiceClient(item);
+            });
+            return [...found.values()].sort(compareClientNames);
+        }
+
+        function populateFinancialClientDropdown() {
+            const el = document.getElementById('fin-filter-client');
+            if (!el) return;
+            const prev = el.value || 'ALL';
+            const groups = new Map();
+            getFinancialInvoiceClientNames().forEach(name => {
+                const key = clientRootKey(name);
+                if (key && !groups.has(key)) groups.set(key, clientRootLabel(name));
+            });
+            const options = [...groups.entries()]
+                .sort((a, b) => compareClientNames(a[1], b[1]))
+                .map(([key, label]) => `<option value="${corrEsc(key)}">${corrEsc(label)}</option>`).join('');
+            el.innerHTML = '<option value="ALL">Todos</option>' + options;
+            el.value = [...el.options].some(option => option.value === prev) ? prev : 'ALL';
+        }
+
         function populateClientDropdowns() {
-            const filterIds = ['dash-filter-client', 'hist-filter-client', 'fin-filter-client'];   // eq-filter-client / eq-f-client: solo clientes oficiales (ver syncEquipmentClientSelectors)
+            const filterIds = ['dash-filter-client', 'hist-filter-client']; // Finanzas tiene una lista propia basada solo en facturas numeradas.
             const formIds = ['nr-client', 'ag-f-client'];
             const names = getCanonicalClientNames();
 
-            // Filtros: agrupados por raíz ("Jocol piso 16" y "Jocol piso 3" → "Jocol")
+            // Filtros generales: agrupados por raíz ("Jocol piso 16" y "Jocol piso 3" → "Jocol")
             const groups = new Map();
             names.forEach(n => { const k = clientRootKey(n); if (k && !groups.has(k)) groups.set(k, clientRootLabel(n)); });
             const filterOptions = [...groups.entries()].map(([k, label]) => `<option value="${corrEsc(k)}">${corrEsc(label)}</option>`).join('');
-            // Formularios (rutina / agenda): solo clientes oficiales de hvac_clients (sin nombres sueltos de equipos u órdenes viejas)
+            // Formularios (rutina / agenda): solo clientes oficiales activos de hvac_clients.
             const officialNames = getOfficialClientNames();
-            const formOptions = (officialNames.length ? officialNames : names).map(n => `<option value="${corrEsc(n)}">${corrEsc(n)}</option>`).join('');
+            const activeNames = getActiveOfficialClientNames();
+            const formOptions = activeNames.map(n => `<option value="${corrEsc(n)}">${corrEsc(n)}</option>`).join('');
 
             const fill = (id, head, options) => {
                 const el = document.getElementById(id);
@@ -5954,9 +6111,10 @@ async function authPedirNuevaClave() {
                 el.innerHTML = head + options;
                 if (prev && Array.from(el.options).some(o => o.value === prev)) el.value = prev;
             };
-            filterIds.forEach(id => fill(id, id === 'fin-filter-client' ? '<option value="ALL">Todos</option>' : '<option value="ALL">Todos los Clientes</option>', filterOptions));
+            filterIds.forEach(id => fill(id, '<option value="ALL">Todos los Clientes</option>', filterOptions));
+            populateFinancialClientDropdown();
             formIds.forEach(id => fill(id, '<option value="">-- Selecciona un Cliente --</option>', formOptions));
-            // Histórico: el filtro solo muestra los clientes del directorio (Gestión de Clientes), agrupados por raíz
+            // Histórico: el filtro solo muestra los clientes del directorio (Gestión de Clientes), agrupados por raíz.
             if (officialNames.length) {
                 const histGroups = new Map();
                 officialNames.forEach(n => { const k = clientRootKey(n); if (k && !histGroups.has(k)) histGroups.set(k, clientRootLabel(n)); });
@@ -5987,7 +6145,7 @@ async function authPedirNuevaClave() {
         let eqClientSelSig = '';
         // Reconstruye filtro y selector del catálogo de equipos; solo toca el DOM si cambió la lista oficial
         function syncEquipmentClientSelectors(force) {
-            const names = getOfficialClientNames();
+            const names = getActiveOfficialClientNames();
             const sig = names.map(normText).join('|');
             const f = document.getElementById('eq-filter-client'), fm = document.getElementById('eq-f-client');
             if (!force && sig === eqClientSelSig && f && f.options.length) return;
@@ -7916,6 +8074,8 @@ async function authPedirNuevaClave() {
             if (nrSaving) return;
             if (nrEditingId !== null) return saveEditedRoutine();
             const client = document.getElementById('nr-client').value;
+            const activeClientRecord = clientsCatalog.find(c => c && sameClient(c.name, client));
+            if (!activeClientRecord || !isClientActiveRecord(activeClientRecord)) return showToast('Este cliente está marcado como NO ACTIVO. No se pueden generar nuevas rutinas de mantenimiento para esta sede.', 'error');
             const routineType = (document.getElementById('nr-type') || {}).value || 'PREVENTIVO';
             const periodicity = routineType === 'PREVENTIVO' ? document.getElementById('nr-periodicity').value : 'Sin periodicidad';   // correctivo/revisión: no programados
             const budget = parseFloat(document.getElementById('nr-budget').value) || 0;
@@ -7983,8 +8143,9 @@ async function authPedirNuevaClave() {
                 || (cqd.length >= 3 && [c.nit, c.phone].some(v => String(v || '').replace(/\D/g, '').includes(cqd))));
             const clientList = getSortedClientRecords(filteredClients);
             const cnt = document.getElementById('client-search-count'); if (cnt) cnt.textContent = cq ? clientList.length + ' de ' + clientsCatalog.length : clientsCatalog.length + ' clientes';
-            if (!clientList.length) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-xs text-slate-400 py-8">Sin resultados para la búsqueda.</td></tr>';
+            if (!clientList.length) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-xs text-slate-400 py-8">Sin resultados para la búsqueda.</td></tr>';
             clientList.forEach(c => {
+                const active = isClientActiveRecord(c);
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="font-bold text-slate-900">${esc(c.name)}</td>
                     <td class="font-mono text-slate-600 text-xs">${esc(c.nit || '-')}</td>
@@ -7992,10 +8153,12 @@ async function authPedirNuevaClave() {
                     <td class="text-slate-600">${esc(c.email || '-')}</td>
                     <td>${esc(c.address || '-')}</td>
                     <td><span class="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg font-mono text-xs font-semibold">${esc(getClientCostCenterLabel(c))}</span></td>
+                    <td>${active ? '<span class="inline-flex px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">ACTIVO</span>' : '<span class="inline-flex px-2.5 py-1 rounded-full text-[10px] font-black bg-slate-100 text-slate-600 border border-slate-300">NO ACTIVO</span>'}</td>
                     <td class="text-right">
-                        <div class="inline-flex gap-1.5">
-                            <button onclick="openClientModal('${escJs(c.id)}')" class="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition"><i class="fa-solid fa-pen"></i></button>
-                            <button onclick="deleteClientRecord('${escJs(c.id)}')" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition"><i class="fa-solid fa-trash"></i></button>
+                        <div class="inline-flex gap-1.5 items-center">
+                            <button onclick="toggleClientActive('${escJs(c.id)}')" class="px-2 py-1.5 text-[10px] font-bold rounded-lg ${active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}" title="${active ? 'Desactivar cliente' : 'Reactivar cliente'}">${active ? 'Desactivar' : 'Activar'}</button>
+                            <button onclick="openClientModal('${escJs(c.id)}')" class="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                            <button onclick="deleteClientRecord('${escJs(c.id)}')" class="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
                         </div>
                     </td>
                 </tr>`);
@@ -8017,6 +8180,7 @@ async function authPedirNuevaClave() {
                 document.getElementById('cli-f-lat').value = c.lat ?? '';
                 document.getElementById('cli-f-lng').value = c.lng ?? '';
                 document.getElementById('cli-f-georadius').value = c.geoRadius || 150;
+                document.getElementById('cli-f-active').checked = isClientActiveRecord(c);
                 cliGeoInit(c);
             } else {
                 document.getElementById('cli-modal-title').innerText = "Nuevo Cliente (Regular o Esporádico)";
@@ -8030,6 +8194,7 @@ async function authPedirNuevaClave() {
                 document.getElementById('cli-f-lat').value = '';
                 document.getElementById('cli-f-lng').value = '';
                 document.getElementById('cli-f-georadius').value = 150;
+                document.getElementById('cli-f-active').checked = true;
                 cliGeoInit(null);
             }
         }
@@ -8058,7 +8223,8 @@ async function authPedirNuevaClave() {
                 lng: (parseFloat(document.getElementById('cli-f-lng').value) || parseFloat(document.getElementById('cli-f-lng').value) === 0) ? parseFloat(document.getElementById('cli-f-lng').value) : null,
                 latitud: parseFloat(document.getElementById('cli-f-lat').value) || null,
                 longitud: parseFloat(document.getElementById('cli-f-lng').value) || null,
-                geoRadius: parseInt(document.getElementById('cli-f-georadius').value, 10) || 150
+                geoRadius: parseInt(document.getElementById('cli-f-georadius').value, 10) || 150,
+                active: !!document.getElementById('cli-f-active').checked
             };
 
             const idx = clientsCatalog.findIndex(c => c.id === id);
@@ -8080,6 +8246,25 @@ async function authPedirNuevaClave() {
             renderClientCatalog();
             closeClientModal();
             showToast("Cliente guardado correctamente.");
+        }
+
+        async function toggleClientActive(id) {
+            if (!isCurrentAdmin()) return showToast('Solo el administrador puede cambiar el estado de los clientes.', 'error');
+            const client = clientsCatalog.find(c => String(c.id) === String(id));
+            if (!client) return showToast('No se encontró el cliente.', 'error');
+            const nextActive = !isClientActiveRecord(client);
+            if (!window.confirm(nextActive
+                ? `¿Reactivar a ${client.name}? Volverá a aparecer para crear rutinas y marcaciones GPS.`
+                : `¿Marcar a ${client.name} como NO ACTIVO? Se conservará en el directorio, facturación e histórico, pero dejará de aparecer en los selectores operativos.`)) return;
+            client.active = nextActive;
+            if (!nextActive) client.estado = 'NO ACTIVO';
+            else if (normText(client.estado) === 'no activo') client.estado = 'ACTIVO';
+            localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(clientsCatalog));
+            const saved = await cloudSaveClient(client);
+            populateClientDropdowns();
+            renderClientCatalog();
+            if (saved) showToast(nextActive ? 'Cliente reactivado correctamente.' : 'Cliente marcado como NO ACTIVO. Sus datos e historial se conservaron.');
+            else showToast('El cambio quedó guardado localmente y pendiente de sincronización.', 'error');
         }
 
         async function deleteClientRecord(id) {
@@ -8300,7 +8485,7 @@ async function authPedirNuevaClave() {
             const clientSelect = document.getElementById('eq-f-client');
             if (clientSelect) {
                 clientSelect.innerHTML = '<option value="">-- Selecciona un Cliente --</option>' +
-                    getSortedClientRecords().map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
+                    getSortedClientRecords().filter(isClientActiveRecord).map(c => `<option value="${corrEsc(c.name)}">${corrEsc(c.name)}</option>`).join('');
             }
             await window.hvacLoadZonesForClient?.(document.getElementById('eq-f-client')?.value || '');
             document.getElementById('equipment-modal-backdrop').classList.remove('hidden');
@@ -9754,16 +9939,21 @@ async function authPedirNuevaClave() {
         // El botón único "Cargar facturas" ofrece carga individual o masiva.
         function openInvoiceUploadOptions() {
             if (!isCurrentAdmin()) return showToast('Solo el perfil de administrador puede cargar facturas históricas.', 'error');
+            const cfg = hvacReadAppFeatureSettings();
+            if (!cfg.showManualInvoice && !cfg.showBulkInvoice) return showToast('Las opciones de carga de facturas están ocultas en Configuración.', 'error');
+            applyAppFeatureVisibility();
             document.getElementById('invoice-upload-options-modal-backdrop').classList.remove('hidden');
         }
         function closeInvoiceUploadOptions() {
             document.getElementById('invoice-upload-options-modal-backdrop').classList.add('hidden');
         }
         function chooseManualInvoiceUpload() {
+            if (!hvacReadAppFeatureSettings().showManualInvoice) return showToast('La carga manual está oculta en Configuración.', 'error');
             closeInvoiceUploadOptions();
             openManualInvoiceModal();
         }
         function chooseBulkManualInvoiceUpload() {
+            if (!hvacReadAppFeatureSettings().showBulkInvoice) return showToast('La carga masiva está oculta en Configuración.', 'error');
             closeInvoiceUploadOptions();
             openManualInvoicesBulkModal();
         }
@@ -10607,8 +10797,226 @@ async function authPedirNuevaClave() {
             renderFinancialModule();
         }
 
+        // ================= FINANZAS: PROYECCIÓN ANUAL VS FACTURACIÓN =================
+        let hvacFinancialProjectionPreview = null;
+        const FIN_PROJ_MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        function hvacFinancialProjectionsRead() {
+            try { const data = JSON.parse(localStorage.getItem(HVAC_FINANCIAL_PROJECTIONS_KEY) || '[]'); return Array.isArray(data) ? data : []; }
+            catch (e) { console.warn('[Finanzas] No se pudo leer la proyección anual:', e); return []; }
+        }
+        function hvacFinancialProjectionsSave(data) {
+            try {
+                localStorage.setItem(HVAC_FINANCIAL_PROJECTIONS_KEY, JSON.stringify(Array.isArray(data) ? data : []));
+                localStorage.setItem('HVAC_TS_' + HVAC_FINANCIAL_PROJECTIONS_KEY, String(Date.now()));
+                if (typeof cloudScheduleStatePush === 'function') cloudScheduleStatePush(HVAC_FINANCIAL_PROJECTIONS_KEY, true);
+                return true;
+            } catch (e) { hvacStorageError(e, 'Guardar proyección financiera'); return false; }
+        }
+        const finProjHeader = v => String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        function finProjMonthNumber(value) {
+            if (value instanceof Date && !isNaN(value)) return value.getMonth() + 1;
+            if (typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 12) return Math.round(value);
+            const raw = String(value == null ? '' : value).trim();
+            if (/^\d{4}[-/]\d{1,2}/.test(raw)) { const n = parseInt(raw.split(/[-/]/)[1], 10); return n >= 1 && n <= 12 ? n : 0; }
+            const key = finProjHeader(raw);
+            const aliases = [['enero','ene','january','jan'],['febrero','feb','february'],['marzo','mar','march'],['abril','abr','april','apr'],['mayo','may'],['junio','jun','june'],['julio','jul','july'],['agosto','ago','august','aug'],['septiembre','setiembre','sep','sept','september'],['octubre','oct','october'],['noviembre','nov','november'],['diciembre','dic','december','dec']];
+            for (let i = 0; i < aliases.length; i++) if (aliases[i].some(a => key === a || key.startsWith(a))) return i + 1;
+            const n = parseInt(raw, 10); return n >= 1 && n <= 12 ? n : 0;
+        }
+        function finProjYearNumber(value, fallback) {
+            if (value instanceof Date && !isNaN(value)) return value.getFullYear();
+            const m = String(value == null ? '' : value).match(/(?:19|20|21)\d{2}/);
+            const n = m ? Number(m[0]) : Number(value);
+            return Number.isInteger(n) && n >= 2000 && n <= 2100 ? n : fallback;
+        }
+        function finProjMoney(value) {
+            if (typeof value === 'number' && Number.isFinite(value)) return value;
+            let raw = String(value == null ? '' : value).trim().replace(/[^0-9,.-]/g, '');
+            if (!raw) return NaN;
+            if (raw.includes(',') && raw.includes('.')) raw = raw.lastIndexOf(',') > raw.lastIndexOf('.') ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+            else if ((raw.match(/\./g) || []).length > 1) raw = raw.replace(/\./g, '');
+            else if ((raw.match(/,/g) || []).length > 1) raw = raw.replace(/,/g, '');
+            else if (raw.includes(',')) raw = /,\d{1,2}$/.test(raw) ? raw.replace(',', '.') : raw.replace(',', '');
+            return Number(raw);
+        }
+        function finProjParseRows(rows, fallbackYear) {
+            const valid = [], errors = [];
+            if (!Array.isArray(rows) || !rows.length) return { valid, errors: ['La primera hoja está vacía.'] };
+            const monthNames = FIN_PROJ_MONTHS.map(finProjHeader);
+            const aliases = { year: ['ano','anio','year'], month: ['mes','month','periodo'], amount: ['valorproyectado','proyectado','proyeccion','presupuesto','meta','valor','monto','presupuestomensual','meta mensual'].map(finProjHeader) };
+            let headerIdx = -1, headers = [], yearIdx = -1, monthIdx = -1, amountIdx = -1, monthCols = [];
+            for (let i = 0; i < Math.min(rows.length, 15); i++) {
+                const candidate = (rows[i] || []).map(finProjHeader);
+                const yi = candidate.findIndex(h => aliases.year.includes(h));
+                const mi = candidate.findIndex(h => aliases.month.includes(h));
+                const ai = candidate.findIndex(h => aliases.amount.includes(h) || h.includes('proyect') || h.includes('presupuesto') || h === 'meta');
+                const mc = candidate.map((h, idx) => ({ h, idx })).filter(x => monthNames.some((m, j) => x.h === m || x.h.startsWith(m) || ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][j] === x.h));
+                if ((mi >= 0 && ai >= 0) || mc.length >= 2) { headerIdx = i; headers = candidate; yearIdx = yi; monthIdx = mi; amountIdx = ai; monthCols = mc; break; }
+            }
+            if (headerIdx < 0) return { valid, errors: ['No se reconocieron las columnas. Usa Año, Mes y ValorProyectado, o una tabla con columnas Enero a Diciembre.'] };
+            const seen = new Set();
+            const addRecord = (year, month, amount, rowNo) => {
+                const y = finProjYearNumber(year, fallbackYear), m = finProjMonthNumber(month), v = finProjMoney(amount);
+                if (!y || m < 1 || m > 12 || !Number.isFinite(v) || v < 0) { errors.push(`Fila ${rowNo}: año, mes o valor proyectado no válido.`); return; }
+                const id = `${y}-${String(m).padStart(2, '0')}`;
+                if (seen.has(id)) { errors.push(`Fila ${rowNo}: el mes ${id} está duplicado dentro del archivo.`); return; }
+                seen.add(id); valid.push({ id, year: y, month: m, projectedAmount: v, updatedAt: Date.now() });
+            };
+            for (let i = headerIdx + 1; i < rows.length; i++) {
+                const r = rows[i] || [];
+                if (!r.some(v => String(v == null ? '' : v).trim() !== '')) continue;
+                if (monthCols.length >= 2 && (monthIdx < 0 || amountIdx < 0)) {
+                    const year = yearIdx >= 0 ? r[yearIdx] : fallbackYear;
+                    monthCols.forEach(mc => {
+                        const val = r[mc.idx];
+                        if (val !== '' && val != null) addRecord(year, mc.h, val, i + 1);
+                    });
+                } else {
+                    addRecord(yearIdx >= 0 ? r[yearIdx] : fallbackYear, r[monthIdx], r[amountIdx], i + 1);
+                }
+            }
+            if (!valid.length && !errors.length) errors.push('No se encontraron valores mensuales diligenciados.');
+            return { valid, errors };
+        }
+        function openFinancialProjectionModal() {
+            if (!isCurrentAdmin()) return showToast('Solo el administrador puede cargar la proyección financiera.', 'error');
+            hvacFinancialProjectionPreview = null;
+            const file = document.getElementById('fin-proj-import-file'); if (file) file.value = '';
+            const year = document.getElementById('fin-proj-import-year'); if (year) year.value = new Date().getFullYear();
+            const preview = document.getElementById('fin-proj-import-preview'); if (preview) preview.textContent = 'Selecciona el archivo para validar los 12 meses antes de guardar.';
+            const btn = document.getElementById('fin-proj-import-submit'); if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+            document.getElementById('financial-projection-modal-backdrop').classList.remove('hidden');
+        }
+        function closeFinancialProjectionModal() {
+            document.getElementById('financial-projection-modal-backdrop').classList.add('hidden');
+            hvacFinancialProjectionPreview = null;
+        }
+        function downloadFinancialProjectionTemplate() {
+            if (!window.XLSX) return showToast('No se ha cargado el componente Excel. Recarga la página.', 'error');
+            const year = Number(document.getElementById('fin-proj-import-year')?.value) || new Date().getFullYear();
+            const rows = [['Año','Mes','ValorProyectado'], ...FIN_PROJ_MONTHS.map(m => [year, m, ''])];
+            const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{ wch: 12 }, { wch: 18 }, { wch: 22 }];
+            const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Proyección anual');
+            XLSX.writeFile(wb, `Plantilla_Proyeccion_Financiera_${year}.xlsx`);
+        }
+        async function previewFinancialProjectionFile(input) {
+            const file = input && input.files && input.files[0], preview = document.getElementById('fin-proj-import-preview'), btn = document.getElementById('fin-proj-import-submit');
+            hvacFinancialProjectionPreview = null;
+            if (btn) { btn.disabled = true; btn.classList.add('opacity-50'); }
+            if (!file) { if (preview) preview.textContent = 'Selecciona un archivo para validar.'; return; }
+            if (!/\.(xlsx|xls|csv)$/i.test(file.name) || file.size > 10 * 1024 * 1024) { if (preview) preview.textContent = 'Selecciona un Excel o CSV de máximo 10 MB.'; return showToast('Formato o tamaño de archivo no válido.', 'error'); }
+            if (!window.XLSX) return showToast('No se ha cargado el componente Excel. Recarga la página.', 'error');
+            try {
+                if (preview) preview.innerHTML = '<span class="processing-spinner"></span> Validando proyección…';
+                const buffer = await file.arrayBuffer(), book = XLSX.read(buffer, { type: 'array', cellDates: true });
+                const sheet = book.Sheets[book.SheetNames[0]]; if (!sheet) throw new Error('El archivo no contiene una hoja.');
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true, blankrows: false });
+                const fallbackYear = Number(document.getElementById('fin-proj-import-year')?.value) || new Date().getFullYear();
+                const result = finProjParseRows(rows, fallbackYear);
+                hvacFinancialProjectionPreview = result.valid.length ? result : null;
+                const existing = new Set(hvacFinancialProjectionsRead().map(x => String(x.id)));
+                const replacing = result.valid.filter(x => existing.has(x.id)).length;
+                if (preview) preview.innerHTML = `<div class="font-black text-slate-800">${result.valid.length} mes(es) válido(s) · ${replacing} reemplazo(s)</div><div class="text-[11px] text-slate-500 mt-1">${result.valid.length ? 'Años encontrados: ' + [...new Set(result.valid.map(x => x.year))].join(', ') : 'No hay datos válidos.'}</div>${result.errors.length ? `<div class="mt-2 text-rose-700">${result.errors.map(esc).join('<br>')}</div>` : '<div class="mt-2 text-emerald-700 font-semibold">La proyección está lista para guardarse.</div>'}`;
+                if (btn) { btn.disabled = !result.valid.length; btn.classList.toggle('opacity-50', !result.valid.length); }
+            } catch (e) { console.error('[Finanzas] Error al leer proyección:', e); if (preview) preview.textContent = e.message || 'No se pudo leer el archivo.'; }
+        }
+        function importFinancialProjectionExcel() {
+            if (!isCurrentAdmin()) return showToast('Solo el administrador puede guardar la proyección.', 'error');
+            const parsed = hvacFinancialProjectionPreview;
+            if (!parsed || !parsed.valid || !parsed.valid.length) return showToast('Primero selecciona y valida un archivo con meses y valores.', 'error');
+            const current = hvacFinancialProjectionsRead(), existing = new Set(current.map(x => String(x.id)));
+            const replacing = parsed.valid.filter(x => existing.has(x.id)).length;
+            if (replacing && !window.confirm(`El archivo reemplazará ${replacing} mes(es) que ya tienen proyección. Los demás meses y años se conservarán. ¿Continuar?`)) return;
+            const map = new Map(current.map(x => [String(x.id), x]));
+            parsed.valid.forEach(x => map.set(String(x.id), x));
+            if (!hvacFinancialProjectionsSave([...map.values()].sort((a,b) => String(a.id).localeCompare(String(b.id))))) return;
+            const count = parsed.valid.length; closeFinancialProjectionModal(); renderFinancialModule();
+            showToast(`Proyección financiera guardada: ${count} mes(es).`);
+        }
+        function renderFinancialProjectionComparison() {
+            const body = document.getElementById('fin-projection-table-body'); if (!body) return;
+            const projections = hvacFinancialProjectionsRead(), currentYear = new Date().getFullYear();
+            const years = new Set([currentYear]);
+            projections.forEach(p => { const y = Number(p.year || String(p.id || '').slice(0,4)); if (y) years.add(y); });
+            const addInvoiceYear = date => { const key = billingMonthKey(date); if (key) years.add(Number(key.slice(0,4))); };
+            workOrders.filter(o => o && o.status === 'BILLED' && o.invoice).forEach(o => addInvoiceYear(o.invoice.date || o.date));
+            hvacManualInvoicesRead().forEach(x => { const inv = x && x.invoice || {}; if (inv.number) addInvoiceYear(inv.date || x.date); });
+            const sel = document.getElementById('fin-projection-year');
+            const prev = Number(sel && sel.value) || currentYear;
+            if (sel) {
+                sel.innerHTML = [...years].sort((a,b) => b-a).map(y => `<option value="${y}">${y}</option>`).join('');
+                sel.value = years.has(prev) ? String(prev) : String(currentYear);
+            }
+            const year = Number(sel && sel.value) || currentYear, projectedMap = new Map(), actualMap = new Map();
+            projections.filter(p => Number(p.year || String(p.id || '').slice(0,4)) === year).forEach(p => projectedMap.set(Number(p.month || String(p.id || '').slice(5,7)), Number(p.projectedAmount ?? p.amount ?? p.value) || 0));
+            const addActual = (date, amount) => { const key = billingMonthKey(date); if (!key || Number(key.slice(0,4)) !== year) return; const month = Number(key.slice(5,7)); actualMap.set(month, (actualMap.get(month) || 0) + (Number(amount) || 0)); };
+            workOrders.filter(o => o && o.status === 'BILLED' && o.invoice).forEach(o => addActual(o.invoice.date || o.date, o.invoice.amount));
+            hvacManualInvoicesRead().forEach(x => { const inv = x && x.invoice || {}; if (inv.number) addActual(inv.date || x.date, inv.amount); });
+            let sumProjected = 0, sumActual = 0, hasProjection = false;
+            body.innerHTML = '';
+            FIN_PROJ_MONTHS.forEach((monthName, i) => {
+                const m = i + 1, has = projectedMap.has(m), projected = has ? projectedMap.get(m) : null, actual = actualMap.get(m) || 0;
+                if (has) { hasProjection = true; sumProjected += projected; }
+                sumActual += actual;
+                const difference = has ? actual - projected : null, percent = has && projected > 0 ? actual / projected * 100 : null;
+                const diffClass = difference == null ? 'text-slate-400' : difference >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                body.insertAdjacentHTML('beforeend', `<tr><td class="font-bold capitalize">${monthName}</td><td class="text-right font-mono">${has ? '$ ' + projected.toLocaleString('es-CO') : '<span class="text-slate-400">Sin proyección</span>'}</td><td class="text-right font-mono font-bold">$ ${actual.toLocaleString('es-CO')}</td><td class="text-right font-mono font-bold ${diffClass}">${has ? (difference < 0 ? '- $ ' + Math.abs(difference).toLocaleString('es-CO') : '$ ' + difference.toLocaleString('es-CO')) : '—'}</td><td class="text-right font-bold">${percent == null ? '—' : percent.toFixed(1).replace('.', ',') + '%'}</td></tr>`);
+            });
+            const fmt = n => '$ ' + Number(n || 0).toLocaleString('es-CO');
+            const diff = sumActual - sumProjected;
+            const projTotal = document.getElementById('fin-proj-total'), actualTotal = document.getElementById('fin-actual-total'), compliance = document.getElementById('fin-proj-compliance');
+            const fullYearProjection = projectedMap.size === 12;
+            if (projTotal) projTotal.textContent = hasProjection ? fmt(sumProjected) : 'Sin cargar';
+            if (actualTotal) actualTotal.textContent = fmt(sumActual);
+            const differenceEl = document.getElementById('fin-proj-difference');
+            if (differenceEl) { differenceEl.textContent = fullYearProjection ? (diff < 0 ? '- ' + fmt(Math.abs(diff)) : fmt(diff)) : '—'; differenceEl.className = 'text-lg font-black mt-1 ' + (fullYearProjection && diff < 0 ? 'text-rose-700' : 'text-amber-900'); }
+            if (compliance) compliance.textContent = !fullYearProjection || sumProjected <= 0 ? '—' : (sumActual / sumProjected * 100).toFixed(1).replace('.', ',') + '%';
+            const monthsNote = document.getElementById('fin-proj-months-note');
+            if (monthsNote) monthsNote.textContent = fullYearProjection ? 'Proyección completa: 12 de 12 meses. La diferencia anual y el cumplimiento comparan el total facturado de todo el año contra la meta anual.' : (hasProjection ? `Proyección cargada para ${projectedMap.size} de 12 meses. Completa los meses faltantes para calcular la diferencia anual y el cumplimiento global.` : 'Todavía no hay proyección cargada para este año. Importa el Excel anual para comparar los meses.');
+            const summary = document.getElementById('fin-projection-summary');
+            if (summary) summary.setAttribute('data-difference', String(fullYearProjection ? diff : ''));
+        }
+
+        // ================= CONFIGURACIÓN: APARIENCIA Y ACCESOS =================
+        function hvacReadAppFeatureSettings() {
+            const defaults = { showManualInvoice: true, showBulkInvoice: true, showFinancialProjection: true };
+            try { const stored = JSON.parse(localStorage.getItem(HVAC_UI_SETTINGS_KEY) || '{}'); return { ...defaults, ...(stored && typeof stored === 'object' ? stored : {}) }; }
+            catch (_) { return defaults; }
+        }
+        function applyAppFeatureVisibility() {
+            const cfg = hvacReadAppFeatureSettings();
+            const one = document.getElementById('btn-choice-manual-invoice'), bulk = document.getElementById('btn-choice-bulk-invoice');
+            const launcher = document.getElementById('btn-manual-invoice-upload'), projection = document.getElementById('btn-financial-projection-upload');
+            if (one) one.classList.toggle('hidden', !cfg.showManualInvoice);
+            if (bulk) bulk.classList.toggle('hidden', !cfg.showBulkInvoice);
+            if (launcher) launcher.classList.toggle('hidden', !(cfg.showManualInvoice || cfg.showBulkInvoice));
+            if (projection) projection.classList.toggle('hidden', !cfg.showFinancialProjection);
+        }
+        function renderSettingsModule() {
+            const cfg = hvacReadAppFeatureSettings();
+            const one = document.getElementById('setting-show-manual-invoice'), bulk = document.getElementById('setting-show-bulk-invoice'), projection = document.getElementById('setting-show-financial-projection');
+            if (one) one.checked = !!cfg.showManualInvoice;
+            if (bulk) bulk.checked = !!cfg.showBulkInvoice;
+            if (projection) projection.checked = !!cfg.showFinancialProjection;
+            applyAppFeatureVisibility();
+            try { const theme = document.documentElement.getAttribute('data-theme') || 'light'; ['light','dark'].forEach(k => { const b = document.getElementById('theme-btn-' + k); if (b) b.setAttribute('aria-pressed', String(k === theme)); }); } catch (_) {}
+        }
+        function saveAppFeatureSettings() {
+            const cfg = { showManualInvoice: !!document.getElementById('setting-show-manual-invoice')?.checked, showBulkInvoice: !!document.getElementById('setting-show-bulk-invoice')?.checked, showFinancialProjection: !!document.getElementById('setting-show-financial-projection')?.checked };
+            try { localStorage.setItem(HVAC_UI_SETTINGS_KEY, JSON.stringify(cfg)); } catch (e) { hvacStorageError(e, 'Guardar configuración visual'); }
+            applyAppFeatureVisibility();
+            showToast('Configuración de accesos guardada.');
+        }
+        function resetAppFeatureSettings() {
+            try { localStorage.removeItem(HVAC_UI_SETTINGS_KEY); } catch (_) {}
+            renderSettingsModule(); showToast('Se restauraron todos los accesos.');
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyAppFeatureVisibility);
+        else applyAppFeatureVisibility();
+
         function renderFinancialModule() {
             const type = document.getElementById('fin-period-type').value || 'YTD';
+            populateFinancialClientDropdown(); // Reconstruye la lista desde facturas existentes y clientes oficiales antes de aplicar el filtro.
             const selectedClient = document.getElementById('fin-filter-client').value || 'ALL';
             const selectedMaintenanceType = document.getElementById('fin-filter-maintenance-type')?.value || 'ALL';
             const matchesMaintenanceType = value => selectedMaintenanceType === 'ALL' || String(value || 'SIN_CLASIFICAR') === selectedMaintenanceType;
@@ -10626,9 +11034,9 @@ async function authPedirNuevaClave() {
                 return true;
             };
 
-            const billedOrders = workOrders.filter(o => o.status === 'BILLED' && o.invoice);
+            const billedOrders = workOrders.filter(o => String(o.status || '').toUpperCase() === 'BILLED' && o.invoice && String(o.invoice.number || '').trim());
             const filteredOrders = billedOrders.filter(o =>
-                matchesClientFilter(o.client, selectedClient) && inSelectedPeriod(o.invoice.date || o.date) &&
+                matchesClientFilter(hvacFinancialOrderClientName(o), selectedClient) && inSelectedPeriod(o.invoice.date || o.date) &&
                 matchesMaintenanceType(billingRoutineType(o))
             );
             const manualInvoices = hvacManualInvoicesRead();
@@ -10666,9 +11074,10 @@ async function authPedirNuevaClave() {
                     ? hvacManualInvoiceMaintenanceType(item)
                     : (billingRoutineType(item) || 'PREVENTIVO');
                 const maintenanceTypeLabel = maintenanceType === 'SIN_CLASIFICAR' ? 'Sin clasificar' : hvacMaintenanceTypeLabel(maintenanceType);
+                const financeClientLabel = record.kind === 'manual' ? hvacManualInvoiceClientName(item) : hvacFinancialOrderClientName(item);
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td>${firstCell}</td>
-                    <td class="font-bold text-teal-700">${esc(hvacManualInvoiceClientName(item) || '-')}</td>
+                    <td class="font-bold text-teal-700">${esc(financeClientLabel || '-')}</td>
                     <td class="text-xs font-bold">${esc(maintenanceTypeLabel)}</td>
                     <td>${dateCell}</td>
                     <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
@@ -10689,6 +11098,8 @@ async function authPedirNuevaClave() {
             document.getElementById('kpi-fin-expenses').innerText = `$ ${totalExpenses.toLocaleString('es-CO')}`;
             document.getElementById('kpi-fin-net').innerText = `$ ${netTotal.toLocaleString('es-CO')}`;
             document.getElementById('kpi-fin-margin').innerText = `${totalMargin}%`;
+            renderFinancialProjectionComparison();
+            applyAppFeatureVisibility();
         }
 
         function isCurrentAdmin() {
@@ -11296,14 +11707,14 @@ async function authPedirNuevaClave() {
     <!-- Capa de interfaz (solo presentación): no altera la lógica ni los datos de la aplicación -->
     <script>
     (function () {
-        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-tools','admin-billing','admin-financial'];
+        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-tools','admin-billing','admin-financial','admin-settings'];
         const META = {
             'admin-dashboard': ['Panel', 'Panel Principal'], 'admin-clients': ['Gestión', 'Gestión de Clientes'],
             'admin-users': ['Gestión', 'Gestión de Usuarios'], 'admin-planning': ['Operación', 'Planificación'],
             'admin-agenda': ['Operación', 'Agenda de Gestión'], 'admin-caja': ['Finanzas', 'Caja Menor'],
             'admin-history': ['Operación', 'Histórico & Avance Global'], 'admin-attendance': ['Operación', 'Asistencia & GPS'], 'admin-equipment': ['Gestión', 'Gestión de Equipos'],
             'admin-tools': ['Operación', 'Recogida de Herramientas'],
-            'admin-billing': ['Finanzas', 'Facturación'], 'admin-financial': ['Finanzas', 'Finanzas']
+            'admin-billing': ['Finanzas', 'Facturación'], 'admin-financial': ['Finanzas', 'Finanzas'], 'admin-settings': ['Sistema', 'Configuración']
         };
         const $ = id => document.getElementById(id);
         const safe = fn => { try { fn(); } catch (e) { console.warn('UI layer:', e); } };
@@ -12130,7 +12541,7 @@ async function progDrop(ev, techId, date) {
 function progOpen(id, techId, date) {
     const it = id ? progItems.find(i => String(i.id) === String(id)) : null;
     progEl('prog-m-tech').innerHTML = progTechs().map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-    progEl('prog-m-client').innerHTML = '<option value="">— Sin cliente —</option>' + getSortedClientRecords().map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    progEl('prog-m-client').innerHTML = '<option value="">— Sin cliente —</option>' + getSortedClientRecords().filter(isClientActiveRecord).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     progEl('prog-m-id').value = it ? it.id : '';
     progEl('prog-m-title').textContent = it ? 'Editar labor' : 'Nueva labor';
     progEl('prog-m-tech').value = it ? it.tecnico_id : (techId || '');
@@ -12975,7 +13386,7 @@ async function attDelete(id) {
    const sel=document.getElementById('hvac-zone-client');
    try{
     if(!Array.isArray(clientsCatalog)||!clientsCatalog.length){const rows=await supabaseFetch('hvac_clients?select=id,payload','GET',null,null,{quiet:true});if(Array.isArray(rows))clientsCatalog=rows.filter(r=>r.payload).map(r=>({...r.payload,id:r.payload.id||r.id}));}
-    sel.innerHTML='<option value="">Selecciona un cliente</option>'+getSortedClientRecords().map(c=>`<option value="${escH(c.name)}">${escH(c.name)}</option>`).join('');
+    sel.innerHTML='<option value="">Selecciona un cliente</option>'+getSortedClientRecords().filter(isClientActiveRecord).map(c=>`<option value="${escH(c.name)}">${escH(c.name)}</option>`).join('');
     await fetchZones(); hvacRenderZones();
    }catch(e){showToast(e.message||'No fue posible cargar las zonas.','error');}
  };
@@ -14451,5 +14862,17 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     }).observe(m, { attributes: true, attributeFilter: ['class'] });
 })();
 </script>
+
+<script id="hvac-update-sync-hook">
+/* Antes de una actualización obligatoria: confirmar la cola administrativa y auditoría. */
+window.HVAC_UPDATE_SYNC = async function () {
+  try { if (typeof hvacStorageReady !== 'undefined') await hvacStorageReady; } catch (_) {}
+  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
+  if (typeof cloudFlushOutbox === 'function') await cloudFlushOutbox();
+  if (typeof auditEnviarCola === 'function') await auditEnviarCola();
+  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
+};
+</script>
+
 </body>
 </html>

@@ -46,6 +46,8 @@
   HVAC.outbox = {
     add: item => tx('outbox', 'readwrite', s => s.put(item)),
     all: () => tx('outbox', 'readonly', s => s.getAll()).then(r => r || []).catch(() => []),
+    // Variante estricta para el guardián de actualizaciones: no confunde un fallo de IndexedDB con cola vacía.
+    allStrict: () => tx('outbox', 'readonly', s => s.getAll()).then(r => r || []),
     remove: id => tx('outbox', 'readwrite', s => s.delete(id)),
     /* handler(item) debe devolver true si quedó sincronizado */
     async flush(handler) {
@@ -329,16 +331,357 @@
     }
   };
 
-  /* ---------- PWA: registro del SW + botón "Instalar" ---------- */
+  /* ---------- PWA: registro SW + actualización obligatoria segura ---------- */
+  const HVAC_APP_VERSION = '2026.11.18.1';
+  global.HVAC_APP_VERSION = HVAC_APP_VERSION;
   HVAC.pwa = {
     _evt: null,
+    _registration: null,
+    _registrationPromise: null,
+    _updateRequired: false,
+    _updateReason: '',
+    _remoteVersion: null,
+    _checking: null,
+    _syncing: false,
+    _uiReady: false,
+    version: HVAC_APP_VERSION,
+
     register() {
-      if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost')) return;
-      addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e)));
-      navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'hvac-sync') document.dispatchEvent(new Event('hvac-sync')); });
+      if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost')) {
+        HVAC.pwa.startVersionMonitor();
+        return Promise.resolve(null);
+      }
+      if (HVAC.pwa._registrationPromise) return HVAC.pwa._registrationPromise;
+
+      const registerNow = async () => {
+        try {
+          const hadController = !!navigator.serviceWorker.controller;
+          const reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+          HVAC.pwa._registration = reg;
+
+          navigator.serviceWorker.addEventListener('message', e => {
+            if (e.data === 'hvac-sync') document.dispatchEvent(new Event('hvac-sync'));
+            if (e.data && e.data.type === 'HVAC_SW_ACTIVATED') {
+              if (hadController) HVAC.pwa.requireUpdate('service-worker');
+            }
+          });
+
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            // El primer control de SW no es una actualización; solo nos interesa reemplazar uno existente.
+            if (hadController || HVAC.pwa._updateRequired) HVAC.pwa.requireUpdate('service-worker');
+          });
+
+          reg.addEventListener('updatefound', () => {
+            const installing = reg.installing;
+            if (!installing) return;
+            installing.addEventListener('statechange', () => {
+              if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+                HVAC.pwa.requireUpdate('service-worker');
+              }
+            });
+          });
+
+          if (reg.waiting && navigator.serviceWorker.controller) HVAC.pwa.requireUpdate('service-worker');
+          // Fuerza una comprobación en cada apertura; Vercel también entrega sw.js sin caché.
+          try { await reg.update(); } catch (_) {}
+          return reg;
+        } catch (e) {
+          console.warn('[PWA] No se pudo registrar el Service Worker:', e);
+          return null;
+        }
+      };
+
+      HVAC.pwa._registrationPromise = new Promise(resolve => {
+        const run = () => registerNow().then(resolve);
+        if (document.readyState === 'complete') run();
+        else addEventListener('load', run, { once: true });
+      });
+      HVAC.pwa.startVersionMonitor();
+      return HVAC.pwa._registrationPromise;
     },
-    async install() { if (!HVAC.pwa._evt) return false; HVAC.pwa._evt.prompt(); const r = await HVAC.pwa._evt.userChoice; HVAC.pwa._evt = null; return r.outcome === 'accepted'; }
+
+    async install() {
+      if (!HVAC.pwa._evt) return false;
+      HVAC.pwa._evt.prompt();
+      const r = await HVAC.pwa._evt.userChoice;
+      HVAC.pwa._evt = null;
+      return r.outcome === 'accepted';
+    },
+
+    compare(a, b) {
+      const aa = String(a || '0').split(/[.-]/).map(x => Number(x) || 0);
+      const bb = String(b || '0').split(/[.-]/).map(x => Number(x) || 0);
+      const n = Math.max(aa.length, bb.length);
+      for (let i = 0; i < n; i++) {
+        const d = (aa[i] || 0) - (bb[i] || 0);
+        if (d) return d > 0 ? 1 : -1;
+      }
+      return 0;
+    },
+
+    async checkVersion() {
+      if (HVAC.pwa._checking) return HVAC.pwa._checking;
+      if (!HVAC.net.isOnline()) return null;
+      HVAC.pwa._checking = (async () => {
+        try {
+          const url = new URL('./version.json', location.href);
+          url.searchParams.set('_hvac_check', String(Date.now()));
+          const response = await fetch(url.toString(), {
+            method: 'GET',
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+          if (!response.ok) throw new Error('HTTP ' + response.status + ' al consultar version.json');
+          const remote = await response.json();
+          if (!remote || !remote.version) throw new Error('version.json no contiene version');
+          HVAC.pwa._remoteVersion = remote;
+
+          const latest = String(remote.version);
+          const minimum = String(remote.minimumVersion || latest);
+          const behindLatest = HVAC.pwa.compare(HVAC_APP_VERSION, latest) < 0;
+          const belowMinimum = HVAC.pwa.compare(HVAC_APP_VERSION, minimum) < 0;
+          if (belowMinimum || (remote.force !== false && behindLatest)) {
+            HVAC.pwa.requireUpdate('version');
+          } else if (!HVAC.pwa._updateRequired || HVAC.pwa._updateReason === 'version') {
+            HVAC.pwa._updateRequired = false;
+            HVAC.pwa._updateReason = '';
+            HVAC.pwa.hideUpdateUi();
+          }
+          return remote;
+        } catch (e) {
+          // Si no se puede consultar el servidor, no se destruye el trabajo ni se bloquea el modo offline.
+          console.info('[PWA] No se pudo verificar la versión; se conserva la sesión actual:', e.message || e);
+          return null;
+        } finally {
+          HVAC.pwa._checking = null;
+        }
+      })();
+      return HVAC.pwa._checking;
+    },
+
+    startVersionMonitor() {
+      if (HVAC.pwa._monitorStarted) return;
+      HVAC.pwa._monitorStarted = true;
+      const check = () => HVAC.pwa.checkVersion();
+      if (document.readyState === 'loading') {
+        addEventListener('DOMContentLoaded', check, { once: true });
+      } else check();
+      setInterval(() => {
+        if (document.visibilityState !== 'hidden') check();
+      }, 90000);
+      // Si el usuario tenía un formulario abierto cuando llegó la actualización,
+      // mostrar el bloqueo en cuanto lo cierre, sin interrumpir ese formulario.
+      setInterval(() => {
+        if (HVAC.pwa._updateRequired) HVAC.pwa.renderUpdateUi();
+      }, 2500);
+      addEventListener('focus', check);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') check();
+        HVAC.pwa.renderUpdateUi();
+      });
+      addEventListener('online', check);
+    },
+
+    requireUpdate(reason) {
+      HVAC.pwa._updateRequired = true;
+      HVAC.pwa._updateReason = reason || 'version';
+      HVAC.pwa.renderUpdateUi();
+    },
+
+    readArrayCount(key) {
+      try {
+        const raw = global.localStorage.getItem(key);
+        if (!raw) return 0;
+        const val = JSON.parse(raw);
+        return Array.isArray(val) ? val.length : (val && typeof val === 'object' ? Object.keys(val).length : 0);
+      } catch (_) { return 0; }
+    },
+
+    async pendingSnapshot() {
+      const result = {
+        cambios: HVAC.pwa.readArrayCount('HVAC_CLOUD_OUTBOX'),
+        auditoria: HVAC.pwa.readArrayCount('HVAC_AUDIT_QUEUE'),
+        marcacionesLegacy: HVAC.pwa.readArrayCount('HVAC_ATT_QUEUE'),
+        colaIndexedDB: 0,
+        colaIndexedDBNoVerificada: false
+      };
+      try {
+        const items = await HVAC.outbox.allStrict();
+        result.colaIndexedDB = Array.isArray(items) ? items.length : 0;
+      } catch (_) {
+        // Fallo al leer la cola no equivale a "cero pendientes": bloquear actualización por seguridad.
+        result.colaIndexedDBNoVerificada = true;
+      }
+      result.total = result.cambios + result.auditoria + result.marcacionesLegacy + result.colaIndexedDB + (result.colaIndexedDBNoVerificada ? 1 : 0);
+      return result;
+    },
+
+    activeWorkDialog() {
+      const dialogs = Array.from(document.querySelectorAll('.modal-backdrop:not(.hidden), .mx-back.open, dialog[open]'));
+      return dialogs.some(el => !['app-login-screen', 'hvac-update-overlay'].includes(el.id) && !el.closest('#hvac-update-overlay'));
+    },
+
+    ensureUpdateUi() {
+      if (HVAC.pwa._uiReady || !document.body) return;
+      HVAC.pwa._uiReady = true;
+      const style = document.createElement('style');
+      style.id = 'hvac-update-style';
+      style.textContent = `
+        #hvac-update-banner{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:100000;background:#fff7ed;color:#7c2d12;border:1px solid #fdba74;border-radius:15px;padding:13px 15px;box-shadow:0 12px 36px rgba(0,0,0,.25);font:600 13px/1.45 system-ui;display:none}
+        #hvac-update-overlay{position:fixed;inset:0;z-index:100001;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(3,8,20,.82);backdrop-filter:blur(7px);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+        #hvac-update-overlay .hvac-up-card{width:min(100%,470px);max-height:calc(100dvh - 36px);overflow:auto;background:#fff;color:#152039;border-radius:23px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.4)}
+        #hvac-update-overlay .hvac-up-icon{width:54px;height:54px;border-radius:17px;display:grid;place-items:center;background:#e0f2fe;color:#0369a1;font-size:24px;margin-bottom:15px}
+        #hvac-update-overlay h2{font-size:21px;line-height:1.2;margin:0 0 9px;font-weight:850}
+        #hvac-update-overlay p{font-size:13px;line-height:1.55;color:#475569;margin:8px 0}
+        #hvac-update-overlay .hvac-up-status{padding:11px 12px;border-radius:12px;background:#f1f5f9;color:#334155;font-size:12px;line-height:1.5;margin:14px 0}
+        #hvac-update-overlay .hvac-up-actions{display:grid;gap:9px;margin-top:17px}
+        #hvac-update-overlay button{min-height:47px;border:0;border-radius:12px;padding:0 15px;font:800 13px system-ui;cursor:pointer}
+        #hvac-update-overlay button:disabled{opacity:.45;cursor:not-allowed}
+        #hvac-update-sync{background:#e2e8f0;color:#1e293b}
+        #hvac-update-reload{background:#0369a1;color:white}
+        #hvac-update-overlay .hvac-up-safe{font-size:11px;color:#64748b;margin-top:13px}
+        @media(prefers-color-scheme:dark){#hvac-update-overlay .hvac-up-card{background:#111c31;color:#e5edf9}#hvac-update-overlay p,#hvac-update-overlay .hvac-up-safe{color:#a8b6cc}#hvac-update-overlay .hvac-up-status{background:#1e2b43;color:#e2e8f0}#hvac-update-sync{background:#334155;color:#fff}}
+      `;
+      document.head.appendChild(style);
+
+      const banner = document.createElement('div');
+      banner.id = 'hvac-update-banner';
+      banner.textContent = 'Hay una actualización obligatoria. Guarda y cierra el formulario abierto; después sincroniza para actualizar.';
+      document.body.appendChild(banner);
+
+      const overlay = document.createElement('div');
+      overlay.id = 'hvac-update-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'hvac-update-title');
+      overlay.innerHTML = `
+        <section class="hvac-up-card">
+          <div class="hvac-up-icon" aria-hidden="true">↻</div>
+          <h2 id="hvac-update-title">Actualización obligatoria</h2>
+          <p>Hay una nueva versión de Smart Maintenance. Para continuar trabajando debes actualizar la aplicación.</p>
+          <div id="hvac-update-status" class="hvac-up-status">Comprobando que no haya información pendiente de sincronizar…</div>
+          <div class="hvac-up-actions">
+            <button id="hvac-update-sync" type="button">Sincronizar información pendiente</button>
+            <button id="hvac-update-reload" type="button" disabled>Actualizar aplicación</button>
+          </div>
+          <p class="hvac-up-safe">Protección de datos: la actualización no borra IndexedDB, fotos, órdenes ni colas locales. No cierres la aplicación mientras se sincroniza.</p>
+        </section>`;
+      document.body.appendChild(overlay);
+
+      document.getElementById('hvac-update-sync').addEventListener('click', () => HVAC.pwa.syncBeforeUpdate());
+      document.getElementById('hvac-update-reload').addEventListener('click', () => HVAC.pwa.updateNow());
+    },
+
+    async syncBeforeUpdate() {
+      if (HVAC.pwa._syncing) return;
+      HVAC.pwa._syncing = true;
+      HVAC.pwa.ensureUpdateUi();
+      const syncButton = document.getElementById('hvac-update-sync');
+      const reloadButton = document.getElementById('hvac-update-reload');
+      const status = document.getElementById('hvac-update-status');
+      syncButton.disabled = true;
+      reloadButton.disabled = true;
+      try {
+        if (!HVAC.net.isOnline()) throw new Error('No hay conexión. Conéctate a internet para sincronizar los datos antes de actualizar.');
+        status.textContent = 'Sincronizando órdenes, formularios, marcaciones, fotografías y auditoría…';
+        if (typeof global.HVAC_UPDATE_SYNC === 'function') {
+          await global.HVAC_UPDATE_SYNC();
+        } else {
+          if (typeof global.hvacFlushStorageWrites === 'function') await global.hvacFlushStorageWrites();
+          if (typeof global.cloudFlushOutbox === 'function') await global.cloudFlushOutbox();
+          if (typeof global.auditEnviarCola === 'function') await global.auditEnviarCola();
+          if (typeof global.mxFlushQueue === 'function') await global.mxFlushQueue();
+          if (typeof global.hvacFlushStorageWrites === 'function') await global.hvacFlushStorageWrites();
+        }
+        const pending = await HVAC.pwa.pendingSnapshot();
+        const summary = [
+          pending.cambios ? pending.cambios + ' cambios de nube' : '',
+          pending.auditoria ? pending.auditoria + ' eventos de auditoría' : '',
+          pending.marcacionesLegacy ? pending.marcacionesLegacy + ' marcaciones antiguas' : '',
+          pending.colaIndexedDB ? pending.colaIndexedDB + ' elementos IndexedDB' : '',
+          pending.colaIndexedDBNoVerificada ? 'cola IndexedDB no verificable' : ''
+        ].filter(Boolean).join(', ');
+        if (pending.total === 0) {
+          status.textContent = 'Sincronización confirmada. No quedan elementos pendientes. Ya puedes instalar la nueva versión.';
+          reloadButton.disabled = false;
+        } else {
+          status.textContent = 'Aún quedan ' + pending.total + ' elemento(s) sin confirmar: ' + summary + '. Se conservarán en este dispositivo; revisa la conexión y vuelve a intentar.';
+        }
+      } catch (e) {
+        status.textContent = (e && e.message ? e.message : 'No se pudo completar la sincronización.') + ' Tus datos locales se conservan.';
+      } finally {
+        syncButton.disabled = false;
+        HVAC.pwa._syncing = false;
+      }
+    },
+
+    async updateNow() {
+      const status = document.getElementById('hvac-update-status');
+      const reloadButton = document.getElementById('hvac-update-reload');
+      if (!HVAC.net.isOnline()) {
+        if (status) status.textContent = 'Necesitas conexión a internet para descargar la nueva versión. Tus datos locales permanecen guardados.';
+        return;
+      }
+      const pending = await HVAC.pwa.pendingSnapshot();
+      if (pending.total > 0) {
+        if (status) status.textContent = 'No se puede actualizar todavía: quedan ' + pending.total + ' elemento(s) pendientes de sincronizar.';
+        if (reloadButton) reloadButton.disabled = true;
+        return;
+      }
+      if (status) status.textContent = 'Instalando la actualización…';
+      if (reloadButton) reloadButton.disabled = true;
+      try {
+        const reg = HVAC.pwa._registration || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+        if (reg && reg.waiting) reg.waiting.postMessage('skip-waiting');
+      } catch (_) {}
+      const u = new URL(location.href);
+      u.searchParams.set('_hvac_update', (HVAC.pwa._remoteVersion && HVAC.pwa._remoteVersion.version) || 'latest');
+      location.replace(u.toString());
+    },
+
+    renderUpdateUi() {
+      if (!HVAC.pwa._updateRequired) return;
+      const run = async () => {
+        HVAC.pwa.ensureUpdateUi();
+        const banner = document.getElementById('hvac-update-banner');
+        const overlay = document.getElementById('hvac-update-overlay');
+        if (!banner || !overlay) return;
+        if (HVAC.pwa.activeWorkDialog()) {
+          banner.style.display = 'block';
+          overlay.style.display = 'none';
+          return;
+        }
+        banner.style.display = 'none';
+        overlay.style.display = 'flex';
+        const status = document.getElementById('hvac-update-status');
+        const reloadButton = document.getElementById('hvac-update-reload');
+        const pending = await HVAC.pwa.pendingSnapshot();
+        if (!status || !reloadButton) return;
+        if (pending.total === 0 && HVAC.net.isOnline()) {
+          status.textContent = 'No hay operaciones pendientes. Puedes instalar la nueva versión sin perder información.';
+          reloadButton.disabled = false;
+        } else if (pending.total > 0) {
+          status.textContent = 'Antes de actualizar debemos sincronizar ' + pending.total + ' elemento(s) pendiente(s).';
+          reloadButton.disabled = true;
+        } else {
+          status.textContent = 'Conéctate a internet para descargar la versión nueva. La información local seguirá guardada.';
+          reloadButton.disabled = true;
+        }
+      };
+      if (document.readyState === 'loading') addEventListener('DOMContentLoaded', run, { once: true });
+      else run();
+    },
+
+    hideUpdateUi() {
+      const b = document.getElementById('hvac-update-banner');
+      const o = document.getElementById('hvac-update-overlay');
+      if (b) b.style.display = 'none';
+      if (o) o.style.display = 'none';
+    }
   };
+
+  // El verificador funciona tanto en la app técnica PWA como en la administración web.
+  HVAC.pwa.startVersionMonitor();
   /* El botón "Instalar" se integra en la barra superior de cada app (nunca flota sobre otros botones) */
   function mountInstall() {
     if (!HVAC.pwa._evt || document.getElementById('hvac-install-chip')) return;

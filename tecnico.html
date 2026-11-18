@@ -411,7 +411,7 @@ html[data-theme="light"] .pill-ok{color:#047857}
 
 </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="common.js?v=8"></script>
+    <script src="common.js?v=20261118-1"></script>
 
 <style id="ui-transitions-v1">
 /* ============================================================
@@ -2534,7 +2534,7 @@ async function authPedirNuevaClave() {
             FULL_TTL_MS: 10 * 60 * 1000,     // payload completo de una orden
             HIST_TTL_MS: 10 * 60 * 1000,     // historial de un equipo
             EQ_TTL_MS: 10 * 60 * 1000,       // equipos de una rutina
-            CLIENTS_TTL_MS: 30 * 60 * 1000,  // lista de clientes (marcación GPS)
+            CLIENTS_TTL_MS: 5 * 60 * 1000,   // estado de clientes GPS: refresco máximo cada 5 minutos
             MAX_FULL: 3,                     // máx. de órdenes completas guardadas en memoria
             LITE_VIEW: 'hvac_orders_lite',
             liteViewMissing: false,
@@ -4640,62 +4640,137 @@ function mxGetPosition() {
     navigator.geolocation.getCurrentPosition(res, e => rej(new Error(e.code === 1 ? 'Permiso de ubicación denegado. Actívalo para esta app en los ajustes del navegador.' : e.code === 3 ? 'Tiempo agotado obteniendo el GPS. Sal a un lugar abierto e intenta de nuevo.' : 'No se pudo obtener la ubicación.')), { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   });
 }
-/* Lista COMPLETA de clientes: antes solo salían los que tenían rutina este mes (por eso aparecía un único cliente) */
-const mxFold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-async function mxLoadAllClients() {
-  const KEY = 'HVAC_CLIENTS_ALL'; let all = null;
-  let freshLocal = false; try { freshLocal = !!localStorage.getItem(KEY) && (Date.now() - Number(localStorage.getItem('HVAC_CLIENTS_AT') || 0)) < EGRESS.CLIENTS_TTL_MS; } catch (_) {}
-  if (navigator.onLine && !freshLocal && egressGet('clients', EGRESS.CLIENTS_TTL_MS) === undefined) {   // si se leyó hace poco, se usa la copia local
-    all = [];
-    for (let off = 0; ; off += 1000) {                       // sin filtros ni límite fijo: pagina de 1000 en 1000
-      const rows = await supabaseFetch('hvac_clients?select=payload&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true });
-      if (!Array.isArray(rows)) { all = null; break; }
-      all.push(...rows.map(r => r && r.payload).filter(c => c && c.name));
-      if (rows.length < 1000) break;
+/* Lista oficial de clientes para marcación GPS. Solo se exponen clientes activos del directorio hvac_clients. */
+const mxFold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s\u00a0\u200b]+/g, ' ').trim().toLowerCase();
+let mxClientsStatusFresh = false;
+const mxClientIsActiveRecord = c => {
+  if (!c) return false;
+  const raw = c.active !== undefined ? c.active : (c.isActive !== undefined ? c.isActive : c.activo);
+  if (raw === false || raw === 0 || ['false','0','no','no activo','inactivo','inactive','desactivado','disabled'].includes(mxFold(raw))) return false;
+  const status = mxFold(c.estado || c.status || c.estatus || '');
+  return !['no activo','inactivo','inactive','desactivado','disabled'].includes(status);
+};
+function mxClientsCacheRead() {
+  try { return JSON.parse(localStorage.getItem('HVAC_CLIENTS_ALL') || '[]'); } catch (_) { return []; }
+}
+function mxClientsCacheFresh() {
+  try {
+    const hasCache = !!localStorage.getItem('HVAC_CLIENTS_ALL');
+    const version = localStorage.getItem('HVAC_CLIENTS_CACHE_VERSION');
+    const at = Number(localStorage.getItem('HVAC_CLIENTS_AT') || 0);
+    return hasCache && version === '2' && at > 0 && (Date.now() - at) < EGRESS.CLIENTS_TTL_MS;
+  } catch (_) { return false; }
+}
+function mxClientsCacheWrite(list, refreshTimestamp) {
+  // Mantener el estado de actividad junto con coordenadas: si no, el teléfono no podría excluir NO ACTIVOS offline.
+  const compact = (list || []).filter(c => c && c.name).map(c => ({
+    id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng,
+    latitud: c.latitud, longitud: c.longitud, geoRadius: c.geoRadius,
+    active: c.active, isActive: c.isActive, activo: c.activo,
+    estado: c.estado, status: c.status, estatus: c.estatus
+  }));
+  try {
+    localStorage.setItem('HVAC_CLIENTS_ALL', JSON.stringify(compact));
+    if (refreshTimestamp !== false) {
+      localStorage.setItem('HVAC_CLIENTS_AT', String(Date.now()));
+      localStorage.setItem('HVAC_CLIENTS_CACHE_VERSION', '2');
     }
-    if (all) { egressSet('clients', '1'); try { localStorage.setItem('HVAC_CLIENTS_AT', String(Date.now())); } catch (_) {} }
-    if (all && all.length) { try { localStorage.setItem(KEY, JSON.stringify(all.map(c => ({ id: c.id, name: c.name, address: c.address, lat: c.lat, lng: c.lng, latitud: c.latitud, longitud: c.longitud, geoRadius: c.geoRadius })))); } catch (e) {} }
+    localStorage.setItem('HVAC_CLIENTS_BACKUP', JSON.stringify(list || []));
+  } catch (e) { console.warn('[Asistencia] No se pudo actualizar la caché de clientes:', e); }
+  mxClientsStatusFresh = mxClientsCacheFresh();
+}
+async function mxLoadAllClients(forceRefresh) {
+  let all = null;
+  const cache = mxClientsCacheRead();
+  const freshLocal = mxClientsCacheFresh();
+  if (navigator.onLine && (!freshLocal || forceRefresh)) {
+    try {
+      const remote = [];
+      for (let off = 0; ; off += 1000) {
+        const rows = await supabaseFetch('hvac_clients?select=payload&order=id.asc&limit=1000&offset=' + off, 'GET', null, null, { quiet: true });
+        if (!Array.isArray(rows)) throw new Error('No se pudo actualizar el directorio de clientes.');
+        remote.push(...rows.map(r => r && r.payload).filter(c => c && c.name));
+        if (rows.length < 1000) break;
+      }
+      all = remote;
+      egressSet('clients', '1');
+      mxClientsCacheWrite(all);
+    } catch (e) {
+      console.warn('[Asistencia] No se pudo refrescar el directorio:', e);
+      if (freshLocal) all = cache;
+    }
+  } else if (freshLocal) {
+    all = cache;
   }
-  if (!all || !all.length) { try { all = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { all = []; } }   // sin señal: última lista descargada
-  all.forEach(c => {                                         // une con el catálogo local (coordenadas incluidas)
-    const l = clientsCatalog.find(x => x && (String(x.id) === String(c.id) || mxFold(x.name) === mxFold(c.name)));
-    if (!l) clientsCatalog.push(c); else ['lat', 'lng', 'latitud', 'longitud', 'geoRadius'].forEach(k => { if (l[k] == null && c[k] != null) l[k] = c[k]; });
+  if (!Array.isArray(all)) {
+    // No permitir listas antiguas cuando no podemos confirmar el estado de actividad.
+    mxClientsStatusFresh = false;
+    clientsCatalog = [];
+    return clientsCatalog;
+  }
+  // El catálogo para GPS se reemplaza por el directorio oficial; nunca se añaden nombres de órdenes viejas.
+  const previousCatalog = Array.isArray(clientsCatalog) ? clientsCatalog : [];
+  clientsCatalog = all.filter(c => c && c.name).map(c => {
+    const previous = previousCatalog.find(x => x && (String(x.id) === String(c.id) || mxFold(x.name) === mxFold(c.name)));
+    return { ...(previous || {}), ...c }; // los flags recién descargados siempre prevalecen sobre la copia local
   });
+  mxClientsStatusFresh = mxClientsCacheFresh();
   return clientsCatalog;
 }
 function mxAttFill() {
   const sel = mxQ('mx-att-client'), q = mxFold(mxQ('mx-att-q').value), prev = sel.value, me = techCurrentUserRecord();
+  if (!mxClientsStatusFresh || !mxClientsCacheFresh()) {
+    sel.innerHTML = '<option value="">Conéctate para actualizar el estado de los clientes</option>';
+    mxQ('mx-att-count').textContent = 'Lista de clientes pendiente de actualización';
+    return;
+  }
   const month = mxMonthKey(), withRoutine = new Set(), seen = new Set(), all = [];
   workOrders.forEach(o => { if (o && o.client && isPreventiveOrder(o) && String(o.date || '').startsWith(month) && techMatches(o, me)) withRoutine.add(mxFold(o.client)); });
   const add = n => { n = String(n || '').trim(); if (n && !seen.has(mxFold(n))) { seen.add(mxFold(n)); all.push(n); } };
-  clientsCatalog.forEach(c => c && add(c.name)); workOrders.forEach(o => o && add(o.client));
+  clientsCatalog.filter(mxClientIsActiveRecord).forEach(c => add(c.name));
   all.sort((a, b) => a.localeCompare(b, 'es'));
   const ok = n => !q || mxFold(n).includes(q), mine = all.filter(n => withRoutine.has(mxFold(n)) && ok(n)), rest = all.filter(n => !withRoutine.has(mxFold(n)) && ok(n));
   const opt = n => '<option value="' + esc(n) + '">' + esc(n) + '</option>';
-  sel.innerHTML = '<option value="">' + (all.length ? '— Selecciona el cliente / sede —' : 'Sin clientes cargados') + '</option>'
+  sel.innerHTML = '<option value="">' + (all.length ? '— Selecciona el cliente / sede —' : 'No hay clientes activos') + '</option>'
     + (mine.length ? '<optgroup label="Con rutina este mes">' + mine.map(opt).join('') + '</optgroup>' : '')
-    + (rest.length ? '<optgroup label="' + (mine.length ? 'Otros clientes' : 'Todos los clientes') + '">' + rest.map(opt).join('') + '</optgroup>' : '');
+    + (rest.length ? '<optgroup label="' + (mine.length ? 'Otros clientes' : 'Todos los clientes activos') + '">' + rest.map(opt).join('') + '</optgroup>' : '');
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
-  mxQ('mx-att-count').textContent = all.length + ' clientes' + (q ? ' · ' + (mine.length + rest.length) + ' coinciden' : '');
+  mxQ('mx-att-count').textContent = all.length + ' clientes activos' + (q ? ' · ' + (mine.length + rest.length) + ' coinciden' : '');
 }
 function mxAttOpen() {
-  mxQ('mx-att-q').value = ''; mxAttFill();                  // muestra al instante lo que ya hay en el teléfono…
+  mxQ('mx-att-q').value = ''; mxAttFill();
   mxQ('mx-att-msg').style.display = 'none';
   const last = mxRead(mxAttTodayKey, '{}'), l = last.date === mxToday() ? last : null;
   const b = mxQ('mx-att-last'); b.style.display = l ? 'block' : 'none';
   if (l) b.textContent = 'Última marcación de hoy: ' + l.tipo + ' · ' + l.cliente + ' · ' + new Date(l.hora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
   mxOpen('mx-att');
-  mxLoadAllClients().then(mxAttFill).catch(() => {});       // …y trae la lista completa desde Supabase
+  mxLoadAllClients(true).then(() => { mxAttFill(); if (!mxClientsStatusFresh) mxAttMsg('No se pudo confirmar el estado actual de los clientes. Conéctate e inténtalo de nuevo.', 'warn'); }).catch(() => {
+    mxClientsStatusFresh = false; mxAttFill(); mxAttMsg('No se pudo actualizar el directorio de clientes.', 'warn');
+  });
 }
 function mxAttMsg(t, kind) { const m = mxQ('mx-att-msg'); m.style.display = t ? 'block' : 'none'; m.className = 'mx-alert ' + (kind || 'warn'); m.innerHTML = t || ''; }
-async function mxClientGeo(name) {
-  let c = clientsCatalog.find(x => mxNorm(x.name) === mxNorm(name));
-  if ((!c || c.lat == null) && navigator.onLine) {
+async function mxVerifyActiveClientForMark(name) {
+  let client = clientsCatalog.find(c => c && mxFold(c.name) === mxFold(name)) || null;
+  if (navigator.onLine) {
+    // Validación en vivo justo antes de registrar: una caché que quedó abierta no puede habilitar un cliente recién desactivado.
     const rows = await supabaseFetch('hvac_clients?select=payload&payload->>name=eq.' + encodeURIComponent(name) + '&limit=1', 'GET', null, null, { quiet: true });
-    if (Array.isArray(rows) && rows[0] && rows[0].payload) c = rows[0].payload;
+    if (!Array.isArray(rows) || !rows[0] || !rows[0].payload) throw new Error('No se pudo verificar el estado del cliente en Supabase. Intenta nuevamente.');
+    client = rows[0].payload;
+    const idx = clientsCatalog.findIndex(c => c && (String(c.id) === String(client.id) || mxFold(c.name) === mxFold(client.name)));
+    if (idx >= 0) clientsCatalog[idx] = { ...clientsCatalog[idx], ...client }; else clientsCatalog.push({ ...client });
+    // Se actualiza el registro seleccionado, pero no se renueva la antigüedad del resto de la lista.
+    mxClientsCacheWrite(clientsCatalog, false);
+    if (!mxClientIsActiveRecord(client)) { mxAttFill(); throw new Error('Este cliente está marcado como NO ACTIVO. No se permiten marcaciones GPS.'); }
+    return client;
   }
+  if (!mxClientsStatusFresh || !mxClientsCacheFresh()) throw new Error('Estás sin conexión y la lista de clientes está desactualizada. Conéctate para validar su estado antes de marcar.');
+  if (!client || !mxClientIsActiveRecord(client)) throw new Error('Este cliente está marcado como NO ACTIVO o ya no pertenece al directorio.');
+  return client;
+}
+async function mxClientGeo(name, verifiedClient) {
+  const c = verifiedClient || clientsCatalog.find(x => mxFold(x.name) === mxFold(name)) || null;
   const lat = c && c.lat !== '' ? parseFloat(c.lat) : NaN, lng = c && c.lng !== '' ? parseFloat(c.lng) : NaN;
-  return { client: c || null, lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, radius: (c && parseInt(c.geoRadius, 10)) || MX.RADIO_DEFAULT_M };
+  return { client: c, lat: isFinite(lat) ? lat : null, lng: isFinite(lng) ? lng : null, radius: (c && parseInt(c.geoRadius, 10)) || MX.RADIO_DEFAULT_M };
 }
 /* ---- Foto del técnico ---- */
 let mxPhotoStream = null, mxPhotoResolve = null;
@@ -4754,10 +4829,11 @@ async function mxMark(tipo) {
   const u = techCurrentUserRecord() || {};
   const btns = [mxQ('mx-btn-in'), mxQ('mx-btn-out')]; btns.forEach(b => b.disabled = true);
   try {
+    const verifiedClient = await mxVerifyActiveClientForMark(name);
     const raw = await mxTakePhoto();
     if (!raw && MX.FOTO_OBLIGATORIA) return mxAttMsg('La foto es obligatoria para registrar la marcación.', 'bad');
     mxAttMsg('<i class="fa-solid fa-satellite-dish"></i> Obteniendo ubicación GPS…', 'warn');
-    const [pos, geo] = await Promise.all([mxGetPosition(), mxClientGeo(name)]);
+    const [pos, geo] = await Promise.all([mxGetPosition(), mxClientGeo(name, verifiedClient)]);
     const { latitude: lat, longitude: lng, accuracy } = pos.coords;
     const dist = geo.lat != null ? mxDistance(lat, lng, geo.lat, geo.lng) : null;
     const inRange = dist == null ? null : dist <= geo.radius;
@@ -5099,5 +5175,18 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) mxPu
   window.openEquipmentExecutionModal = wrapped;
 })();
 </script>
+
+<script id="hvac-update-sync-hook">
+/* Vacía ambas colas del técnico: operaciones de nube y marcaciones/fotos/Telegram en IndexedDB. */
+window.HVAC_UPDATE_SYNC = async function () {
+  try { if (typeof hvacStorageReady !== 'undefined') await hvacStorageReady; } catch (_) {}
+  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
+  if (typeof cloudFlushOutbox === 'function') await cloudFlushOutbox();
+  if (typeof auditEnviarCola === 'function') await auditEnviarCola();
+  if (typeof mxFlushQueue === 'function') await mxFlushQueue();
+  try { if (typeof hvacFlushStorageWrites === 'function') await hvacFlushStorageWrites(); } catch (_) {}
+};
+</script>
+
 </body>
 </html>

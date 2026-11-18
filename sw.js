@@ -1,37 +1,130 @@
-/* Service Worker · Smart Maintenance HVAC (PWA, offline). Cambia CACHE_VERSION al publicar. */
-const CACHE_VERSION = 'hvac-v7';
-const SHELL = ['./', './tecnico.html', './common.js', './manifest.json',
-               './icon-192.png', './icon-512.png', './icon-512-maskable.png', './apple-touch-icon.png'];
-const CDN_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'cdn.tailwindcss.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+/* Service Worker · Smart Maintenance HVAC.
+   Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
+const CACHE_VERSION = 'hvac-v8-safe-update-20261118';
+const SHELL = [
+  './',
+  './tecnico.html',
+  './common.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-512-maskable.png',
+  './apple-touch-icon.png'
+];
+const CDN_HOSTS = [
+  'cdnjs.cloudflare.com',
+  'cdn.jsdelivr.net',
+  'cdn.tailwindcss.com',
+  'fonts.googleapis.com',
+  'fonts.gstatic.com'
+];
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE_VERSION).then(c => Promise.allSettled(SHELL.map(u => c.add(u)))).then(() => self.skipWaiting()));
-});
-self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
-});
-self.addEventListener('message', e => { if (e.data === 'skip-waiting') self.skipWaiting(); });
-
-/* Sincronización en segundo plano (Android/Chrome): avisa a las pestañas para vaciar la cola de IndexedDB */
-self.addEventListener('sync', e => {
-  if (e.tag === 'hvac-outbox') e.waitUntil(self.clients.matchAll({ includeUncontrolled: true }).then(cs => cs.forEach(c => c.postMessage('hvac-sync'))));
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_VERSION)
+      .then(cache => Promise.allSettled(SHELL.map(path => cache.add(path))))
+      // Activa la versión nueva sin esperar a cerrar las pestañas antiguas.
+      .then(() => self.skipWaiting())
+  );
 });
 
-self.addEventListener('fetch', e => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
-  if (url.hostname.endsWith('supabase.co')) return;   // datos y fotos: siempre red (los datos offline viven en IndexedDB)
-  if (req.mode === 'navigate' && !url.pathname.endsWith('tecnico.html')) return;   // el administrador funciona como web normal
-  if (req.mode === 'navigate') {                      // HTML: red primero; sin señal, última copia
-    e.respondWith(fetch(req).then(r => { const cp = r.clone(); caches.open(CACHE_VERSION).then(c => c.put(req, cp)); return r; })
-      .catch(() => caches.match(req).then(r => r || caches.match('./tecnico.html'))));
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys.filter(key => key.startsWith('hvac-') && key !== CACHE_VERSION)
+        .map(key => caches.delete(key))
+    );
+    await self.clients.claim();
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    clients.forEach(client => client.postMessage({
+      type: 'HVAC_SW_ACTIVATED',
+      cacheVersion: CACHE_VERSION
+    }));
+  })());
+});
+
+self.addEventListener('message', event => {
+  if (event.data === 'skip-waiting' || (event.data && event.data.type === 'SKIP_WAITING')) {
+    self.skipWaiting();
+  }
+});
+
+/* Sync de segundo plano: conserva el comportamiento de la cola IndexedDB de marcaciones. */
+self.addEventListener('sync', event => {
+  if (event.tag === 'hvac-outbox') {
+    event.waitUntil(
+      self.clients.matchAll({ includeUncontrolled: true }).then(clients => {
+        clients.forEach(client => client.postMessage('hvac-sync'));
+      })
+    );
+  }
+});
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.hostname.endsWith('supabase.co')) return;
+
+  // Versionado y lógica compartida: siempre consultar red primero para no servir JS obsoleto.
+  const isVersionControlAsset =
+    url.origin === self.location.origin &&
+    (url.pathname.endsWith('/common.js') || url.pathname.endsWith('/version.json'));
+
+  if (isVersionControlAsset) {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(new Request(request, { cache: 'no-store' }));
+        if (response && response.ok && url.pathname.endsWith('/common.js')) {
+          const copyForRequest = response.clone();
+          const copyForShell = response.clone();
+          caches.open(CACHE_VERSION).then(async cache => {
+            await cache.put(request, copyForRequest);
+            // También guardar sin query para el fallback offline del shell precargado.
+            await cache.put(url.pathname, copyForShell);
+          }).catch(() => {});
+        }
+        return response;
+      } catch (_) {
+        // En modo offline se permite la última copia conocida, incluso si cambió el query de versión.
+        return (await caches.match(request)) ||
+          (await caches.match(url.pathname)) ||
+          Response.error();
+      }
+    })());
     return;
   }
-  if (url.origin === location.origin || CDN_HOSTS.includes(url.hostname)) {   // estáticos: caché primero y revalida
-    e.respondWith(caches.match(req).then(hit => {
-      const net = fetch(req).then(r => { if (r && (r.ok || r.type === 'opaque')) { const cp = r.clone(); caches.open(CACHE_VERSION).then(c => c.put(req, cp)); } return r; }).catch(() => hit);
-      return hit || net;
-    }));
+
+  // Navegación técnica: red primero; la copia de caché solo sirve como respaldo sin conexión.
+  if (request.mode === 'navigate' && url.pathname.endsWith('/tecnico.html')) {
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(response => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_VERSION).then(cache => cache.put(request, copy)).catch(() => {});
+          }
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || (await caches.match('./tecnico.html')))
+    );
+    return;
+  }
+
+  // Resto de recursos: caché primero, actualización en segundo plano.
+  if (url.origin === self.location.origin || CDN_HOSTS.includes(url.hostname)) {
+    event.respondWith((async () => {
+      const cached = await caches.match(request);
+      const network = fetch(request).then(response => {
+        if (response && (response.ok || response.type === 'opaque')) {
+          const copy = response.clone();
+          caches.open(CACHE_VERSION).then(cache => cache.put(request, copy)).catch(() => {});
+        }
+        return response;
+      }).catch(() => cached);
+      return cached || network;
+    })());
   }
 });
