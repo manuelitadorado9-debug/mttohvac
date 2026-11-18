@@ -1729,7 +1729,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 <div class="overflow-x-auto">
                     <table>
                         <thead><tr>
-                            <th>Fecha factura</th><th>Cliente</th><th>Concepto</th><th>Factura #</th><th>Valor facturado</th><th>Gastos reales</th><th>PDF</th><th class="text-right">Acciones</th>
+                            <th>Fecha factura</th><th>Cliente</th><th>Tipo mtto</th><th>Concepto</th><th>Factura #</th><th>Valor facturado</th><th>Gastos reales</th><th>PDF</th><th class="text-right">Acciones</th>
                         </tr></thead>
                         <tbody id="manual-invoices-table-body"></tbody>
                     </table>
@@ -1785,6 +1785,14 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <select id="fin-filter-client" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-52">
                         <option value="ALL">Todos</option>
                     </select>
+                    <label class="text-xs font-bold text-slate-600 uppercase">Tipo mtto:</label>
+                    <select id="fin-filter-maintenance-type" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-40">
+                        <option value="ALL">Todos</option>
+                        <option value="PREVENTIVO">Preventivo</option>
+                        <option value="CORRECTIVO">Correctivo</option>
+                        <option value="REVISION">Revisión</option>
+                        <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                    </select>
                     <input type="month" id="fin-filter-month" onchange="renderFinancialModule()" class="input-box text-xs w-36 hidden">
                     <input type="number" id="fin-filter-year" onchange="renderFinancialModule()" placeholder="Año" min="2020" max="2035" class="input-box text-xs w-24 hidden font-bold">
                 </div>
@@ -1816,6 +1824,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                             <tr>
                                 <th>Orden / registro</th>
                                 <th>Cliente</th>
+                                <th>Tipo mtto</th>
                                 <th>Fecha</th>
                                 <th>Factura #</th>
                                 <th>Valor Facturado</th>
@@ -2586,7 +2595,16 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Concepto / Servicio facturado *</label>
-                    <input type="text" id="manual-inv-concept" required maxlength="220" class="input-box text-xs" placeholder="Ej. Mantenimiento preventivo realizado en marzo">
+                    <input type="text" id="manual-inv-concept" required maxlength="220" class="input-box text-xs" placeholder="Ej. Mantenimiento de equipos realizado en marzo">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tipo de mantenimiento *</label>
+                    <select id="manual-inv-type" required class="input-box text-xs font-bold">
+                        <option value="">Selecciona el tipo de mantenimiento</option>
+                        <option value="PREVENTIVO">Preventivo</option>
+                        <option value="CORRECTIVO">Correctivo</option>
+                        <option value="REVISION">Revisión</option>
+                    </select>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -2664,7 +2682,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <div class="text-xs text-indigo-900"><b>Primero descarga la plantilla.</b> Usa una fila por factura y no cambies los encabezados.</div>
                     <button type="button" onclick="downloadManualInvoicesTemplate()" class="px-3 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"><i class="fa-solid fa-download mr-1"></i> Descargar plantilla Excel</button>
                 </div>
-                <p class="text-[11px] text-indigo-800 mt-2">Columnas obligatorias: Cliente, Concepto, NumeroFactura, Fecha y ValorFacturado. GastosReales es opcional y, si queda vacío, se toma como $0. La fecha puede ir como AAAA-MM-DD o como fecha de Excel.</p>
+                <p class="text-[11px] text-indigo-800 mt-2">Columnas obligatorias: Cliente, TipoMantenimiento, Concepto, NumeroFactura, Fecha y ValorFacturado. En TipoMantenimiento usa Preventivo, Correctivo o Revisión (también acepta PRE, COR o REV). GastosReales es opcional y, si queda vacío, se toma como $0. La fecha puede ir como AAAA-MM-DD o como fecha de Excel.</p>
                 <p class="text-[11px] text-indigo-900 mt-2 font-semibold">El cliente debe existir en Gestión de Clientes. La app compara el nombre ignorando mayúsculas, tildes y espacios extra, asigna su ID de cliente y rechaza los que no encuentre. No crea clientes desde Excel.</p>
             </div>
             <div>
@@ -9607,16 +9625,17 @@ async function authPedirNuevaClave() {
 
             // El técnico escribe `tipoRutina`; priorizarlo evita que el valor inicial
             // `maintenanceType: PREVENTIVO` tape una Revisión guardada posteriormente.
-            const explicit = [o.tipoRutina, o.maintenanceType, o.routineType]
+            const explicit = [o.tipoRutina, o.maintenanceType, o.routineType, o.type, o.invoice && o.invoice.maintenanceType]
                 .map(normalize)
                 .map(value => aliases[value])
                 .find(Boolean);
             if (explicit) return explicit;
 
-            // Compatibilidad con órdenes antiguas que solo identifican el tipo por su ID.
+            // Compatibilidad con órdenes antiguas que identifican el tipo por prefijo
+            // aun cuando el consecutivo venga pegado: COR004, REV0010, COR-004, etc.
             const id = String(o.id || '');
-            if (/^COR-/i.test(id)) return 'CORRECTIVO';
-            if (/^REV-/i.test(id)) return 'REVISION';
+            if (/^COR(?:RECTIVO|[-_]|\d|$)/i.test(id)) return 'CORRECTIVO';
+            if (/^REV(?:ISION|[-_]|\d|$)/i.test(id)) return 'REVISION';
 
             const executionTypes = [...new Set(Object.values(o.executions || {})
                 .map(exec => aliases[normalize(exec && exec.tipoRutina)])
@@ -9708,6 +9727,7 @@ async function authPedirNuevaClave() {
                 : null;
             document.getElementById('manual-inv-client').value = item ? ((linkedClient && linkedClient.name) || item.client || '') : '';
             document.getElementById('manual-inv-concept').value = item ? (item.concept || '') : '';
+            document.getElementById('manual-inv-type').value = item ? (hvacNormalizeMaintenanceType(item.maintenanceType || item.tipoRutina || item.routineType || '') || '') : '';
             document.getElementById('manual-inv-number').value = inv.number || '';
             document.getElementById('manual-inv-date').value = String(inv.date || item?.date || hvacLocalDateValue()).slice(0, 10);
             document.getElementById('manual-inv-amount').value = (inv.amount == null ? '' : inv.amount);
@@ -9776,14 +9796,15 @@ async function authPedirNuevaClave() {
         function downloadManualInvoicesTemplate() {
             if (!window.XLSX) return showToast('No se ha cargado el componente Excel. Recarga la página e inténtalo de nuevo.', 'error');
             const wb = XLSX.utils.book_new();
-            const data = [['Cliente', 'Concepto', 'NumeroFactura', 'Fecha', 'ValorFacturado', 'GastosReales']];
+            const data = [['Cliente', 'TipoMantenimiento', 'Concepto', 'NumeroFactura', 'Fecha', 'ValorFacturado', 'GastosReales']];
             const ws = XLSX.utils.aoa_to_sheet(data);
-            ws['!cols'] = [{ wch: 32 }, { wch: 48 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
+            ws['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 48 }, { wch: 22 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
             XLSX.utils.book_append_sheet(wb, ws, 'Facturas');
             const help = [
                 ['INSTRUCCIONES PARA CARGAR FACTURAS HISTÓRICAS'],
                 ['En la hoja Facturas, registra una factura por fila debajo de los encabezados.'],
                 ['Cliente', 'Nombre de un cliente existente en Gestión de Clientes. Se valida contra el directorio oficial; no se crean clientes desde este archivo.'],
+                ['TipoMantenimiento', 'Tipo de mantenimiento obligatorio. Usa Preventivo, Correctivo o Revisión. También se aceptan PRE, COR y REV.'],
                 ['Concepto', 'Servicio o concepto facturado. Obligatorio.'],
                 ['NumeroFactura', 'Número exacto de la factura. Obligatorio.'],
                 ['Fecha', 'Fecha real de emisión. Formato recomendado: AAAA-MM-DD. Obligatorio.'],
@@ -9791,10 +9812,10 @@ async function authPedirNuevaClave() {
                 ['GastosReales', 'Gastos asociados a esa factura. Opcional; si queda vacío se registra como cero.'],
                 ['Validación de cliente', 'Debe existir en Gestión de Clientes. Se ignoran mayúsculas, tildes y espacios extra, pero el nombre debe corresponder a un registro del directorio.'],
                 ['Importante', 'No agregues símbolos de moneda si puedes evitarlo. No repitas la misma factura para el mismo cliente. Las filas rechazadas se mostrarán con su motivo.'],
-                ['Ejemplo', 'Nombre registrado en Gestión de Clientes', 'Mantenimiento de equipos', 'FE-1001', '2026-03-15', 1500000, 250000]
+                ['Ejemplo', 'Nombre registrado en Gestión de Clientes', 'Preventivo', 'Mantenimiento preventivo de equipos', 'FE-1001', '2026-03-15', 1500000, 250000]
             ];
             const helpSheet = XLSX.utils.aoa_to_sheet(help);
-            helpSheet['!cols'] = [{ wch: 24 }, { wch: 92 }, { wch: 28 }, { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 16 }];
+            helpSheet['!cols'] = [{ wch: 24 }, { wch: 92 }, { wch: 24 }, { wch: 48 }, { wch: 22 }, { wch: 20 }, { wch: 16 }, { wch: 18 }];
             XLSX.utils.book_append_sheet(wb, helpSheet, 'Instrucciones');
             XLSX.writeFile(wb, 'Plantilla_facturas_historicas.xlsx');
         }
@@ -9809,6 +9830,21 @@ async function authPedirNuevaClave() {
                 if (i >= 0) return i;
             }
             return -1;
+        }
+        function hvacNormalizeMaintenanceType(value) {
+            const raw = String(value == null ? '' : value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+            if (['PRE', 'PREVENTIVO', 'PREVENTIVA'].includes(raw)) return 'PREVENTIVO';
+            if (['COR', 'CORRECTIVO', 'CORRECTIVA'].includes(raw)) return 'CORRECTIVO';
+            if (['REV', 'REVISION', 'DIAGNOSTICO', 'DIAGNOSTICO TECNICO'].includes(raw)) return 'REVISION';
+            return '';
+        }
+        function hvacMaintenanceTypeLabel(value) {
+            const type = hvacNormalizeMaintenanceType(value);
+            return type === 'PREVENTIVO' ? 'Preventivo' : type === 'CORRECTIVO' ? 'Correctivo' : type === 'REVISION' ? 'Revisión' : 'Sin clasificar';
+        }
+        function hvacManualInvoiceMaintenanceType(item) {
+            const inv = item && item.invoice ? item.invoice : {};
+            return hvacNormalizeMaintenanceType(item && (item.maintenanceType || item.tipoRutina || item.routineType || item.type) || inv.maintenanceType || inv.tipoRutina || '') || 'SIN_CLASIFICAR';
         }
         function hvacParseExcelMoney(value) {
             if (value === '' || value == null) return null;
@@ -9891,6 +9927,7 @@ async function authPedirNuevaClave() {
                 return `<tr>
                     <td class="px-2 py-2 align-top">${item.rowNumber}</td>
                     <td class="px-2 py-2 align-top">${esc(clientLabel)}</td>
+                    <td class="px-2 py-2 align-top">${esc(hvacMaintenanceTypeLabel(item.maintenanceType || ''))}</td>
                     <td class="px-2 py-2 align-top">${esc(item.concept || '-')}</td>
                     <td class="px-2 py-2 align-top">${esc(item.number || '-')}</td>
                     <td class="px-2 py-2 align-top">${esc(item.date || '-')}</td>
@@ -9912,7 +9949,7 @@ async function authPedirNuevaClave() {
                     ${card('Otros errores', invalid, 'bg-slate-100 text-slate-700')}
                 </div>
                 <p class="text-[11px] text-slate-600 mb-2">${esc(summary)}${!finalResult ? ' Los nombres se comparan ignorando mayúsculas, tildes y espacios extra, pero deben corresponder a un cliente existente en Gestión de Clientes.' : ''}</p>
-                <div class="overflow-auto max-h-[48vh] rounded-lg border border-slate-200"><table class="text-[11px] min-w-[980px]"><thead class="sticky top-0"><tr><th class="px-2 py-2">Fila</th><th class="px-2 py-2">Cliente</th><th class="px-2 py-2">Concepto</th><th class="px-2 py-2">Factura</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-right">Valor</th><th class="px-2 py-2 text-right">Gastos</th><th class="px-2 py-2">Resultado</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
+                <div class="overflow-auto max-h-[48vh] rounded-lg border border-slate-200"><table class="text-[11px] min-w-[1100px]"><thead class="sticky top-0"><tr><th class="px-2 py-2">Fila</th><th class="px-2 py-2">Cliente</th><th class="px-2 py-2">Tipo mtto</th><th class="px-2 py-2">Concepto</th><th class="px-2 py-2">Factura</th><th class="px-2 py-2">Fecha</th><th class="px-2 py-2 text-right">Valor</th><th class="px-2 py-2 text-right">Gastos</th><th class="px-2 py-2">Resultado</th></tr></thead><tbody>${rowHtml}</tbody></table></div>`;
             if (submit) {
                 submit.disabled = finalResult ? false : ready === 0;
                 submit.classList.toggle('opacity-50', !finalResult && ready === 0);
@@ -9954,14 +9991,15 @@ async function authPedirNuevaClave() {
                 const headers = rows[0];
                 const cols = {
                     client: hvacExcelColumnIndex(headers, ['Cliente', 'NombreCliente', 'RazonSocial']),
+                    maintenanceType: hvacExcelColumnIndex(headers, ['TipoMantenimiento', 'TipoDeMantenimiento', 'TipoMtto', 'TipoRutina', 'Tipo']),
                     concept: hvacExcelColumnIndex(headers, ['Concepto', 'Servicio', 'Detalle', 'Descripcion']),
                     number: hvacExcelColumnIndex(headers, ['NumeroFactura', 'NumeroDeFactura', 'Factura', 'NroFactura', 'NoFactura']),
                     date: hvacExcelColumnIndex(headers, ['Fecha', 'FechaEmision', 'FechaFactura']),
                     amount: hvacExcelColumnIndex(headers, ['ValorFacturado', 'Valor', 'ValorDeLaFactura', 'Subtotal', 'MontoFactura']),
                     expenses: hvacExcelColumnIndex(headers, ['GastosReales', 'Gastos', 'GastosOperativos', 'Costos'])
                 };
-                const missing = ['client', 'concept', 'number', 'date', 'amount'].filter(k => cols[k] < 0);
-                if (missing.length) throw new Error('Faltan encabezados obligatorios. Descarga y utiliza la plantilla oficial.');
+                const missing = ['client', 'maintenanceType', 'concept', 'number', 'date', 'amount'].filter(k => cols[k] < 0);
+                if (missing.length) throw new Error('Faltan encabezados obligatorios. Incluye TipoMantenimiento y descarga la plantilla oficial actualizada.');
 
                 const existingKeys = hvacExistingInvoiceKeys();
                 const seenInFile = new Set();
@@ -9970,6 +10008,8 @@ async function authPedirNuevaClave() {
                     if (!Array.isArray(row) || row.every(v => v === '' || v == null)) return;
                     const get = key => cols[key] >= 0 ? row[cols[key]] : '';
                     const client = String(get('client') == null ? '' : get('client')).trim();
+                    const maintenanceTypeRaw = String(get('maintenanceType') == null ? '' : get('maintenanceType')).trim();
+                    const maintenanceType = hvacNormalizeMaintenanceType(maintenanceTypeRaw);
                     const concept = String(get('concept') == null ? '' : get('concept')).trim();
                     const number = String(get('number') == null ? '' : get('number')).trim();
                     const date = hvacParseExcelDate(get('date'));
@@ -9979,6 +10019,8 @@ async function authPedirNuevaClave() {
                     const clientRecord = client ? findClientRecord(client) : null; // SOLO Gestión de Clientes
                     const errors = [];
                     if (!client) errors.push('Cliente vacío');
+                    if (!maintenanceTypeRaw) errors.push('Tipo de mantenimiento vacío');
+                    else if (!maintenanceType) errors.push('Tipo de mantenimiento inválido: usa Preventivo, Correctivo o Revisión');
                     if (!concept) errors.push('Concepto vacío');
                     if (!number) errors.push('Número de factura vacío');
                     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push('Fecha inválida');
@@ -9996,6 +10038,8 @@ async function authPedirNuevaClave() {
                         clientId: clientRecord ? clientRecord.id : null,
                         clientMatched: !!clientRecord,
                         clientMissing,
+                        maintenanceType,
+                        maintenanceTypeRaw,
                         concept,
                         number,
                         date,
@@ -10058,6 +10102,7 @@ async function authPedirNuevaClave() {
                         importSource: 'EXCEL',
                         client: clientRecord.name,
                         clientId: clientRecord.id,
+                        maintenanceType: row.maintenanceType,
                         concept: row.concept,
                         date: row.date,
                         invoice: { number: row.number, amount: row.amount, expenses: row.expenses, date: row.date, pdfUrl: null },
@@ -10101,6 +10146,7 @@ async function authPedirNuevaClave() {
                 const clientRecord = findClientRecord(clientRaw);
                 if (!clientRecord) return showToast('El cliente no existe en Gestión de Clientes. Regístralo primero o selecciona uno del listado oficial.', 'error');
                 const concept = document.getElementById('manual-inv-concept').value.trim();
+                const maintenanceType = hvacNormalizeMaintenanceType(document.getElementById('manual-inv-type').value);
                 const number = document.getElementById('manual-inv-number').value.trim();
                 const date = document.getElementById('manual-inv-date').value;
                 const amountRaw = document.getElementById('manual-inv-amount').value;
@@ -10110,8 +10156,8 @@ async function authPedirNuevaClave() {
                 const fileInput = document.getElementById('manual-inv-pdf');
                 const file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
 
-                if (!clientRaw || !concept || !number || !date || amountRaw === '' || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(expenses) || expenses < 0) {
-                    return showToast('Completa cliente, concepto, número, fecha y un valor facturado mayor que cero.', 'error');
+                if (!clientRaw || !concept || !maintenanceType || !number || !date || amountRaw === '' || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(expenses) || expenses < 0) {
+                    return showToast('Completa cliente, tipo de mantenimiento, concepto, número, fecha y un valor facturado mayor que cero.', 'error');
                 }
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return showToast('La fecha de la factura no es válida.', 'error');
                 if (file) {
@@ -10136,6 +10182,7 @@ async function authPedirNuevaClave() {
                     manual: true,
                     client: clientRecord.name,
                     clientId: clientRecord.id,
+                    maintenanceType,
                     concept,
                     date,
                     invoice: { number, amount, expenses, date, pdfUrl },
@@ -10169,7 +10216,7 @@ async function authPedirNuevaClave() {
             const all = hvacManualInvoicesRead();
             const visible = all.filter(item => {
                 const inv = item.invoice || {};
-                const haystack = [hvacManualInvoiceClientName(item), item.concept, inv.number, inv.date].join(' ').toLocaleLowerCase('es-CO');
+                const haystack = [hvacManualInvoiceClientName(item), hvacMaintenanceTypeLabel(hvacManualInvoiceMaintenanceType(item)), item.concept, inv.number, inv.date].join(' ').toLocaleLowerCase('es-CO');
                 return !query || haystack.includes(query);
             }).sort((a, b) => String((b.invoice || {}).date || b.date || '').localeCompare(String((a.invoice || {}).date || a.date || '')));
             const total = all.reduce((acc, item) => {
@@ -10185,7 +10232,7 @@ async function authPedirNuevaClave() {
                 <div class="rounded-xl border border-rose-100 bg-rose-50 p-3"><span class="text-[10px] font-bold uppercase tracking-wider text-rose-700">Gastos reales</span><p class="text-lg font-black text-rose-700 mt-1">${fmt(total.expenses)}</p></div>`;
             tbody.innerHTML = '';
             if (!visible.length) {
-                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-slate-400 text-xs font-medium py-8">${all.length ? 'No hay facturas históricas que coincidan con la búsqueda.' : 'Todavía no has registrado facturas históricas.'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-slate-400 text-xs font-medium py-8">${all.length ? 'No hay facturas históricas que coincidan con la búsqueda.' : 'Todavía no has registrado facturas históricas.'}</td></tr>`;
                 return;
             }
             visible.forEach(item => {
@@ -10193,6 +10240,7 @@ async function authPedirNuevaClave() {
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td class="text-xs">${esc(inv.date || item.date || '-')}</td>
                     <td class="font-bold text-teal-700">${esc(hvacManualInvoiceClientName(item) || '-')}</td>
+                    <td class="text-xs font-bold">${esc(hvacMaintenanceTypeLabel(hvacManualInvoiceMaintenanceType(item)))}</td>
                     <td class="text-xs">${esc(item.concept || '-')}</td>
                     <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
                     <td class="font-bold text-slate-900">${fmt(inv.amount)}</td>
@@ -10562,6 +10610,8 @@ async function authPedirNuevaClave() {
         function renderFinancialModule() {
             const type = document.getElementById('fin-period-type').value || 'YTD';
             const selectedClient = document.getElementById('fin-filter-client').value || 'ALL';
+            const selectedMaintenanceType = document.getElementById('fin-filter-maintenance-type')?.value || 'ALL';
+            const matchesMaintenanceType = value => selectedMaintenanceType === 'ALL' || String(value || 'SIN_CLASIFICAR') === selectedMaintenanceType;
             const selMonth = document.getElementById('fin-filter-month').value;
             const selYear = parseInt(document.getElementById('fin-filter-year').value, 10);
             const currentYear = new Date().getFullYear();
@@ -10578,12 +10628,14 @@ async function authPedirNuevaClave() {
 
             const billedOrders = workOrders.filter(o => o.status === 'BILLED' && o.invoice);
             const filteredOrders = billedOrders.filter(o =>
-                matchesClientFilter(o.client, selectedClient) && inSelectedPeriod(o.invoice.date || o.date)
+                matchesClientFilter(o.client, selectedClient) && inSelectedPeriod(o.invoice.date || o.date) &&
+                matchesMaintenanceType(billingRoutineType(o))
             );
             const manualInvoices = hvacManualInvoicesRead();
             const filteredManual = manualInvoices.filter(item => {
                 const inv = item && item.invoice ? item.invoice : {};
-                return !!inv.number && matchesClientFilter(hvacManualInvoiceClientName(item), selectedClient) && inSelectedPeriod(inv.date || item.date);
+                return !!inv.number && matchesClientFilter(hvacManualInvoiceClientName(item), selectedClient) &&
+                    inSelectedPeriod(inv.date || item.date) && matchesMaintenanceType(hvacManualInvoiceMaintenanceType(item));
             });
 
             let totalBilled = 0;
@@ -10610,9 +10662,14 @@ async function authPedirNuevaClave() {
                     ? `<span class="font-bold text-indigo-700">Factura manual</span><div class="text-[10px] text-slate-500 mt-0.5">${esc(item.concept || 'Registro histórico')}</div>`
                     : `<span class="font-bold text-slate-900">${esc(item.id)}</span>`;
                 const dateCell = record.kind === 'manual' ? esc(inv.date || item.date || '-') : esc(item.date || '-');
+                const maintenanceType = record.kind === 'manual'
+                    ? hvacManualInvoiceMaintenanceType(item)
+                    : (billingRoutineType(item) || 'PREVENTIVO');
+                const maintenanceTypeLabel = maintenanceType === 'SIN_CLASIFICAR' ? 'Sin clasificar' : hvacMaintenanceTypeLabel(maintenanceType);
                 tbody.insertAdjacentHTML('beforeend', `<tr>
                     <td>${firstCell}</td>
                     <td class="font-bold text-teal-700">${esc(hvacManualInvoiceClientName(item) || '-')}</td>
+                    <td class="text-xs font-bold">${esc(maintenanceTypeLabel)}</td>
                     <td>${dateCell}</td>
                     <td class="font-mono font-bold text-xs">${esc(inv.number || '-')}</td>
                     <td class="font-bold text-slate-900">$ ${billed.toLocaleString('es-CO')}</td>
@@ -10623,7 +10680,7 @@ async function authPedirNuevaClave() {
             });
 
             if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-slate-400 text-xs font-medium py-8">No hay facturas para el periodo y cliente seleccionados.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center text-slate-400 text-xs font-medium py-8">No hay facturas para los filtros seleccionados.</td></tr>';
             }
 
             const netTotal = totalBilled - totalExpenses;
