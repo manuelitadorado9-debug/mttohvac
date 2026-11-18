@@ -1134,6 +1134,113 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
 [data-theme="dark"] .hv-dlg-btn.ghost{background:#1e293b;color:#cbd5e1}
 @media (prefers-reduced-motion:no-preference){.hv-dlg-card{animation:hvDlgIn .2s ease-out}@keyframes hvDlgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}
 </style>
+
+<style id="finance-dashboard-approved-design">
+  #view-admin-financial.finance-dashboard{--fd-bg:#F4F7F9;--fd-card:#FFFFFF;--fd-ink:#172033;--fd-muted:#7D899B;--fd-line:#E5EAF0;--fd-blue:#172B4D;--fd-red:#D92D50;--fd-green:#079669;--fd-green-dark:#087653;--fd-gold:#A66B09;gap:16px!important}
+  #view-admin-financial .fd-card{background:var(--fd-card);border:1px solid var(--fd-line);border-radius:17px;box-shadow:0 5px 18px rgba(27,43,65,.055),0 1px 3px rgba(27,43,65,.04);min-width:0}
+  #view-admin-financial .fd-header{padding:22px 24px 19px}
+  #view-admin-financial .fd-header-grid{display:grid;grid-template-columns:minmax(220px,1fr) auto;align-items:end;gap:24px}
+  #view-admin-financial .fd-heading h2{margin:0;color:#182238;font-size:25px;line-height:1.15;font-weight:850;letter-spacing:-.8px}
+  #view-admin-financial .fd-heading p{margin:5px 0 0;color:var(--fd-muted);font-size:12.5px;font-weight:500}
+  #view-admin-financial .fd-controls{display:flex;align-items:end;justify-content:flex-end;flex-wrap:wrap;gap:9px}
+  #view-admin-financial .fd-field{display:flex;flex-direction:column;gap:6px;min-width:135px;margin:0;color:#667387;font-size:9.5px;font-weight:850;letter-spacing:.075em;text-transform:uppercase}
+  #view-admin-financial .fd-field.fd-period{width:174px}
+  #view-admin-financial .fd-field.fd-client{width:180px}
+  #view-admin-financial .fd-field.fd-type{width:150px}
+  #view-admin-financial .fd-field.fd-month{width:160px}
+  #view-admin-financial .fd-field.fd-year{width:105px}
+  #view-admin-financial .fd-control{width:100%;height:42px;min-height:42px;padding:0 12px;border:1px solid #DCE3EB;border-radius:10px;background:#F9FBFC;color:#263247;font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;box-shadow:none}
+  #view-admin-financial .fd-control:focus{border-color:#90A7C3;box-shadow:0 0 0 3px rgba(58,105,160,.10);outline:0}
+  #view-admin-financial .fd-sync,#view-admin-financial .fd-upload{height:42px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 14px;border:1px solid #DCE3EB;border-radius:10px;background:#fff;color:#263247;font-size:11.5px;font-weight:800;white-space:nowrap;box-shadow:0 2px 5px rgba(20,35,55,.04);transition:background .15s,border-color .15s}
+  #view-admin-financial .fd-sync:hover{background:#F8FAFC;border-color:#CBD5E1}
+  #view-admin-financial .fd-upload{background:#eef2ff;border-color:#dce3ff;color:#4546a5}
+  #view-admin-financial .fd-upload:hover{background:#e6eaff}
+  #view-admin-financial .fd-sync:disabled{opacity:.6;cursor:wait}
+  #view-admin-financial .fd-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+  #view-admin-financial .fd-kpi{position:relative;overflow:hidden;padding:19px 20px 17px;min-height:126px;border-radius:16px}
+  #view-admin-financial .fd-kpi:before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--fd-accent)}
+  #view-admin-financial .fd-kpi-billing{--fd-accent:#172B4D;--fd-value:#172B4D}
+  #view-admin-financial .fd-kpi-expenses{--fd-accent:#D92D50;--fd-value:#D92D50}
+  #view-admin-financial .fd-kpi-profit{--fd-accent:#079669;--fd-value:#079669}
+  #view-admin-financial .fd-kpi-margin{--fd-accent:#079669;--fd-value:#079669}
+  #view-admin-financial .fd-kpi-label{margin-bottom:12px;color:#718096;font-size:9.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+  #view-admin-financial .fd-kpi-expenses .fd-kpi-label{color:#D92D50}
+  #view-admin-financial .fd-kpi-profit .fd-kpi-label,#view-admin-financial .fd-kpi-margin .fd-kpi-label{color:#079669}
+  #view-admin-financial .fd-kpi-value{margin:0;color:var(--fd-value);font-size:clamp(21px,2vw,30px);line-height:1.12;font-weight:900;letter-spacing:-.9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-kpi-note{display:block;margin-top:8px;color:#8B96A7;font-size:10px;font-weight:550}
+  #view-admin-financial .fd-comparison{overflow:hidden}
+  #view-admin-financial .fd-compare-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:19px 23px 15px;border-bottom:1px solid #EEF1F5}
+  #view-admin-financial .fd-compare-head h3{display:flex;align-items:center;gap:9px;margin:0;color:#182238;font-size:15px;font-weight:850;letter-spacing:-.2px}
+  #view-admin-financial .fd-compare-head h3 i{color:#4D63D8}
+  #view-admin-financial #fin-proj-period-label{margin:0;color:#8994A4;font-size:11.5px;font-weight:550;text-align:right}
+  #view-admin-financial .fd-compare-body{padding:18px 22px 19px}
+  #view-admin-financial .fd-compare-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+  #view-admin-financial .fd-compare-value{min-height:86px;padding:15px 17px;border:1px solid var(--fd-line);border-radius:13px;background:#FBFCFD}
+  #view-admin-financial .fd-projected-value{background:#F7F9FD;border-color:#E4EAF2}
+  #view-admin-financial .fd-difference-value{background:#FFFBF3;border-color:#F5E8C8}
+  #view-admin-financial .fd-eyebrow{margin-bottom:8px;color:#778397;font-size:9.5px;font-weight:900;letter-spacing:.08em}
+  #view-admin-financial .fd-projected-value .fd-eyebrow{color:#4D63D8}
+  #view-admin-financial .fd-difference-value .fd-eyebrow{color:#A66B09}
+  #view-admin-financial .fd-compare-number{margin:0;color:var(--fd-blue);font-size:clamp(21px,1.8vw,27px);font-weight:900;line-height:1.12;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-difference-value .fd-compare-number{color:var(--fd-gold)}
+  #view-admin-financial .fd-difference-value .fd-compare-number.fd-negative{color:var(--fd-red)}
+  #view-admin-financial .fd-progress-block{margin-top:20px}
+  #view-admin-financial .fd-progress-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:9px}
+  #view-admin-financial .fd-progress-label{color:#586579;font-size:11.5px;font-weight:750}
+  #view-admin-financial .fd-progress-percent{color:var(--fd-green-dark);font-size:14px;font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-progress-track-wrap{position:relative;padding:0 1px}
+  #view-admin-financial .fd-progress-track{position:relative;height:15px;width:100%;overflow:hidden;border-radius:999px;background:#E8EEF0}
+  #view-admin-financial .fd-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#0DAD7C,#07865F);transition:width .25s ease}
+  #view-admin-financial .fd-progress-marker{position:absolute;z-index:2;top:-4px;left:100%;display:none;width:3px;height:23px;border-radius:3px;background:#173C35;box-shadow:0 0 0 2px rgba(255,255,255,.9);transform:translateX(-50%);transition:left .25s ease}
+  #view-admin-financial .fd-progress-foot{margin:8px 0 0;color:#929CAB;font-size:10px}
+  #view-admin-financial .fd-proj-note{margin:13px 0 0;color:#8B96A7;font-size:10px;line-height:1.45}
+  #view-admin-financial .fd-details{border-top:1px solid #EEF1F5}
+  #view-admin-financial .fd-details summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:12px 20px;color:#65728A;font-size:11px;font-weight:800;user-select:none}
+  #view-admin-financial .fd-details summary::-webkit-details-marker{display:none}
+  #view-admin-financial .fd-details summary>span{display:flex;align-items:center;gap:8px}
+  #view-admin-financial .fd-details summary>span i{color:#4D63D8}
+  #view-admin-financial .fd-details-chevron{margin-left:auto;transition:transform .2s}
+  #view-admin-financial .fd-details[open] .fd-details-chevron{transform:rotate(180deg)}
+  #view-admin-financial .fd-details[open] summary{background:#FAFBFD}
+  #view-admin-financial .fd-details-table-wrap{overflow-x:auto;padding:0 15px 14px}
+  #view-admin-financial .fd-month-table{width:100%;min-width:570px;border-collapse:collapse}
+  #view-admin-financial .fd-month-table th,#view-admin-financial .fd-month-table td{padding:9px 10px;border-bottom:1px solid #EEF1F5;font-size:11px}
+  #view-admin-financial .fd-month-table th{color:#718096;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+  #view-admin-financial .fd-finance-table-card{overflow:hidden}
+  #view-admin-financial .fd-table-heading{padding:15px 19px;border-bottom:1px solid #EEF1F5}
+  #view-admin-financial .fd-table-heading h3{margin:0;color:#182238;font-size:13px;font-weight:850}
+  #view-admin-financial .fd-table-heading p{margin:3px 0 0;color:#8994A4;font-size:10.5px}
+  #view-admin-financial .fd-invoice-table{width:100%;min-width:900px;border-collapse:collapse}
+  #view-admin-financial .fd-invoice-table th,#view-admin-financial .fd-invoice-table td{padding:11px 13px;border-bottom:1px solid #EEF1F5;font-size:10.5px;vertical-align:middle}
+  #view-admin-financial .fd-invoice-table th{background:#F8FAFC;color:#718096;font-size:9px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;text-align:left;white-space:nowrap}
+  #view-admin-financial .fd-invoice-table tbody tr:hover{background:#FAFCFD}
+  #view-admin-financial .fd-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  html[data-theme="dark"] #view-admin-financial.finance-dashboard .fd-card{background:#0f1830;border-color:#1d2a4a;color:#e8edf7;box-shadow:0 5px 18px rgba(0,0,0,.18)}
+  html[data-theme="dark"] #view-admin-financial .fd-heading h2,html[data-theme="dark"] #view-admin-financial .fd-compare-head h3,html[data-theme="dark"] #view-admin-financial .fd-table-heading h3{color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-heading p,html[data-theme="dark"] #view-admin-financial #fin-proj-period-label,html[data-theme="dark"] #view-admin-financial .fd-kpi-note,html[data-theme="dark"] #view-admin-financial .fd-proj-note,html[data-theme="dark"] #view-admin-financial .fd-table-heading p{color:#8d9bb8}
+  html[data-theme="dark"] #view-admin-financial .fd-field{color:#a8b6d0}
+  html[data-theme="dark"] #view-admin-financial .fd-control{background:#0b1328;border-color:#263758;color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-sync{background:#0b1328;border-color:#263758;color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-upload{background:#20264a;border-color:#39416d;color:#c7d0ff}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-head,html[data-theme="dark"] #view-admin-financial .fd-details,html[data-theme="dark"] #view-admin-financial .fd-table-heading{border-color:#1d2a4a}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-value{background:#111e38;border-color:#263758}
+  html[data-theme="dark"] #view-admin-financial .fd-projected-value{background:#15203a;border-color:#283a63}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value{background:#2c241b;border-color:#594322}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-number{color:#d9e5f8}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value .fd-compare-number{color:#f4c66c}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value .fd-compare-number.fd-negative{color:#fb7185}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-label{color:#c2cde0}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-track{background:#253551}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-marker{background:#e3f5ed;box-shadow:0 0 0 2px rgba(15,24,48,.9)}
+  html[data-theme="dark"] #view-admin-financial .fd-details summary{color:#aebbd1}
+  html[data-theme="dark"] #view-admin-financial .fd-details[open] summary,html[data-theme="dark"] #view-admin-financial .fd-invoice-table th{background:#111e38}
+  html[data-theme="dark"] #view-admin-financial .fd-month-table th,html[data-theme="dark"] #view-admin-financial .fd-month-table td,html[data-theme="dark"] #view-admin-financial .fd-invoice-table th,html[data-theme="dark"] #view-admin-financial .fd-invoice-table td{border-color:#1d2a4a;color:#cbd5e1}
+  html[data-theme="dark"] #view-admin-financial .fd-invoice-table tbody tr:hover{background:#14213f}
+  @media(max-width:1200px){#view-admin-financial .fd-header-grid{grid-template-columns:1fr;gap:16px}#view-admin-financial .fd-controls{justify-content:flex-start}#view-admin-financial .fd-field.fd-period{width:170px}#view-admin-financial .fd-field.fd-client{width:190px}}
+  @media(max-width:760px){#view-admin-financial .fd-header{padding:18px 16px 15px}#view-admin-financial .fd-heading h2{font-size:22px}#view-admin-financial .fd-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:9px}#view-admin-financial .fd-field,#view-admin-financial .fd-field.fd-period,#view-admin-financial .fd-field.fd-client,#view-admin-financial .fd-field.fd-type,#view-admin-financial .fd-field.fd-month,#view-admin-financial .fd-field.fd-year{width:auto;min-width:0}#view-admin-financial .fd-sync,#view-admin-financial .fd-upload{width:100%;grid-column:span 1;padding:0 8px}#view-admin-financial .fd-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}#view-admin-financial .fd-kpi{padding:16px 14px;min-height:111px}#view-admin-financial .fd-kpi-label{font-size:8.5px;min-height:22px}#view-admin-financial .fd-kpi-value{font-size:clamp(18px,4.7vw,24px)}#view-admin-financial .fd-kpi-note{font-size:9px}#view-admin-financial .fd-compare-head{align-items:flex-start;flex-direction:column;gap:5px;padding:16px}#view-admin-financial #fin-proj-period-label{text-align:left}#view-admin-financial .fd-compare-body{padding:15px 16px 17px}#view-admin-financial .fd-compare-values{gap:9px}#view-admin-financial .fd-compare-value{padding:13px 12px;min-height:80px}#view-admin-financial .fd-compare-number{font-size:clamp(17px,4.4vw,22px)}#view-admin-financial .fd-eyebrow{font-size:8.5px}#view-admin-financial .fd-progress-label{font-size:10.5px;max-width:75%}#view-admin-financial .fd-progress-percent{font-size:12px}}
+  @media(max-width:390px){#view-admin-financial .fd-controls{grid-template-columns:1fr}#view-admin-financial .fd-sync,#view-admin-financial .fd-upload{grid-column:1}#view-admin-financial .fd-compare-values{grid-template-columns:1fr}}
+</style>
+
 </head>
 <body class="min-h-screen flex flex-col antialiased">
 
@@ -1774,112 +1881,138 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             </div>
         </section>
 
-        <section id="view-admin-financial" class="hidden space-y-3">
-            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm page-head space-y-3">
-                <div class="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                        <h2 class="text-base font-black text-slate-900 tracking-tight">Finanzas</h2>
-                        <p class="text-xs text-slate-500 mt-0.5">Métricas de facturación, gastos operativos reales y rentabilidad neta.</p>
-                    </div>
-                    <button type="button" id="btn-financial-projection-upload" onclick="openFinancialProjectionModal()" class="px-3 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition whitespace-nowrap"><i class="fa-solid fa-file-excel mr-1"></i> Cargar proyección</button>
-                </div>
-                <div class="flex flex-wrap gap-2 items-end">
-                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Periodo
-                        <select id="fin-period-type" onchange="handleFinancePeriodChange()" class="input-box font-bold text-xs w-full">
-                            <option value="YTD" selected>Lo transcurrido del año (YTD)</option>
-                            <option value="MONTH">Por Mes Específico</option>
-                            <option value="YEAR">Por Año Completo</option>
-                            <option value="ALL">Todo el Historial</option>
-                        </select>
-                    </label>
-                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Cliente
-                        <select id="fin-filter-client" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-full">
-                            <option value="ALL">Todos</option>
-                        </select>
-                    </label>
-                    <label class="flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Tipo mtto
-                        <select id="fin-filter-maintenance-type" onchange="renderFinancialModule()" class="input-box font-bold text-xs w-full">
-                            <option value="ALL">Todos</option>
-                            <option value="PREVENTIVO">Preventivo</option>
-                            <option value="CORRECTIVO">Correctivo</option>
-                            <option value="REVISION">Revisión</option>
-                            <option value="SIN_CLASIFICAR">Sin clasificar</option>
-                        </select>
-                    </label>
-                    <label id="fin-filter-month-field" class="hidden flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Mes
-                        <input type="month" id="fin-filter-month" onchange="renderFinancialModule()" class="input-box text-xs w-full">
-                    </label>
-                    <label id="fin-filter-year-field" class="hidden flex flex-col gap-1 min-w-[180px] flex-1 text-[10px] font-bold text-slate-600 uppercase">Año
-                        <input type="number" id="fin-filter-year" onchange="renderFinancialModule()" placeholder="Año" min="2020" max="2100" class="input-box text-xs w-full font-bold">
-                    </label>
-                </div>
+        <section id="view-admin-financial" class="hidden finance-dashboard space-y-4">
+    <header class="fd-card fd-header">
+        <div class="fd-header-grid">
+            <div class="fd-heading">
+                <h2>Finanzas</h2>
+                <p>Facturación, gastos operativos reales y rentabilidad neta.</p>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-billed">
-                    <span class="text-xs text-slate-500 font-bold uppercase tracking-wider">Facturación Total</span>
-                    <p id="kpi-fin-billed" class="text-3xl font-black text-slate-900 mt-2">$ 0</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-expenses">
-                    <span class="text-xs text-rose-500 font-bold uppercase tracking-wider">Gastos Operativos Reales</span>
-                    <p id="kpi-fin-expenses" class="text-3xl font-black text-rose-600 mt-2">$ 0</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-net">
-                    <span class="text-xs text-emerald-600 font-bold uppercase tracking-wider">Utilidad Neta Real</span>
-                    <p id="kpi-fin-net" class="text-3xl font-black text-emerald-600 mt-2">$ 0</p>
-                </div>
-                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm kpi-card kpi-fin-margin">
-                    <span class="text-xs text-teal-600 font-bold uppercase tracking-wider">% Margen Real</span>
-                    <p id="kpi-fin-margin" class="text-3xl font-black text-teal-600 mt-2">0%</p>
-                </div>
+            <div class="fd-controls" aria-label="Filtros de finanzas">
+                <label class="fd-field fd-period" for="fin-period-type">
+                    <span>PERÍODO</span>
+                    <select id="fin-period-type" onchange="handleFinancePeriodChange()" class="fd-control">
+                        <option value="YTD" selected>YTD · Año a la fecha</option>
+                        <option value="MONTH">Por mes específico</option>
+                        <option value="YEAR">Año completo</option>
+                        <option value="ALL">Todo el historial</option>
+                    </select>
+                </label>
+                <label class="fd-field fd-client" for="fin-filter-client">
+                    <span>CLIENTE</span>
+                    <select id="fin-filter-client" onchange="renderFinancialModule()" class="fd-control">
+                        <option value="ALL">Todos</option>
+                    </select>
+                </label>
+                <label class="fd-field fd-type" for="fin-filter-maintenance-type">
+                    <span>TIPO MTTO</span>
+                    <select id="fin-filter-maintenance-type" onchange="renderFinancialModule()" class="fd-control">
+                        <option value="ALL">Todos</option>
+                        <option value="PREVENTIVO">Preventivo</option>
+                        <option value="CORRECTIVO">Correctivo</option>
+                        <option value="REVISION">Revisión</option>
+                        <option value="SIN_CLASIFICAR">Sin clasificar</option>
+                    </select>
+                </label>
+                <label id="fin-filter-month-field" class="fd-field fd-month hidden" for="fin-filter-month">
+                    <span>MES</span>
+                    <input type="month" id="fin-filter-month" onchange="renderFinancialModule()" class="fd-control">
+                </label>
+                <label id="fin-filter-year-field" class="fd-field fd-year hidden" for="fin-filter-year">
+                    <span>AÑO</span>
+                    <input type="number" id="fin-filter-year" onchange="renderFinancialModule()" placeholder="Año" min="2020" max="2100" class="fd-control">
+                </label>
+                <button type="button" class="fd-sync" onclick="window.hvacAdminManualSync && window.hvacAdminManualSync(this)" title="Sincronizar información">
+                    <i class="fa-solid fa-rotate"></i><span>Sincronizar</span>
+                </button>
+                <button type="button" id="btn-financial-projection-upload" onclick="openFinancialProjectionModal()" class="fd-upload">
+                    <i class="fa-solid fa-file-excel"></i><span>Cargar proyección</span>
+                </button>
             </div>
+        </div>
+    </header>
 
-            <section id="financial-projection-comparison" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
-                    <div class="min-w-0">
-                        <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-chart-column text-indigo-600 mr-2"></i>Facturado vs. proyectado</h3>
-                        <p id="fin-proj-period-label" class="text-[11px] text-slate-500 mt-0.5">Comparación global del periodo seleccionado.</p>
-                    </div>
-                    <span class="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">Comparativo global</span>
-                </div>
-                <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 p-3" id="fin-projection-summary">
-                    <div class="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3"><span id="fin-proj-label" class="text-[9px] font-bold uppercase text-indigo-700">Proyectado del periodo</span><p id="fin-proj-total" class="text-base sm:text-lg font-black text-indigo-900 mt-1">$ 0</p></div>
-                    <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3"><span id="fin-actual-label" class="text-[9px] font-bold uppercase text-sky-700">Facturado del periodo</span><p id="fin-actual-total" class="text-base sm:text-lg font-black text-sky-900 mt-1">$ 0</p></div>
-                    <div class="rounded-xl border border-amber-100 bg-amber-50/60 p-3"><span id="fin-proj-diff-label" class="text-[9px] font-bold uppercase text-amber-700">Diferencia</span><p id="fin-proj-difference" class="text-base sm:text-lg font-black text-amber-900 mt-1">—</p></div>
-                    <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3"><span id="fin-proj-compliance-label" class="text-[9px] font-bold uppercase text-emerald-700">Cumplimiento</span><p id="fin-proj-compliance" class="text-base sm:text-lg font-black text-emerald-900 mt-1">—</p></div>
-                    <p id="fin-proj-months-note" class="col-span-2 xl:col-span-4 text-[10px] text-slate-500 leading-4">La comparación utiliza el periodo seleccionado y requiere una proyección cargada para cada mes del periodo.</p>
-                </div>
-                <details id="fin-projection-details" class="border-t border-slate-100">
-                    <summary class="cursor-pointer select-none px-4 py-2.5 text-[11px] font-bold text-indigo-700 hover:bg-indigo-50/50">Ver detalle mensual de la comparación</summary>
-                    <div class="overflow-x-auto px-3 pb-3">
-                        <table class="w-full">
-                            <thead><tr><th>Mes</th><th class="text-right">Proyectado</th><th class="text-right">Facturado</th><th class="text-right">Diferencia</th><th class="text-right">Cumplimiento</th></tr></thead>
-                            <tbody id="fin-projection-table-body"></tbody>
-                        </table>
-                    </div>
-                </details>
-            </section>
+    <div class="fd-kpis" aria-label="Indicadores financieros">
+        <article class="fd-card fd-kpi fd-kpi-billing">
+            <div class="fd-kpi-label">FACTURACIÓN TOTAL</div>
+            <p id="kpi-fin-billed" class="fd-kpi-value">$ 0</p>
+            <span class="fd-kpi-note">Total facturado del periodo</span>
+        </article>
+        <article class="fd-card fd-kpi fd-kpi-expenses">
+            <div class="fd-kpi-label">GASTOS OPERATIVOS REALES</div>
+            <p id="kpi-fin-expenses" class="fd-kpi-value">$ 0</p>
+            <span class="fd-kpi-note">Costos y gastos registrados</span>
+        </article>
+        <article class="fd-card fd-kpi fd-kpi-profit">
+            <div class="fd-kpi-label">UTILIDAD NETA REAL</div>
+            <p id="kpi-fin-net" class="fd-kpi-value">$ 0</p>
+            <span class="fd-kpi-note">Facturación menos gastos</span>
+        </article>
+        <article class="fd-card fd-kpi fd-kpi-margin">
+            <div class="fd-kpi-label">% MARGEN REAL</div>
+            <p id="kpi-fin-margin" class="fd-kpi-value">0%</p>
+            <span class="fd-kpi-note">Utilidad sobre facturación</span>
+        </article>
+    </div>
 
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-                <div class="overflow-x-auto">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Orden / registro</th>
-                                <th>Cliente</th>
-                                <th>Tipo mtto</th>
-                                <th>Fecha</th>
-                                <th>Factura #</th>
-                                <th>Valor Facturado</th>
-                                <th>Gastos Reales</th>
-                                <th>Utilidad Neta</th>
-                                <th>Margen %</th>
-                            </tr>
-                        </thead>
-                        <tbody id="financial-table-body"></tbody>
-                    </table>
-                </div>
+    <section id="financial-projection-comparison" class="fd-card fd-comparison" aria-label="Facturado contra proyectado">
+        <div class="fd-compare-head">
+            <h3><i class="fa-solid fa-chart-line" aria-hidden="true"></i>Facturado vs. proyectado</h3>
+            <p id="fin-proj-period-label">Comparación global · periodo seleccionado</p>
+        </div>
+        <div class="fd-compare-body">
+            <div class="fd-compare-values">
+                <article class="fd-compare-value fd-projected-value">
+                    <div id="fin-proj-label" class="fd-eyebrow">PROYECTADO DEL PERIODO</div>
+                    <p id="fin-proj-total" class="fd-compare-number">Sin cargar</p>
+                </article>
+                <article class="fd-compare-value fd-difference-value">
+                    <div id="fin-proj-diff-label" class="fd-eyebrow">DIFERENCIA</div>
+                    <p id="fin-proj-difference" class="fd-compare-number">—</p>
+                </article>
             </div>
-        </section>
+            <div class="fd-progress-block">
+                <div class="fd-progress-top">
+                    <span class="fd-progress-label">Cumplimiento (facturación total vs. proyectado)</span>
+                    <strong id="fin-proj-compliance" class="fd-progress-percent">—</strong>
+                </div>
+                <div class="fd-progress-track-wrap">
+                    <div class="fd-progress-track" role="progressbar" aria-label="Cumplimiento de la proyección" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div id="fin-proj-progress-fill" class="fd-progress-fill"></div>
+                    </div>
+                    <span id="fin-proj-progress-marker" class="fd-progress-marker" title="Meta proyectada: 100%" aria-hidden="true"></span>
+                </div>
+                <p class="fd-progress-foot">La marca vertical indica la meta proyectada (100%).</p>
+            </div>
+            <p id="fin-proj-months-note" class="fd-proj-note">La comparación utiliza el periodo seleccionado y requiere una proyección cargada para cada mes del periodo.</p>
+            <span id="fin-actual-total" class="fd-visually-hidden" aria-hidden="true">$ 0</span>
+        </div>
+        <details id="fin-projection-details" class="fd-details">
+            <summary><span><i class="fa-solid fa-table-list"></i>Ver detalle mensual de la comparación</span><i class="fa-solid fa-chevron-down fd-details-chevron" aria-hidden="true"></i></summary>
+            <div class="fd-details-table-wrap">
+                <table class="fd-month-table">
+                    <thead><tr><th>Mes</th><th class="text-right">Proyectado</th><th class="text-right">Facturado</th><th class="text-right">Diferencia</th><th class="text-right">Cumplimiento</th></tr></thead>
+                    <tbody id="fin-projection-table-body"></tbody>
+                </table>
+            </div>
+        </details>
+    </section>
+
+    <div class="fd-card fd-finance-table-card">
+        <div class="fd-table-heading">
+            <div><h3>Detalle de facturación</h3><p>Registros que corresponden a los filtros seleccionados.</p></div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="fd-invoice-table">
+                <thead><tr>
+                    <th>Orden / registro</th><th>Cliente</th><th>Tipo mtto</th><th>Fecha</th><th>Factura #</th>
+                    <th>Valor Facturado</th><th>Gastos Reales</th><th>Utilidad Neta</th><th>Margen %</th>
+                </tr></thead>
+                <tbody id="financial-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
 
     
         <section id="view-admin-settings" class="hidden space-y-4">
@@ -11064,9 +11197,26 @@ async function authPedirNuevaClave() {
             const diff = sumActual - sumProjected;
             if (differenceEl) {
                 differenceEl.textContent = completeProjection ? (diff < 0 ? '- ' + fmt(Math.abs(diff)) : fmt(diff)) : '—';
-                differenceEl.className = 'text-base sm:text-lg font-black mt-1 ' + (completeProjection && diff < 0 ? 'text-rose-700' : 'text-amber-900');
+                differenceEl.classList.add('fd-compare-number');
+                differenceEl.classList.toggle('fd-negative', completeProjection && diff < 0);
             }
             if (complianceEl) complianceEl.textContent = !completeProjection || sumProjected <= 0 ? '—' : (sumActual / sumProjected * 100).toFixed(1).replace('.', ',') + '%';
+            const progressFill = document.getElementById('fin-proj-progress-fill');
+            const progressMarker = document.getElementById('fin-proj-progress-marker');
+            const progressTrack = section.querySelector('.fd-progress-track');
+            const hasComparableProgress = completeProjection && sumProjected > 0;
+            const complianceValue = hasComparableProgress ? (sumActual / sumProjected * 100) : 0;
+            if (complianceEl) complianceEl.style.color = !hasComparableProgress ? '#929CAB' : (complianceValue >= 100 ? 'var(--fd-green-dark)' : 'var(--fd-gold)');
+            const progressWidth = Math.max(0, Math.min(100, complianceValue));
+            // Si el avance supera la meta, la barra queda llena y la marca del 100%
+            // se desplaza al punto proporcional dentro del total facturado.
+            const markerPosition = complianceValue >= 100 && complianceValue > 0 ? (100 / complianceValue) * 100 : 100;
+            if (progressFill) progressFill.style.width = hasComparableProgress ? progressWidth + '%' : '0%';
+            if (progressMarker) {
+                progressMarker.style.left = markerPosition + '%';
+                progressMarker.style.display = hasComparableProgress && sumActual > 0 ? 'block' : 'none';
+            }
+            if (progressTrack) progressTrack.setAttribute('aria-valuenow', String(Math.round(progressWidth)));
             if (note) {
                 if (!keys.length) note.textContent = 'No hay datos para comparar en este periodo. Puedes importar la proyección del año desde el botón superior.';
                 else if (completeProjection) note.textContent = `Proyección completa: ${projectedCount} de ${keys.length} mes(es). Diferencia = facturado menos proyectado; cumplimiento = facturado / proyectado.`;
@@ -11127,7 +11277,7 @@ async function authPedirNuevaClave() {
                 const monthKey = billingMonthKey(dateValue);
                 if (!monthKey) return true;
                 const recordYear = parseInt(monthKey.slice(0, 4), 10);
-                if (type === 'YTD') return recordYear === currentYear;
+                if (type === 'YTD') return recordYear === currentYear && parseInt(monthKey.slice(5, 7), 10) <= (new Date().getMonth() + 1);
                 if (type === 'MONTH') return !selMonth || monthKey === selMonth;
                 if (type === 'YEAR') return !selYear || recordYear === selYear;
                 return true;
