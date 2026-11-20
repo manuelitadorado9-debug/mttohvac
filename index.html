@@ -726,6 +726,39 @@ html #app-main .page-head .flex:has(> button + button) > button{min-height:40px 
 .pa-row button{min-width:28px;min-height:28px}
 .pa-foot{margin-top:10px;font-size:.72rem;font-weight:700;opacity:.8}.pa-foot button{font-weight:900;color:#0d9488;background:none;border:0;padding:0}
 .pa-ok{font-size:.78rem;font-weight:700;color:#0f766e}
+/* Controles propios de recordatorios: usan los tokens del tema y evitan fondos blancos fijos */
+.pa-row .period-alert-trigger-btn{
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 32px;
+  width:32px;height:32px;min-width:32px;min-height:32px;padding:0;
+  border:1px solid var(--line);border-radius:9px;background:var(--card-2);
+  color:var(--text-2);box-shadow:var(--sh-sm);transition:background .18s,border-color .18s,color .18s,transform .15s;
+}
+.pa-row .period-alert-trigger-btn:hover{background:var(--tint);border-color:var(--brand);color:var(--brand-dark)}
+.pa-row .period-alert-trigger-btn:active{transform:scale(.94)}
+.period-alert-actions-dialog{background:var(--card);color:var(--text);border-color:var(--line)}
+.period-alert-action{display:flex;width:100%;align-items:center;gap:.75rem;padding:.85rem 1rem;text-align:left;border:1px solid;border-radius:1rem;transition:background .18s,border-color .18s,transform .15s}
+.period-alert-action:active{transform:scale(.99)}
+.period-alert-action--schedule{background:#e6fffb;border-color:#99f6e4;color:#115e59}
+.period-alert-action--schedule:hover{background:#ccfbf1;border-color:#5eead4}
+.period-alert-action--schedule>i{color:#0f766e}
+.period-alert-action--schedule small{display:block;color:#0f766e;opacity:1;line-height:1.45}
+.period-alert-action--hide{background:var(--card-2);border-color:var(--line);color:var(--text)}
+.period-alert-action--hide:hover{background:var(--tint);border-color:var(--brand)}
+.period-alert-action--hide>i{color:var(--text-2)}
+.period-alert-action--hide small{display:block;color:var(--muted);opacity:1;line-height:1.45}
+#period-alert-actions-modal .period-alert-actions-dialog{background:var(--card)!important;color:var(--text);border-color:var(--line)!important}
+#period-alert-actions-modal .period-alert-actions-header{border-color:var(--line-2)}
+#period-alert-actions-modal .period-alert-actions-footer{border-color:var(--line-2)}
+html[data-theme="dark"] .pa-row .period-alert-trigger-btn{background:#17243e;border-color:#405476;color:#e8edf7}
+html[data-theme="dark"] .pa-row .period-alert-trigger-btn:hover{background:#223453;border-color:#5eead4;color:#99f6e4}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--schedule{background:rgba(20,184,166,.18);border-color:rgba(94,234,212,.48);color:#e6fffb}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--schedule:hover{background:rgba(20,184,166,.27);border-color:#5eead4}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--schedule>i{color:#5eead4}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--schedule small{color:#c1f7ee;opacity:1}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--hide{background:#111d35;border-color:#344563;color:#e8edf7}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--hide:hover{background:#1a2a47;border-color:#52698f}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--hide>i{color:#e2e8f5}
+html[data-theme="dark"] #period-alert-actions-modal .period-alert-action--hide small{color:#b9c6dd;opacity:1}
 </style>
 <style id="v7-overrides">
 /* Planificación diaria: barra de navegación (fecha, flechas, atajos) */
@@ -2027,12 +2060,12 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         <section id="view-admin-settings" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
                 <h2 class="text-base font-black text-slate-900 tracking-tight">Configuración de la aplicación</h2>
-                <p class="text-xs text-slate-500 mt-1">Personaliza la apariencia y decide qué accesos de carga quieres mostrar en cada momento. Ocultar un botón no elimina información ni registros.</p>
+                <p class="text-xs text-slate-500 mt-1">La apariencia se conserva en este dispositivo. Las preferencias operativas se guardan en Supabase y se comparten con todos los administradores; solo el administrador principal puede modificarlas.</p>
             </div>
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
                 <div>
                     <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-palette text-indigo-600 mr-2"></i>Apariencia</h3>
-                    <p class="text-xs text-slate-500 mt-1">Selecciona el tema visual de toda la aplicación.</p>
+                    <p class="text-xs text-slate-500 mt-1">Selecciona el tema visual de este dispositivo. No cambia el tema de los demás administradores.</p>
                 </div>
                 <div class="theme-switch max-w-sm" role="group" aria-label="Tema de la aplicación">
                     <button type="button" id="theme-btn-light" onclick="setTheme('light')" aria-pressed="false" title="Modo claro"><i class="fa-solid fa-sun"></i><span>Claro</span></button>
@@ -2042,7 +2075,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4">
                 <div>
                     <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-eye-slash text-amber-600 mr-2"></i>Mostrar u ocultar funciones</h3>
-                    <p class="text-xs text-slate-500 mt-1">Puedes ocultar temporalmente los accesos que no estés utilizando. Los datos ya cargados permanecen guardados.</p>
+                    <p class="text-xs text-slate-500 mt-1">Estas preferencias son globales: se aplican a todos los administradores y permanecen guardadas después de cerrar sesión o recargar la aplicación.</p>
                 </div>
                 <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
                     <span><b class="block text-xs text-slate-800">Carga manual de facturas</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar la opción para registrar una factura histórica individual.</small></span>
@@ -2056,7 +2089,25 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <span><b class="block text-xs text-slate-800">Carga de proyección anual</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar el acceso para importar las metas mensuales de facturación.</small></span>
                     <input type="checkbox" id="setting-show-financial-projection" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
                 </label>
-                <div class="flex justify-end"><button type="button" onclick="resetAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700">Restablecer accesos</button></div>
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <p id="app-settings-permission-note" class="text-[11px] text-slate-500">Solo el administrador principal puede cambiar estas preferencias.</p>
+                    <button type="button" id="setting-reset-access" onclick="resetAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700">Restablecer accesos</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
+                <div>
+                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-shield-halved text-rose-600 mr-2"></i>Política global de facturación</h3>
+                    <p class="text-xs text-slate-500 mt-1">Controla si se pueden guardar facturas con gastos operativos en cero. La regla se comparte con todos los administradores.</p>
+                </div>
+                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                    <span><b class="block text-xs text-slate-800">Permitir facturar con gastos en $0</b><small class="block text-[11px] text-slate-500 mt-0.5">Activado: se solicita confirmación antes de guardar. Desactivado: bloquea la factura hasta ingresar gastos mayores que cero.</small></span>
+                    <input type="checkbox" id="setting-allow-zero-expenses" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-rose-600">
+                </label>
+                <p class="text-[11px] text-slate-500">El administrador principal (cuenta inicial) define esta regla. Los demás administradores la reciben automáticamente al sincronizar.</p>
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <p id="app-settings-sync-status" class="text-[11px] text-slate-500" aria-live="polite">Preferencias compartidas con Supabase.</p>
+                    <button type="button" id="setting-save-global" onclick="saveAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white">Guardar preferencias para todos</button>
+                </div>
             </div>
         </section>
 
@@ -2902,7 +2953,7 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
                     <div class="text-xs text-indigo-900"><b>Primero descarga la plantilla.</b> Usa una fila por factura y no cambies los encabezados.</div>
                     <button type="button" onclick="downloadManualInvoicesTemplate()" class="px-3 py-2 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"><i class="fa-solid fa-download mr-1"></i> Descargar plantilla Excel</button>
                 </div>
-                <p class="text-[11px] text-indigo-800 mt-2">Columnas obligatorias: Cliente, TipoMantenimiento, Concepto, NumeroFactura, Fecha y ValorFacturado. En TipoMantenimiento usa Preventivo, Correctivo o Revisión (también acepta PRE, COR o REV). GastosReales es opcional y, si queda vacío, se toma como $0. La fecha puede ir como AAAA-MM-DD o como fecha de Excel.</p>
+                <p class="text-[11px] text-indigo-800 mt-2">Columnas obligatorias: Cliente, TipoMantenimiento, Concepto, NumeroFactura, Fecha y ValorFacturado. En TipoMantenimiento usa Preventivo, Correctivo o Revisión (también acepta PRE, COR o REV). GastosReales se toma como $0 si queda vacío; la política global puede permitirlo o bloquearlo. La fecha puede ir como AAAA-MM-DD o como fecha de Excel.</p>
                 <p class="text-[11px] text-indigo-900 mt-2 font-semibold">El cliente debe existir en Gestión de Clientes. La app compara el nombre ignorando mayúsculas, tildes y espacios extra, asigna su ID de cliente y rechaza los que no encuentre. No crea clientes desde Excel.</p>
             </div>
             <div>
@@ -3121,9 +3172,12 @@ html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
         }
         // ===== Almacenamiento local con respaldo IndexedDB (sin pérdida al agotar localStorage) =====
         const HVAC_FINANCIAL_PROJECTIONS_KEY = 'HVAC_FINANCIAL_PROJECTIONS_BACKUP';
+        // Preferencias operativas compartidas: se guardan en hvac_app_state y aplican a todos los administradores.
         const HVAC_UI_SETTINGS_KEY = 'HVAC_UI_SETTINGS_BACKUP';
+        const HVAC_UI_SETTINGS_SYNC_AT_KEY = 'HVAC_UI_SETTINGS_SYNC_AT';
+        const HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY = 'HVAC_UI_SETTINGS_REMOTE_EXISTS';
         const HVAC_PERIOD_ALERTS_HIDDEN_KEY = 'HVAC_PERIOD_ALERTS_HIDDEN_BACKUP';
-        const CLOUD_STATE_KEYS = ['HVAC_PROJECTIONS_BACKUP', 'HVAC_AGENDA_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_CAJA_SEQUENCE', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP', HVAC_FINANCIAL_PROJECTIONS_KEY, HVAC_PERIOD_ALERTS_HIDDEN_KEY];
+        const CLOUD_STATE_KEYS = ['HVAC_PROJECTIONS_BACKUP', 'HVAC_AGENDA_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_CAJA_SEQUENCE', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_FORMS_CONFIG_BACKUP', HVAC_FINANCIAL_PROJECTIONS_KEY, HVAC_PERIOD_ALERTS_HIDDEN_KEY, HVAC_UI_SETTINGS_KEY];
         const cloudStateCtl = { muted: false, disabled: false, timers: {}, quotaWarnedAt: 0 };
         const hvacMemoryStorage = new Map();
         let hvacDbPromise = null;
@@ -4194,6 +4248,7 @@ async function authPedirNuevaClave() {
             const number = document.getElementById('inv-f-number').value.trim();
             const amount = parseFloat(document.getElementById('inv-f-amount').value) || 0;
             const expenses = parseFloat(document.getElementById('inv-f-expenses').value) || 0;
+            if (!Number.isFinite(expenses) || expenses < 0) return showToast('Los gastos operativos deben ser un número igual o mayor que cero.', 'error');
             const fileInput = document.getElementById('inv-f-pdf');
             const archivo = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
 
@@ -4206,18 +4261,8 @@ async function authPedirNuevaClave() {
                 }
             }
 
-            // Confirmación preventiva: $0 en gastos produce un margen del 100% cuando
-            // hay facturación. Se permite guardar en cero, pero exige confirmación
-            // explícita antes de subir el PDF o modificar la orden en Supabase.
-            if (expenses === 0) {
-                const confirmado = window.confirm(
-                    'ATENCIÓN: Los gastos operativos reales están en $0.\n\n' +
-                    'La factura quedará registrada sin costos y el dashboard financiero ' +
-                    'mostrará una utilidad equivalente al 100% del valor facturado (si es mayor que cero).\n\n' +
-                    '¿Confirmas que deseas guardar la factura con los gastos en cero?'
-                );
-                if (!confirmado) return;
-            }
+            // La regla global se consulta antes de subir el PDF o modificar la orden.
+            if (!(await hvacCanSaveInvoiceWithZeroExpenses(expenses, 'inv-f-expenses', 'esta factura'))) return;
 
             const previa = holder.invoice || {};
             const urlAnterior = previa.pdfUrl || null;
@@ -5011,10 +5056,10 @@ async function authPedirNuevaClave() {
             'admin-caja': { tables: ['hvac_clients'], state: ['HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP'] },
             'admin-history': { tables: ['hvac_clients'], state: [], historyPage: true },      // órdenes: solo las más recientes, por páginas
             'admin-equipment': { tables: ['hvac_clients'], state: ['HVAC_FORMS_CONFIG_BACKUP'], equipmentsProgressive: true }, // equipos: por páginas
-            'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_MANUAL_INVOICES_BACKUP'] }, // facturas históricas independientes
+            'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_MANUAL_INVOICES_BACKUP', HVAC_UI_SETTINGS_KEY] }, // facturas históricas y política compartida
             'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
-            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_FINANCIAL_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP'] },
-            'admin-settings': { tables: [], state: [] }
+            'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_FINANCIAL_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP', HVAC_UI_SETTINGS_KEY] },
+            'admin-settings': { tables: [], state: [HVAC_UI_SETTINGS_KEY] }
         };
         // Vencida = pasó el TTL, o no hay copia local con la que pintar (p. ej. tras limpiar el almacenamiento).
         const CLOUD_CATALOG_TTL = 10 * 60 * 1000;   // catálogos cambian poco; "Sincronizar" siempre fuerza
@@ -5681,12 +5726,22 @@ async function authPedirNuevaClave() {
                     const payload = byId[cloudCleanId(key)];
                     if (!payload || typeof payload.data !== 'string') return;
                     const localTs = Number(localStorage.getItem('HVAC_TS_' + key)) || 0;
-                    if (!localStorage.getItem(key) || Number(payload.updatedAt || 0) > localTs) {
+                    const hasPendingLocalWrite = key === HVAC_UI_SETTINGS_KEY && cloudOutboxRead().some(entry =>
+                        entry && entry.table === 'hvac_app_state' && String(entry.id) === cloudCleanId(key) && entry.op !== 'delete');
+                    // Esta preferencia es global: no se conserva una preferencia vieja de otro administrador.
+                    // Solo se respeta la copia local cuando tiene una escritura propia aún pendiente de sincronizar.
+                    if (!localStorage.getItem(key) || Number(payload.updatedAt || 0) > localTs || (key === HVAC_UI_SETTINGS_KEY && !hasPendingLocalWrite)) {
                         localStorage.setItem(key, payload.data);
                         localStorage.setItem('HVAC_TS_' + key, String(payload.updatedAt || Date.now()));
                         changed = true;
                     }
                 });
+                if (keys.includes(HVAC_UI_SETTINGS_KEY)) {
+                    const sharedRow = byId[cloudCleanId(HVAC_UI_SETTINGS_KEY)];
+                    localStorage.setItem(HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY, sharedRow && typeof sharedRow.data === 'string' ? '1' : '0');
+                    const previousSync = Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0;
+                    localStorage.setItem(HVAC_UI_SETTINGS_SYNC_AT_KEY, String(Math.max(Date.now(), previousSync + 1)));
+                }
             } finally { cloudStateCtl.muted = false; }
             return changed || cambioEstado;
         }
@@ -5708,7 +5763,9 @@ async function authPedirNuevaClave() {
             if (!cfg) return;
             if (!force && cloudSectionsLoaded.has(tabId)) {
                 const stale = (cfg.tables || []).some(table => cloudTableStale(table));
-                if (!stale) return;
+                const sharedSettingsStale = (cfg.state || []).includes(HVAC_UI_SETTINGS_KEY) &&
+                    (Date.now() - (Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0) > 30000);
+                if (!stale && !sharedSettingsStale) return;
                 cloudSectionsLoaded.delete(tabId);
             }
             if (cloudSectionsInFlight[tabId]) {
@@ -7928,10 +7985,12 @@ async function authPedirNuevaClave() {
             const equipmentIds=Array.from(document.querySelectorAll('.sch-eq-checkbox:checked')).map(c=>c.value);
             if(!date||!technician)return showToast('Fecha y al menos un técnico son obligatorios.','error');if(!equipmentIds.length)return showToast('Selecciona al menos un equipo de la zona elegida.','error');
             const alreadyScheduled=new Set((proj.scheduledEquipmentIds||[]).map(String));
-            if(equipmentIds.some(id=>alreadyScheduled.has(String(id))))return showToast('Uno o más equipos ya están programados en esta proyección. Actualiza la lista y vuelve a seleccionar.','error');
+            const projectionType=String(proj.maintenanceType||'PREVENTIVO').toUpperCase();
+            if(projectionType==='PREVENTIVO' && equipmentIds.some(id=>alreadyScheduled.has(String(id))))return showToast('Uno o más equipos ya están programados en esta proyección preventiva.','error');
             try{
               const baseId=await hvacBaseIdForProjection(proj),groups=((document.getElementById('sch-no-split')||{}).checked)?hvacMergeZoneGroups(hvacGroupEquipmentByZone(equipmentIds)):hvacGroupEquipmentByZone(equipmentIds);
-              const orders=hvacBuildZoneOrders({client:proj.client,date,technician,technicians,groups,base:baseId});
+              const orders=hvacBuildZoneOrders({client:proj.client,date,technician,technicians,groups,base:baseId,type:projectionType});
+              orders.forEach(o=>{o.maintenanceBudget=Number(proj.budget)||0;o.maintenancePeriodicity=proj.periodicity||'Sin periodicidad';});
               workOrders.push(...orders);
               proj.zoneBaseId=baseId;
               proj.orderId=proj.orderId||orders[0].id;proj.orderIds=[...new Set([...(proj.orderIds||[]),...orders.map(o=>o.id)])];
@@ -8323,19 +8382,19 @@ async function authPedirNuevaClave() {
             try {
                 const dObj=new Date(date+'T00:00:00'), month=dObj.getMonth()+1, year=dObj.getFullYear();
                 const projId=`PROJ-${year}-${month}-${client.replace(/[\/\\]/g,'-')}-${Date.now().toString().slice(-5)}`;
-                // Preventivos/correctivos conservan la regla mensual. Las revisiones se controlan
-                // por semana: una revisión anterior de otra semana (incluso si falló) no bloquea
-                // una nueva revisión del mismo equipo en la semana actual.
+                // Los preventivos conservan una sola programación por equipo y mes.
+                // Los correctivos son intervenciones independientes: se puede crear más
+                // de uno para los mismos equipos incluso en la misma semana o mes, y cada
+                // uno recibe su propia proyección y consecutivo. Las revisiones tampoco
+                // se bloquean por repetición dentro de una semana.
                 const selectedWeek = hvacIsoWeekKey(date);
-                const periodProjs=monthlyProjections.filter(p=>{
+                const periodProjs = routineType === 'CORRECTIVO' ? [] : monthlyProjections.filter(p=>{
                     if(!p || p.client!==client || !p.zoneBaseId || (p.maintenanceType||'PREVENTIVO')!==routineType) return false;
                     if(routineType==='REVISION') return hvacIsoWeekKey(hvacProjectionDate(p))===selectedWeek && !!selectedWeek;
                     return Number(p.month)===month && Number(p.year)===year;
                 });
                 const already=new Set();periodProjs.forEach(p=>(p.scheduledEquipmentIds||p.equipmentIds||[]).forEach(id=>already.add(String(id))));
-                // Las revisiones nunca se bloquean por duplicidad: se pueden repetir
-                // para el mismo equipo incluso dentro de la misma semana.
-                if(routineType!=='REVISION' && equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este periodo para este cliente.','error');
+                if(routineType==='PREVENTIVO' && equipmentIds.some(id=>already.has(String(id))))return showToast('Uno o más equipos ya están programados en este mes para este cliente.','error');
                 // Plan de facturación: cada grupo = un consecutivo (PRE-000X) con una parte -P# por zona. Sin selección: un solo grupo.
                 const plan=(typeof hvacNrGetPlan==='function'&&hvacNrGetPlan())||[{n:1,groups:hvacGroupEquipmentByZone(equipmentIds),equipmentIds,value:budget,target:periodProjs.length?periodProjs[0].id:'NEW'}];
                 const orderObjs=[];
@@ -10233,7 +10292,7 @@ async function authPedirNuevaClave() {
                 ['NumeroFactura', 'Número exacto de la factura. Obligatorio.'],
                 ['Fecha', 'Fecha real de emisión. Formato recomendado: AAAA-MM-DD. Obligatorio.'],
                 ['ValorFacturado', 'Valor antes de IVA, numérico y mayor que cero. Obligatorio.'],
-                ['GastosReales', 'Gastos asociados a esa factura. Opcional; si queda vacío se registra como cero.'],
+                ['GastosReales', 'Gastos asociados a esa factura. Si la política global lo permite, puede quedar vacío y se registra como cero; si está bloqueado, debe ser mayor que cero.'],
                 ['Validación de cliente', 'Debe existir en Gestión de Clientes. Se ignoran mayúsculas, tildes y espacios extra, pero el nombre debe corresponder a un registro del directorio.'],
                 ['Importante', 'No agregues símbolos de moneda si puedes evitarlo. No repitas la misma factura para el mismo cliente. Las filas rechazadas se mostrarán con su motivo.'],
                 ['Ejemplo', 'Nombre registrado en Gestión de Clientes', 'Preventivo', 'Mantenimiento preventivo de equipos', 'FE-1001', '2026-03-15', 1500000, 250000]
@@ -10405,6 +10464,8 @@ async function authPedirNuevaClave() {
             }
             if (preview) preview.innerHTML = '<div class="flex items-center gap-2"><span class="processing-spinner"></span> Leyendo y validando el archivo…</div>';
             try {
+                const globalSettingsCheck = await hvacRefreshSharedAppSettings();
+                const zeroExpensesAllowed = globalSettingsCheck.verified && hvacReadAppFeatureSettings().allowZeroExpenses;
                 const buffer = await file.arrayBuffer();
                 const book = XLSX.read(buffer, { type: 'array', cellDates: true });
                 const sheetName = book.SheetNames && book.SheetNames[0];
@@ -10449,7 +10510,10 @@ async function authPedirNuevaClave() {
                     if (!number) errors.push('Número de factura vacío');
                     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) errors.push('Fecha inválida');
                     if (amount == null || amount <= 0) errors.push('Valor facturado inválido');
-                    if (expenses == null || expenses < 0) errors.push('Gastos inválidos');
+                    if (expenses == null || !Number.isFinite(expenses) || expenses < 0) errors.push('Gastos inválidos');
+                    if (expenses === 0 && !zeroExpensesAllowed) errors.push(globalSettingsCheck.verified
+                        ? 'Gastos en $0 bloqueados por la política global; ingresa un valor mayor que cero.'
+                        : 'No se pudo verificar la política global; sincroniza antes de importar facturas con gastos en $0.');
                     const clientMissing = !!client && !clientRecord;
                     const canonicalClient = clientRecord ? clientRecord.name : client;
                     const key = clientRecord && number ? hvacManualInvoiceDuplicateKey(clientRecord.name, number) : '';
@@ -10490,9 +10554,25 @@ async function authPedirNuevaClave() {
             if (hvacManualInvoicesExcelResultShown) return closeManualInvoicesBulkModal();
             if (window.hvacManualInvoicesBulkSaving) return;
             const preview = Array.isArray(hvacManualInvoicesExcelPreview) ? hvacManualInvoicesExcelPreview : [];
-            const valid = preview.filter(item => item.ok);
+            let valid = preview.filter(item => item.ok);
             if (!valid.length) return showToast('No hay facturas válidas para importar. Revisa los motivos de rechazo en la comprobación.', 'error');
-            if (!window.confirm(`Se cargarán ${valid.length} facturas cuyo cliente existe en Gestión de Clientes. Las filas sin cliente registrado, duplicadas o con errores no se cargarán. ¿Continuar?`)) return;
+            const zeroRows = valid.filter(item => Number(item.expenses) === 0);
+            if (zeroRows.length) {
+                const globalSettingsCheck = await hvacRefreshSharedAppSettings();
+                if (!globalSettingsCheck.verified) return showToast('No se pudo verificar la política global. Conéctate y sincroniza antes de importar facturas con gastos en $0.', 'error');
+                if (!hvacReadAppFeatureSettings().allowZeroExpenses) {
+                    const blocked = preview.map(item => item.ok && Number(item.expenses) === 0
+                        ? { ...item, ok: false, errors: [...(item.errors || []), 'Gastos en $0 bloqueados por la política global; ingresa un valor mayor que cero.'] }
+                        : item);
+                    hvacManualInvoicesExcelPreview = blocked;
+                    hvacRenderManualInvoicesExcelCheck(blocked, false);
+                    return showToast('La política global bloquea las filas con gastos en $0. Corrige el Excel y vuelve a revisarlo.', 'error');
+                }
+            }
+            const confirmText = `Se cargarán ${valid.length} facturas cuyo cliente existe en Gestión de Clientes. Las filas sin cliente registrado, duplicadas o con errores no se cargarán.` +
+                (zeroRows.length ? `\n\nAtención: ${zeroRows.length} factura(s) tienen gastos en $0. La configuración permite cargarlas, pero debes confirmar que es correcto.` : '') +
+                '\n\n¿Continuar?';
+            if (!window.confirm(confirmText)) return;
 
             window.hvacManualInvoicesBulkSaving = true;
             const button = document.getElementById('manual-invoices-bulk-submit');
@@ -10584,6 +10664,7 @@ async function authPedirNuevaClave() {
                     return showToast('Completa cliente, tipo de mantenimiento, concepto, número, fecha y un valor facturado mayor que cero.', 'error');
                 }
                 if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return showToast('La fecha de la factura no es válida.', 'error');
+                if (!(await hvacCanSaveInvoiceWithZeroExpenses(expenses, 'manual-inv-expenses', 'esta factura histórica'))) return;
                 if (file) {
                     if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) return showToast('El archivo adjunto debe ser un PDF.', 'error');
                     if (file.size > FACTURA_MAX_MB * 1024 * 1024) return showToast('El PDF supera ' + FACTURA_MAX_MB + ' MB. Comprímelo e inténtalo de nuevo.', 'error');
@@ -11306,12 +11387,100 @@ async function authPedirNuevaClave() {
             if (summary) summary.setAttribute('data-difference', String(completeProjection ? diff : ''));
         }
 
-        // ================= CONFIGURACIÓN: APARIENCIA Y ACCESOS =================
+        // ================= CONFIGURACIÓN: APARIENCIA Y PREFERENCIAS GLOBALES =================
         function hvacReadAppFeatureSettings() {
-            const defaults = { showManualInvoice: true, showBulkInvoice: true, showFinancialProjection: true };
-            try { const stored = JSON.parse(localStorage.getItem(HVAC_UI_SETTINGS_KEY) || '{}'); return { ...defaults, ...(stored && typeof stored === 'object' ? stored : {}) }; }
-            catch (_) { return defaults; }
+            const defaults = { showManualInvoice: true, showBulkInvoice: true, showFinancialProjection: true, allowZeroExpenses: true };
+            try {
+                const stored = JSON.parse(localStorage.getItem(HVAC_UI_SETTINGS_KEY) || '{}');
+                return { ...defaults, ...(stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) };
+            } catch (_) { return defaults; }
         }
+
+        // La cuenta creada en el primer ingreso tiene el ID fijo ADMIN y es la administradora principal.
+        function hvacIsPrimaryAdmin() {
+            const user = systemUsers.find(u => String(u.id) === String(activeUser));
+            return !!(user && user.role === 'ADMIN' && String(user.id) === 'ADMIN' && activeSessionRole === 'ADMIN');
+        }
+
+        async function hvacRefreshSharedAppSettings() {
+            await hvacStorageReady;
+            const hasLocal = localStorage.getItem(HVAC_UI_SETTINGS_KEY) !== null;
+            const hasRemoteSnapshot = localStorage.getItem(HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY) === '1';
+            if (!navigator.onLine) return { verified: hasRemoteSnapshot || hvacIsPrimaryAdmin(), offline: true, hasLocal, hasRemoteSnapshot };
+            const before = Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0;
+            try {
+                if (!(await cloudStateProbe())) return { verified: false, offline: false, hasLocal };
+                await loadCloudStateKeys([HVAC_UI_SETTINGS_KEY], true);
+                const after = Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0;
+                const remoteExists = localStorage.getItem(HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY) === '1';
+                return { verified: after > before && (remoteExists || hvacIsPrimaryAdmin()), offline: false, hasLocal: localStorage.getItem(HVAC_UI_SETTINGS_KEY) !== null, hasRemoteSnapshot: remoteExists };
+            } catch (err) {
+                console.warn('[Configuración] No se pudieron actualizar las preferencias globales:', err);
+                return { verified: false, offline: false, hasLocal };
+            }
+        }
+
+        async function hvacPersistSharedAppSettings(settings) {
+            const user = systemUsers.find(u => String(u.id) === String(activeUser)) || {};
+            const next = {
+                showManualInvoice: settings.showManualInvoice !== false,
+                showBulkInvoice: settings.showBulkInvoice !== false,
+                showFinancialProjection: settings.showFinancialProjection !== false,
+                allowZeroExpenses: settings.allowZeroExpenses !== false,
+                updatedAt: Date.now(),
+                updatedBy: String(activeUser || ''),
+                updatedByName: String(user.name || user.username || 'Administrador')
+            };
+            try {
+                localStorage.setItem(HVAC_UI_SETTINGS_KEY, JSON.stringify(next));
+                localStorage.setItem('HVAC_TS_' + HVAC_UI_SETTINGS_KEY, String(next.updatedAt));
+            } catch (err) {
+                hvacStorageError(err, 'Guardar preferencias globales');
+                return { saved: false, synced: false };
+            }
+            applyAppFeatureVisibility();
+            clearTimeout(cloudStateCtl.timers[HVAC_UI_SETTINGS_KEY]);
+            try {
+                if (navigator.onLine && await cloudStateProbe()) {
+                    const synced = await cloudPushState(HVAC_UI_SETTINGS_KEY);
+                    if (synced) {
+                        localStorage.setItem(HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY, '1');
+                        const previousSync = Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0;
+                        localStorage.setItem(HVAC_UI_SETTINGS_SYNC_AT_KEY, String(Math.max(Date.now(), previousSync + 1)));
+                        return { saved: true, synced: true };
+                    }
+                }
+            } catch (err) { console.warn('[Configuración] Preferencias guardadas localmente; falta sincronizar:', err); }
+            // El valor queda respaldado localmente y en la cola offline; otros administradores lo recibirán al sincronizar.
+            if (!cloudStateCtl.disabled) cloudScheduleStatePush(HVAC_UI_SETTINGS_KEY, true);
+            return { saved: true, synced: false };
+        }
+
+        async function hvacCanSaveInvoiceWithZeroExpenses(expenses, fieldId, contextLabel) {
+            if (Number(expenses) !== 0) return true;
+            const refreshed = await hvacRefreshSharedAppSettings();
+            if (!refreshed.verified) {
+                const message = refreshed.offline
+                    ? 'No hay una preferencia global sincronizada en este dispositivo. Conéctate a internet y vuelve a intentar para verificar si se permiten gastos en $0.'
+                    : 'No se pudo consultar la política global de facturación en Supabase. Por seguridad, no se permite guardar una factura con gastos en $0 hasta verificarla.';
+                showToast(message, 'error');
+                return false;
+            }
+            const cfg = hvacReadAppFeatureSettings();
+            const field = document.getElementById(fieldId);
+            if (!cfg.allowZeroExpenses) {
+                showToast('Facturación bloqueada: el administrador principal deshabilitó las facturas con gastos en $0. Ingresa un gasto operativo mayor que cero.', 'error');
+                if (field) { field.focus(); try { field.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {} }
+                return false;
+            }
+            const confirmed = window.confirm(
+                'ATENCIÓN: los gastos operativos de ' + (contextLabel || 'esta factura') + ' están en $0.\n\n' +
+                'La factura se registrará sin costos y el dashboard financiero puede mostrar una utilidad del 100%.\n\n' +
+                '¿Confirmas que deseas continuar con los gastos en cero?'
+            );
+            return !!confirmed;
+        }
+
         function applyAppFeatureVisibility() {
             const cfg = hvacReadAppFeatureSettings();
             const one = document.getElementById('btn-choice-manual-invoice'), bulk = document.getElementById('btn-choice-bulk-invoice');
@@ -11321,25 +11490,82 @@ async function authPedirNuevaClave() {
             if (launcher) launcher.classList.toggle('hidden', !(cfg.showManualInvoice || cfg.showBulkInvoice));
             if (projection) projection.classList.toggle('hidden', !cfg.showFinancialProjection);
         }
+
         function renderSettingsModule() {
             const cfg = hvacReadAppFeatureSettings();
-            const one = document.getElementById('setting-show-manual-invoice'), bulk = document.getElementById('setting-show-bulk-invoice'), projection = document.getElementById('setting-show-financial-projection');
-            if (one) one.checked = !!cfg.showManualInvoice;
-            if (bulk) bulk.checked = !!cfg.showBulkInvoice;
-            if (projection) projection.checked = !!cfg.showFinancialProjection;
+            const ids = ['setting-show-manual-invoice', 'setting-show-bulk-invoice', 'setting-show-financial-projection', 'setting-allow-zero-expenses'];
+            const fields = ids.map(id => document.getElementById(id));
+            if (fields[0]) fields[0].checked = !!cfg.showManualInvoice;
+            if (fields[1]) fields[1].checked = !!cfg.showBulkInvoice;
+            if (fields[2]) fields[2].checked = !!cfg.showFinancialProjection;
+            if (fields[3]) fields[3].checked = !!cfg.allowZeroExpenses;
+            const canEdit = hvacIsPrimaryAdmin();
+            fields.forEach(field => { if (field) field.disabled = !canEdit; });
+            const reset = document.getElementById('setting-reset-access');
+            if (reset) reset.disabled = !canEdit;
+            const save = document.getElementById('setting-save-global');
+            if (save) save.disabled = !canEdit || hvacAppSettingsSaving;
+            const note = document.getElementById('app-settings-permission-note');
+            if (note) note.textContent = canEdit
+                ? 'Puedes modificar estas reglas globales. Se sincronizan con Supabase para todos los administradores.'
+                : 'Vista de solo lectura: únicamente el administrador principal (cuenta inicial) puede cambiar estas preferencias.';
+            const syncStatus = document.getElementById('app-settings-sync-status');
+            if (syncStatus) {
+                const last = Number(localStorage.getItem(HVAC_UI_SETTINGS_SYNC_AT_KEY)) || 0;
+                const remoteExists = localStorage.getItem(HVAC_UI_SETTINGS_REMOTE_EXISTS_KEY) === '1';
+                syncStatus.textContent = !navigator.onLine
+                    ? (remoteExists ? 'Sin conexión: se está usando la última preferencia global publicada.' : 'Sin conexión: todavía no se ha publicado una preferencia global.')
+                    : (remoteExists ? (last ? 'Preferencias globales publicadas. Última consulta: ' + new Date(last).toLocaleString('es-CO') : 'Preferencias globales publicadas en Supabase.') : 'Aún no hay preferencias globales publicadas. El administrador principal debe pulsar «Guardar preferencias para todos».');
+            }
             applyAppFeatureVisibility();
             try { const theme = document.documentElement.getAttribute('data-theme') || 'light'; ['light','dark'].forEach(k => { const b = document.getElementById('theme-btn-' + k); if (b) b.setAttribute('aria-pressed', String(k === theme)); }); } catch (_) {}
         }
-        function saveAppFeatureSettings() {
-            const cfg = { showManualInvoice: !!document.getElementById('setting-show-manual-invoice')?.checked, showBulkInvoice: !!document.getElementById('setting-show-bulk-invoice')?.checked, showFinancialProjection: !!document.getElementById('setting-show-financial-projection')?.checked };
-            try { localStorage.setItem(HVAC_UI_SETTINGS_KEY, JSON.stringify(cfg)); } catch (e) { hvacStorageError(e, 'Guardar configuración visual'); }
-            applyAppFeatureVisibility();
-            showToast('Configuración de accesos guardada.');
+
+        let hvacAppSettingsSaving = false;
+        async function saveAppFeatureSettings() {
+            if (hvacAppSettingsSaving) return;
+            if (!hvacIsPrimaryAdmin()) {
+                renderSettingsModule();
+                return showToast('Solo el administrador principal puede modificar las preferencias globales.', 'error');
+            }
+            hvacAppSettingsSaving = true;
+            const fields = ['setting-show-manual-invoice', 'setting-show-bulk-invoice', 'setting-show-financial-projection', 'setting-allow-zero-expenses'].map(id => document.getElementById(id));
+            fields.forEach(field => { if (field) field.disabled = true; });
+            try {
+                const cfg = {
+                    showManualInvoice: !!fields[0]?.checked,
+                    showBulkInvoice: !!fields[1]?.checked,
+                    showFinancialProjection: !!fields[2]?.checked,
+                    allowZeroExpenses: !!fields[3]?.checked
+                };
+                const result = await hvacPersistSharedAppSettings(cfg);
+                if (!result.saved) {
+                    showToast('No se pudieron guardar las preferencias. Revisa el almacenamiento del dispositivo.', 'error');
+                } else if (result.synced) {
+                    showToast('Preferencias guardadas en Supabase y aplicadas a todos los administradores.');
+                } else {
+                    showToast('Preferencias guardadas en este dispositivo; la sincronización global está pendiente.', 'error');
+                }
+            } finally {
+                hvacAppSettingsSaving = false;
+                renderSettingsModule();
+            }
         }
-        function resetAppFeatureSettings() {
-            try { localStorage.removeItem(HVAC_UI_SETTINGS_KEY); } catch (_) {}
-            renderSettingsModule(); showToast('Se restauraron todos los accesos.');
+
+        async function resetAppFeatureSettings() {
+            if (!hvacIsPrimaryAdmin()) return showToast('Solo el administrador principal puede restablecer las preferencias globales.', 'error');
+            const current = hvacReadAppFeatureSettings();
+            const result = await hvacPersistSharedAppSettings({
+                ...current,
+                showManualInvoice: true,
+                showBulkInvoice: true,
+                showFinancialProjection: true,
+                allowZeroExpenses: current.allowZeroExpenses
+            });
+            renderSettingsModule();
+            showToast(result.synced ? 'Se restablecieron los accesos y el cambio se compartió con todos los administradores.' : 'Se restablecieron los accesos localmente; la sincronización global está pendiente.', result.synced ? 'success' : 'error');
         }
+
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyAppFeatureVisibility);
         else applyAppFeatureVisibility();
 
@@ -12732,12 +12958,12 @@ function periodAlertEnsureModal() {
     if (modal) return modal;
     modal = document.createElement('div');
     modal.id = 'period-alert-actions-modal';
-    modal.className = 'fixed inset-0 z-[10004] flex items-center justify-center bg-slate-950/60 p-4 hidden';
-    modal.innerHTML = `<div class="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="period-alert-modal-title">
-      <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4"><div><h3 id="period-alert-modal-title" class="text-base font-black text-slate-900">Recordatorio de mantenimiento</h3><p id="period-alert-modal-sub" class="mt-1 text-xs text-slate-500"></p></div><button type="button" id="period-alert-modal-close" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
-      <div class="space-y-3 p-5"><button type="button" id="period-alert-schedule" class="flex w-full items-center gap-3 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-left text-teal-900 hover:bg-teal-100"><i class="fa-solid fa-calendar-plus text-lg"></i><span><b class="block text-sm">Programar rutina</b><small class="block text-xs text-teal-800/80">Abrir la creación con el cliente y los datos del recordatorio.</small></span></button>
-      <button type="button" id="period-alert-hide" class="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-slate-800 hover:bg-slate-100"><i class="fa-solid fa-eye-slash text-lg"></i><span><b class="block text-sm">Quitar de la agenda</b><small class="block text-xs text-slate-500">Ocultar solo este aviso, sin borrar rutinas ni proyecciones.</small></span></button></div>
-      <div class="flex justify-end border-t border-slate-100 px-5 py-3"><button type="button" id="period-alert-modal-cancel" class="rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">Cerrar</button></div></div>`;
+    modal.className = 'period-alert-actions-modal fixed inset-0 z-[10004] flex items-center justify-center bg-slate-950/60 p-4 hidden';
+    modal.innerHTML = `<div class="period-alert-actions-dialog w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="period-alert-modal-title">
+      <div class="period-alert-actions-header flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4"><div><h3 id="period-alert-modal-title" class="text-base font-black text-slate-900">Recordatorio de mantenimiento</h3><p id="period-alert-modal-sub" class="mt-1 text-xs text-slate-500"></p></div><button type="button" id="period-alert-modal-close" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="space-y-3 p-5"><button type="button" id="period-alert-schedule" class="period-alert-action period-alert-action--schedule"><i class="fa-solid fa-calendar-plus text-lg"></i><span><b class="block text-sm">Programar rutina</b><small class="block text-xs">Abrir la creación con el cliente y los datos del recordatorio.</small></span></button>
+      <button type="button" id="period-alert-hide" class="period-alert-action period-alert-action--hide"><i class="fa-solid fa-eye-slash text-lg"></i><span><b class="block text-sm">Quitar de la agenda</b><small class="block text-xs">Ocultar solo este aviso, sin borrar rutinas ni proyecciones.</small></span></button></div>
+      <div class="period-alert-actions-footer flex justify-end border-t border-slate-100 px-5 py-3"><button type="button" id="period-alert-modal-cancel" class="rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">Cerrar</button></div></div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) closePeriodAlertActions(); });
     modal.querySelector('#period-alert-modal-close').addEventListener('click', closePeriodAlertActions);
@@ -12817,7 +13043,7 @@ function renderPeriodAlerts() {
         return `<div class="pa-row" style="border-left-color:${c};cursor:pointer" ondblclick="openPeriodAlertActions('${key}')" title="Doble clic para ver opciones">
           <div class="pa-main"><b>${esc(a.client)}</b><span>${esc(a.text)} · ${esc(a.per || '')}</span></div>
           <div class="flex items-center gap-2"><div class="pa-when" style="color:${c}">${esc(label)}<small>${esc(a.due.split('-').reverse().join('/'))}</small></div>
-          <button type="button" onclick="event.stopPropagation();openPeriodAlertActions('${key}')" class="flex h-7 w-7 flex-none items-center justify-center rounded-lg border border-slate-200 bg-white/80 text-slate-500 hover:border-teal-300 hover:text-teal-700" title="Opciones del recordatorio" aria-label="Opciones del recordatorio"><i class="fa-solid fa-ellipsis text-xs"></i></button></div></div>`;
+          <button type="button" onclick="event.stopPropagation();openPeriodAlertActions('${key}')" class="period-alert-trigger-btn" title="Opciones del recordatorio" aria-label="Opciones del recordatorio"><i class="fa-solid fa-ellipsis text-xs"></i></button></div></div>`;
     }).join('');
     const restore = hiddenCount ? `<button type="button" onclick="restoreHiddenPeriodAlerts()">Mostrar de nuevo ${hiddenCount} oculto(s)</button>` : '';
     const foot = [];
@@ -13953,6 +14179,10 @@ async function attDelete(id) {
     var c=($('nr-client')||{}).value, d=($('nr-date')||{}).value; if(!c||!d) return [];
     var dt=new Date(d+'T00:00:00'), m=dt.getMonth()+1, y=dt.getFullYear();
     var rt=String(($('nr-type')||{}).value||'PREVENTIVO').toUpperCase(), wk=typeof hvacIsoWeekKey==='function'?hvacIsoWeekKey(d):'';
+    // Cada correctivo representa una intervención independiente: no reutiliza
+    // proyecciones de otro correctivo del mismo mes para no bloquear equipos ni
+    // reciclar el consecutivo. Los preventivos sí conservan su agrupación mensual.
+    if(rt==='CORRECTIVO') return [];
     return (monthlyProjections||[]).filter(function(p){
       if(!p||p.client!==c||!p.zoneBaseId||(p.maintenanceType||'PREVENTIVO').toUpperCase()!==rt) return false;
       if(rt==='REVISION') return !!wk && typeof hvacProjectionDate==='function' && hvacIsoWeekKey(hvacProjectionDate(p))===wk;
