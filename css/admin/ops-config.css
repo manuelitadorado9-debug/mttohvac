@@ -1,0 +1,23 @@
+/* Configuración Operativa · Etapa 1B */
+#ops-cfg-modal .mx-sheet{max-width:760px;max-height:min(100dvh - 24px,860px)}
+.oc-tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 0;border-bottom:1px solid var(--line);flex:none}
+.oc-tab{flex:none;padding:8px 12px;border:0;background:transparent;color:var(--text-2);font-size:.78rem;font-weight:800;border-bottom:2px solid transparent;white-space:nowrap}
+.oc-tab.on{color:#0b9e91;border-bottom-color:#0b9e91}
+.oc-tab[disabled]{opacity:.45}
+.oc-tab small{font-weight:700;font-size:.62rem;margin-left:4px}
+.oc-card{border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px}
+.oc-card h4{margin:0;font-size:.82rem;font-weight:900}
+.oc-hint{font-size:.7rem;color:var(--text-2);line-height:1.35}
+.oc-now{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.oc-now b{font-size:1.5rem;font-weight:900}
+.oc-form{display:grid;gap:10px;grid-template-columns:1fr}
+@media (min-width:560px){.oc-form{grid-template-columns:1fr 1fr}.oc-form .full{grid-column:1/-1}}
+.oc-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:.78rem}
+.oc-row:first-child{border-top:0}
+.oc-row .l{min-width:0}.oc-row .l b{display:block;font-weight:800;overflow:hidden;text-overflow:ellipsis}
+.oc-row .l span{color:var(--text-2);font-size:.68rem}
+.oc-badge{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;background:var(--ctl,#e2e8f0);color:var(--text-2);white-space:nowrap}
+.oc-badge.ok{background:#d1fae5;color:#047857}.oc-badge.sch{background:#fef3c7;color:#92400e}.oc-badge.off{background:#fee2e2;color:#b91c1c}
+.oc-mini{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;font-size:.68rem;font-weight:800;padding:4px 8px}
+.oc-err{padding:14px;border-radius:12px;background:#fef2f2;color:#b91c1c;font-size:.78rem;font-weight:700}
+.oc-empty{font-size:.74rem;color:var(--text-2);padding:6px 0}
