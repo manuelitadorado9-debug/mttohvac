@@ -1,0 +1,6 @@
+
+/* Admin: reemplaza el fadeUp original (10px / .35s) por el estándar 8px / .26s */
+#app-main section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwards}
+@media (prefers-reduced-motion:reduce){#app-main section:not(.hidden){animation:none}}
+/* Admin: velo de "procesando" con entrada suave */
+#app-processing-overlay.is-visible{animation:fadeIn .18s ease both}

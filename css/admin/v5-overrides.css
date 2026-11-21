@@ -1,0 +1,23 @@
+
+/* Modales propios (programación / edición de marcación): centrados, cuerpo desplazable y pie siempre visible */
+.mx-modal{position:fixed;inset:0;z-index:10004;display:flex;align-items:center;justify-content:center;padding:max(12px,env(safe-area-inset-top)) 12px max(12px,env(safe-area-inset-bottom));background:rgba(8,14,32,.62);backdrop-filter:blur(3px)}
+.mx-sheet{width:100%;max-width:460px;max-height:calc(100vh - 24px);max-height:min(100dvh - 24px,720px);display:flex;flex-direction:column;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);overflow:hidden}
+.mx-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:14px 16px;border-bottom:1px solid var(--line)}
+.mx-head h3{margin:0;font-size:.95rem;font-weight:900;line-height:1.2}
+.mx-x{width:36px;height:36px;flex:none;border-radius:10px;display:grid;place-items:center;color:var(--text-2);background:transparent;border:0}
+.mx-body{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:14px 16px;display:grid;gap:12px;align-content:start}
+.mx-body label{display:block;font-size:.72rem;font-weight:800;margin-bottom:4px}
+.mx-grid2{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:480px){.mx-grid2{grid-template-columns:1fr 1fr}}
+.mx-foot{flex:none;display:grid;gap:8px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--card)}
+.mx-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+html .mx-modal .mx-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;min-width:0;height:48px;min-height:48px;padding:0 1rem;border-radius:14px;font-size:.85rem;font-weight:800;line-height:1;white-space:nowrap;border:1px solid transparent;margin:0}
+html .mx-modal .mx-btn-pri{background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff}
+html .mx-modal .mx-btn-sec{background:var(--ctl,#e2e8f0);color:var(--text);border-color:var(--line)}
+html .mx-modal .mx-btn-danger{background:rgba(244,63,94,.12);color:#e11d48;border-color:rgba(244,63,94,.35)}
+/* Botones de una misma cabecera: mismo alto, tipografía y radio (antes: verdes pequeños vs. morado/azul estirados) */
+html #app-main .page-head .flex:has(> button + button) > button{min-height:40px !important;height:auto !important;padding:.5rem .95rem !important;font-size:.78rem !important;line-height:1.2 !important;border-radius:10px !important;justify-content:center}
+@media (max-width:767.98px){
+  html #app-main .page-head .flex:has(> button + button){width:100%}
+  html #app-main .page-head .flex:has(> button + button) > button{flex:1 1 100% !important;width:100% !important;max-width:100% !important;min-height:44px !important;margin:0 !important}
+}

@@ -1,0 +1,71 @@
+
+/* ============================================================
+   Transiciones suaves (fade + slide) · v1
+   Duración 0.26s · curva ease-out · desplazamiento 8px
+   ============================================================ */
+:root{--ui-dur:.26s;--ui-dur-out:.2s;--ui-shift:8px;--ui-ease:cubic-bezier(.22,.61,.36,1)}
+@keyframes uiFadeSlide{from{opacity:0;transform:translateY(var(--ui-shift))}to{opacity:1;transform:none}}
+
+/* 1) Cambio de pestaña / vista principal: se anima cada vez que la sección pasa de oculta a visible */
+main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwards}
+
+/* 2) Modales y paneles flotantes: nunca desaparecen con display:none,
+      así pueden hacer fade-out; al estar ocultos no reciben clics ni foco. */
+.modal-backdrop,.mx-modal{
+  opacity:1;visibility:visible;
+  transition:opacity var(--ui-dur) ease-out,visibility 0s linear 0s;
+}
+.modal-backdrop.hidden,.mx-modal.hidden,
+#tech-sync-modal.modal-backdrop.hidden{
+  display:flex!important;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--ui-dur-out) ease,visibility 0s linear var(--ui-dur-out);
+}
+/* La tarjeta interior sube 8px mientras aparece y baja 8px al cerrarse */
+.modal-backdrop > *,.mx-modal > *{
+  opacity:1;transform:none;
+  transition:opacity var(--ui-dur) ease-out,transform var(--ui-dur) ease-out;
+}
+.modal-backdrop.hidden > *,.mx-modal.hidden > *{
+  opacity:0;transform:translateY(var(--ui-shift));
+  transition:opacity var(--ui-dur-out) ease,transform var(--ui-dur-out) ease;
+}
+/* Se desactivan las animaciones antiguas de entrada: ahora lo hacen las transiciones de arriba */
+.modal-backdrop > .sheet,
+.modal-backdrop > .modal-card,
+.modal-backdrop > .tech-sync-card,
+.modal-backdrop .modal-card,
+#tech-sync-modal .tech-sync-card{animation:none!important}
+
+@media (prefers-reduced-motion:reduce){
+  main > section:not(.hidden){animation:none}
+  .modal-backdrop,.mx-modal,.modal-backdrop > *,.mx-modal > *{transition-duration:.01ms!important;transition-delay:0s!important}
+}
+
+/* ===== Ajustes de ventanas (modales) ===== */
+.modal-card>.flex.border-b:first-child{position:static!important;flex-wrap:nowrap!important;margin:0 0 1rem!important;padding:0 0 .85rem!important;background:transparent!important}
+.modal-card>.flex.border-b:first-child>h3{min-width:0;flex:1 1 auto;overflow-wrap:anywhere}
+.modal-card>.flex.border-b:first-child>.modal-close{flex:0 0 auto}
+.modal-backdrop,.mx-modal,.qrm-back{backdrop-filter:blur(10px)!important;-webkit-backdrop-filter:blur(10px)!important}
+.modal-backdrop{background:rgba(8,14,32,.5)!important}
+html[data-theme="dark"] .modal-backdrop{background:rgba(2,5,14,.58)!important}
+.plan-tab{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;min-height:3rem;padding:.5rem .75rem;line-height:1.2;text-align:center}
+
+/* ===== Modo noche: variantes con opacidad que no tenían regla (cajas claras sobre fondo oscuro) ===== */
+html[data-theme="dark"] [class*="bg-teal-50/"]{background-color:rgba(20,184,166,.11)}
+html[data-theme="dark"] [class*="bg-amber-50/"]{background-color:rgba(245,158,11,.12)}
+html[data-theme="dark"] [class*="bg-emerald-50/"]{background-color:rgba(16,185,129,.13)}
+html[data-theme="dark"] [class*="bg-purple-50/"]{background-color:rgba(168,85,247,.13)}
+html[data-theme="dark"] [class*="bg-indigo-50/"]{background-color:rgba(99,102,241,.17)}
+html[data-theme="dark"] [class*="bg-rose-50/"]{background-color:rgba(244,63,94,.13)}
+html[data-theme="dark"] [class*="bg-blue-50/"],html[data-theme="dark"] [class~="bg-sky-50"]{background-color:rgba(59,130,246,.14)}
+html[data-theme="dark"] [class*="bg-slate-50/"]{background-color:#0b1328}
+html[data-theme="dark"] [class*="bg-slate-100/"]{background-color:#17223d}
+html[data-theme="dark"] [class*="border-teal-"]{border-color:rgba(20,184,166,.3)}
+html[data-theme="dark"] [class*="border-sky-"]{border-color:rgba(14,165,233,.3)}
+/* Celular: el botón X queda fijo arriba a la derecha, fuera del contenido, siempre alcanzable */
+@media (max-width:767px){
+  .modal-backdrop:not(#app-login-screen) .modal-card>.flex.border-b:first-child>.modal-close{
+    position:fixed;top:calc(8px + env(safe-area-inset-top,0px));right:12px;z-index:20;width:2.6rem;height:2.6rem;
+    border-radius:99px;background:var(--card);color:var(--text);border:1px solid var(--line);box-shadow:0 8px 22px -6px rgba(0,0,0,.55)}
+}

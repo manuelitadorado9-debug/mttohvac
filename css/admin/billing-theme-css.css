@@ -1,0 +1,10 @@
+
+.bill-mini{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px}
+.bill-chip{font-size:10px;font-weight:900;text-transform:uppercase;padding:2px 8px;border-radius:999px;border:1px solid;white-space:nowrap}
+.bill-chip.prev{background:#f0f9ff;color:#0369a1;border-color:#bae6fd}
+.bill-chip.corr{background:#fffbeb;color:#b45309;border-color:#fde68a}
+.bill-chip.rev{background:#f5f3ff;color:#6d28d9;border-color:#ddd6fe}
+html[data-theme="dark"] .bill-mini{background:#0b1328;border-color:rgba(148,163,184,.18)}
+html[data-theme="dark"] .bill-chip.prev{background:rgba(14,165,233,.14);color:#7dd3fc;border-color:rgba(14,165,233,.35)}
+html[data-theme="dark"] .bill-chip.corr{background:rgba(245,158,11,.14);color:#fcd34d;border-color:rgba(245,158,11,.35)}
+html[data-theme="dark"] .bill-chip.rev{background:rgba(139,92,246,.16);color:#c4b5fd;border-color:rgba(139,92,246,.35)}

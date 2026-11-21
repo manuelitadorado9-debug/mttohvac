@@ -1,0 +1,45 @@
+
+/* Planificación diaria: barra de navegación (fecha, flechas, atajos) */
+html #app-main .prog-tools{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;width:100%}
+html #app-main .prog-nav{display:flex;align-items:center;gap:8px;flex:1 1 100%;min-width:0}
+html #app-main .prog-nav .prog-date{flex:1 1 auto;min-width:0;height:44px}
+html #app-main .prog-nav .prog-view{flex:0 0 7rem;width:7rem;height:44px}
+html #app-main .prog-nb{flex:0 0 44px !important;width:44px !important;height:44px !important;min-height:44px !important;padding:0 !important;border-radius:12px !important;display:inline-flex;align-items:center;justify-content:center;background:var(--ctl);border:1px solid var(--line);color:var(--text);transition:border-color .15s,color .15s}
+html #app-main .prog-quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;flex:1 1 100%}
+html #app-main .prog-quick button{flex:none !important;width:auto !important;height:40px !important;min-height:40px !important;padding:0 .4rem !important;border-radius:11px !important;font-size:.78rem !important;font-weight:800;background:var(--ctl);border:1px solid var(--line);color:var(--text);transition:border-color .15s,color .15s}
+html #app-main .prog-nb:hover,html #app-main .prog-quick button:hover{border-color:#14b8a6;color:#14b8a6}
+@media (min-width:768px){html #app-main .prog-nav{flex:0 0 auto}html #app-main .prog-nav .prog-date{flex:0 0 11rem}html #app-main .prog-quick{flex:0 0 auto;grid-template-columns:repeat(4,auto)}html #app-main .prog-quick button{padding:0 1rem !important}}
+/* Tarjetas con tono propio (antes gris sin contraste): Ubicación de la sede y Control de asistencia */
+.geo-card,.att-surface{background:linear-gradient(135deg,rgba(13,148,136,.16),rgba(37,99,235,.10)) !important;border:1px solid rgba(45,212,191,.42) !important;color:var(--text)}
+.geo-card{padding:14px;border-radius:16px}
+.geo-card .text-slate-800,.geo-card .text-slate-700,.att-surface .text-slate-900,.att-surface .text-slate-700,.att-surface .text-slate-600{color:var(--text) !important}
+.geo-card .text-slate-500,.geo-card .text-slate-400,.att-surface .text-slate-500,.att-surface .text-slate-400{color:var(--text-2) !important}
+.geo-card button.geo-btn{background:linear-gradient(135deg,#14c4b4,#0b9e91) !important;color:#fff !important;border:0 !important;min-height:44px;border-radius:12px !important;font-weight:800}
+.geo-card summary{color:var(--text);font-weight:800}
+.geo-card .input-box{background:var(--card) !important}
+/* Modal de cliente (misma estructura que el resto de modales móviles) */
+.mx-sheet form.mx-form{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;margin:0}
+/* Calendario: celdas clicables + modal del día */
+#plan-calendar .fc-daygrid-day{cursor:pointer}#plan-calendar .fc-daygrid-day:hover{background:rgba(20,184,166,.08)}
+.mx-sheet.dm-wide{max-width:720px}
+.dm-sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.dm-kpi{border-radius:14px;padding:10px 12px;border:1px solid var(--line);background:rgba(127,127,127,.06)}
+.dm-kpi b{display:block;font-size:1.25rem;font-weight:900;line-height:1.1}.dm-kpi span{font-size:.68rem;font-weight:800;opacity:.7}
+.dm-sec{border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.dm-sec>h4{margin:0;display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:.8rem;font-weight:900;background:rgba(127,127,127,.08)}
+.dm-sec>h4 small{margin-left:auto;font-weight:800;opacity:.6}
+.dm-body{padding:10px 12px;display:grid;gap:10px}
+.dm-empty{font-size:.76rem;opacity:.6;padding:6px 2px}
+.dm-card{border:1px solid var(--line);border-left:4px solid #14b8a6;border-radius:12px;padding:10px 12px;display:grid;gap:8px;background:var(--card)}
+.dm-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between}
+.dm-title{font-weight:900;font-size:.82rem;min-width:0;overflow-wrap:anywhere}.dm-sub{font-size:.7rem;opacity:.7}
+.dm-badge{font-size:.66rem;font-weight:900;padding:3px 9px;border-radius:99px;border:1px solid;white-space:nowrap}
+.dm-bar{height:7px;border-radius:99px;background:rgba(127,127,127,.2);overflow:hidden}.dm-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#14b8a6,#22c55e)}
+.dm-chips{display:flex;flex-wrap:wrap;gap:6px}.dm-chip{font-size:.66rem;font-weight:800;padding:2px 9px;border-radius:99px;background:rgba(20,184,166,.15);color:#14b8a6;border:1px solid rgba(20,184,166,.4)}
+.dm-eq{display:grid;gap:6px;padding:8px 10px;border-radius:10px;background:rgba(127,127,127,.07)}
+.dm-eq-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:space-between;font-size:.76rem;font-weight:800}
+.dm-photos{display:flex;gap:6px;overflow-x:auto}.dm-photos a{flex:none}.dm-photos img{width:54px;height:54px;object-fit:cover;border-radius:9px;border:1px solid var(--line)}
+.dm-actions{display:flex;flex-wrap:wrap;gap:8px}
+.dm-actions button{height:36px;padding:0 .8rem;border-radius:10px;font-size:.72rem;font-weight:800;background:var(--ctl);border:1px solid var(--line);color:var(--text)}
+.dm-actions button.pri{background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff;border:0}
+.dm-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.76rem;padding:6px 2px;border-bottom:1px dashed var(--line)}.dm-row:last-child{border-bottom:0}

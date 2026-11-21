@@ -1,0 +1,4 @@
+
+/* Filas con acción de edición: cursor de mano y doble toque sin zoom */
+#app-main tbody tr{touch-action:manipulation}
+#app-main tbody tr:not([onclick]):has(button .fa-pen,button .fa-pen-to-square,button .fa-receipt){cursor:pointer}

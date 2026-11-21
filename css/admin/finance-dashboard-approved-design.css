@@ -1,0 +1,111 @@
+
+  #view-admin-financial.finance-dashboard{--fd-bg:#F4F7F9;--fd-card:#FFFFFF;--fd-ink:#172033;--fd-muted:#7D899B;--fd-line:#E5EAF0;--fd-blue:#172B4D;--fd-red:#D92D50;--fd-green:#079669;--fd-green-dark:#087653;--fd-gold:#A66B09;gap:16px!important}
+  #view-admin-financial .fd-card{background:var(--fd-card);border:1px solid var(--fd-line);border-radius:17px;box-shadow:0 5px 18px rgba(27,43,65,.055),0 1px 3px rgba(27,43,65,.04);min-width:0}
+  #view-admin-financial .fd-header{padding:22px 24px 19px}
+  #view-admin-financial .fd-header-grid{display:grid;grid-template-columns:minmax(220px,1fr) auto;align-items:end;gap:24px}
+  #view-admin-financial .fd-heading h2{margin:0;color:#182238;font-size:25px;line-height:1.15;font-weight:850;letter-spacing:-.8px}
+  #view-admin-financial .fd-heading p{margin:5px 0 0;color:var(--fd-muted);font-size:12.5px;font-weight:500}
+  #view-admin-financial .fd-controls{display:flex;align-items:end;justify-content:flex-end;flex-wrap:wrap;gap:9px}
+  #view-admin-financial .fd-field{display:flex;flex-direction:column;gap:6px;min-width:135px;margin:0;color:#667387;font-size:9.5px;font-weight:850;letter-spacing:.075em;text-transform:uppercase}
+  #view-admin-financial .fd-field.fd-period{width:174px}
+  #view-admin-financial .fd-field.fd-client{width:180px}
+  #view-admin-financial .fd-field.fd-type{width:150px}
+  #view-admin-financial .fd-field.fd-month{width:160px}
+  #view-admin-financial .fd-field.fd-year{width:105px}
+  #view-admin-financial .fd-control{width:100%;height:42px;min-height:42px;padding:0 12px;border:1px solid #DCE3EB;border-radius:10px;background:#F9FBFC;color:#263247;font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;box-shadow:none}
+  #view-admin-financial .fd-control:focus{border-color:#90A7C3;box-shadow:0 0 0 3px rgba(58,105,160,.10);outline:0}
+  #view-admin-financial .fd-sync,#view-admin-financial .fd-upload{height:42px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 14px;border:1px solid #DCE3EB;border-radius:10px;background:#fff;color:#263247;font-size:11.5px;font-weight:800;white-space:nowrap;box-shadow:0 2px 5px rgba(20,35,55,.04);transition:background .15s,border-color .15s}
+  #view-admin-financial .fd-sync:hover{background:#F8FAFC;border-color:#CBD5E1}
+  #view-admin-financial .fd-upload{background:#eef2ff;border-color:#dce3ff;color:#4546a5}
+  #view-admin-financial .fd-upload:hover{background:#e6eaff}
+  #view-admin-financial .fd-sync:disabled{opacity:.6;cursor:wait}
+  #view-admin-financial .fd-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+  #view-admin-financial .fd-kpi{position:relative;overflow:hidden;padding:19px 20px 17px;min-height:126px;border-radius:16px}
+  #view-admin-financial .fd-kpi:before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--fd-accent)}
+  #view-admin-financial .fd-kpi-billing{--fd-accent:#172B4D;--fd-value:#172B4D}
+  #view-admin-financial .fd-kpi-expenses{--fd-accent:#D92D50;--fd-value:#D92D50}
+  #view-admin-financial .fd-kpi-profit{--fd-accent:#079669;--fd-value:#079669}
+  #view-admin-financial .fd-kpi-margin{--fd-accent:#079669;--fd-value:#079669}
+  #view-admin-financial .fd-kpi-label{margin-bottom:12px;color:#718096;font-size:9.5px;font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+  #view-admin-financial .fd-kpi-expenses .fd-kpi-label{color:#D92D50}
+  #view-admin-financial .fd-kpi-profit .fd-kpi-label,#view-admin-financial .fd-kpi-margin .fd-kpi-label{color:#079669}
+  #view-admin-financial .fd-kpi-value{margin:0;color:var(--fd-value);font-size:clamp(21px,2vw,30px);line-height:1.12;font-weight:900;letter-spacing:-.9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-kpi-note{display:block;margin-top:8px;color:#8B96A7;font-size:10px;font-weight:550}
+  #view-admin-financial .fd-comparison{overflow:hidden}
+  #view-admin-financial .fd-compare-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:19px 23px 15px;border-bottom:1px solid #EEF1F5}
+  #view-admin-financial .fd-compare-head h3{display:flex;align-items:center;gap:9px;margin:0;color:#182238;font-size:15px;font-weight:850;letter-spacing:-.2px}
+  #view-admin-financial .fd-compare-head h3 i{color:#4D63D8}
+  #view-admin-financial #fin-proj-period-label{margin:0;color:#8994A4;font-size:11.5px;font-weight:550;text-align:right}
+  #view-admin-financial .fd-compare-body{padding:18px 22px 19px}
+  #view-admin-financial .fd-compare-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+  #view-admin-financial .fd-compare-value{min-height:86px;padding:15px 17px;border:1px solid var(--fd-line);border-radius:13px;background:#FBFCFD}
+  #view-admin-financial .fd-projected-value{background:#F7F9FD;border-color:#E4EAF2}
+  #view-admin-financial .fd-difference-value{background:#FFFBF3;border-color:#F5E8C8}
+  #view-admin-financial .fd-eyebrow{margin-bottom:8px;color:#778397;font-size:9.5px;font-weight:900;letter-spacing:.08em}
+  #view-admin-financial .fd-projected-value .fd-eyebrow{color:#4D63D8}
+  #view-admin-financial .fd-difference-value .fd-eyebrow{color:#A66B09}
+  #view-admin-financial .fd-compare-number{margin:0;color:var(--fd-blue);font-size:clamp(21px,1.8vw,27px);font-weight:900;line-height:1.12;letter-spacing:-.6px;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-difference-value .fd-compare-number{color:var(--fd-gold)}
+  #view-admin-financial .fd-difference-value .fd-compare-number.fd-negative{color:var(--fd-red)}
+  #view-admin-financial .fd-progress-block{margin-top:20px}
+  #view-admin-financial .fd-progress-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:9px}
+  #view-admin-financial .fd-progress-label{color:#586579;font-size:11.5px;font-weight:750}
+  #view-admin-financial .fd-progress-percent{color:var(--fd-green-dark);font-size:14px;font-weight:900;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #view-admin-financial .fd-progress-track-wrap{position:relative;padding:0 1px}
+  #view-admin-financial .fd-progress-track{position:relative;height:15px;width:100%;overflow:hidden;border-radius:999px;background:#E8EEF0}
+  #view-admin-financial .fd-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#0DAD7C,#07865F);transition:width .25s ease}
+  #view-admin-financial .fd-progress-marker{position:absolute;z-index:2;top:-4px;left:100%;display:none;width:3px;height:23px;border-radius:3px;background:#173C35;box-shadow:0 0 0 2px rgba(255,255,255,.9);transform:translateX(-50%);transition:left .25s ease}
+  #view-admin-financial .fd-progress-foot{margin:8px 0 0;color:#929CAB;font-size:10px}
+  #view-admin-financial .fd-proj-note{margin:13px 0 0;color:#8B96A7;font-size:10px;line-height:1.45}
+  #view-admin-financial .fd-details{border-top:1px solid #EEF1F5}
+  #view-admin-financial .fd-details summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:12px 20px;color:#65728A;font-size:11px;font-weight:800;user-select:none}
+  #view-admin-financial .fd-details summary::-webkit-details-marker{display:none}
+  #view-admin-financial .fd-details summary>span{display:flex;align-items:center;gap:8px}
+  #view-admin-financial .fd-details summary>span i{color:#4D63D8}
+  #view-admin-financial .fd-details-chevron{margin-left:auto;transition:transform .2s}
+  #view-admin-financial .fd-details[open] .fd-details-chevron{transform:rotate(180deg)}
+  #view-admin-financial .fd-details[open] summary{background:#FAFBFD}
+  #view-admin-financial .fd-details-table-wrap{overflow-x:auto;padding:0 15px 14px}
+  #view-admin-financial .fd-month-table{width:100%;min-width:570px;border-collapse:collapse}
+  #view-admin-financial .fd-month-table th,#view-admin-financial .fd-month-table td{padding:9px 10px;border-bottom:1px solid #EEF1F5;font-size:11px}
+  #view-admin-financial .fd-month-table th{color:#718096;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+  #view-admin-financial .fd-finance-table-card{overflow:hidden}
+  #view-admin-financial .fd-table-heading{padding:15px 19px;border-bottom:1px solid #EEF1F5}
+  #view-admin-financial .fd-table-heading h3{margin:0;color:#182238;font-size:13px;font-weight:850}
+  #view-admin-financial .fd-table-heading p{margin:3px 0 0;color:#8994A4;font-size:10.5px}
+  #view-admin-financial .fd-invoice-table{width:100%;min-width:900px;border-collapse:collapse}
+  #view-admin-financial .fd-invoice-table th,#view-admin-financial .fd-invoice-table td{padding:11px 13px;border-bottom:1px solid #EEF1F5;font-size:10.5px;vertical-align:middle}
+  #view-admin-financial .fd-invoice-table th{background:#F8FAFC;color:#718096;font-size:9px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;text-align:left;white-space:nowrap}
+  #view-admin-financial .fd-invoice-table tbody tr:hover{background:#FAFCFD}
+  #view-admin-financial .fd-visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  html[data-theme="dark"] #view-admin-financial.finance-dashboard .fd-card{background:#0f1830;border-color:#1d2a4a;color:#e8edf7;box-shadow:0 5px 18px rgba(0,0,0,.18)}
+  html[data-theme="dark"] #view-admin-financial .fd-heading h2,html[data-theme="dark"] #view-admin-financial .fd-compare-head h3,html[data-theme="dark"] #view-admin-financial .fd-table-heading h3{color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-heading p,html[data-theme="dark"] #view-admin-financial #fin-proj-period-label,html[data-theme="dark"] #view-admin-financial .fd-kpi-note,html[data-theme="dark"] #view-admin-financial .fd-proj-note,html[data-theme="dark"] #view-admin-financial .fd-table-heading p{color:#8d9bb8}
+  html[data-theme="dark"] #view-admin-financial .fd-field{color:#a8b6d0}
+  html[data-theme="dark"] #view-admin-financial .fd-control{background:#0b1328;border-color:#263758;color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-sync{background:#0b1328;border-color:#263758;color:#e8edf7}
+  html[data-theme="dark"] #view-admin-financial .fd-upload{background:#20264a;border-color:#39416d;color:#c7d0ff}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-head,html[data-theme="dark"] #view-admin-financial .fd-details,html[data-theme="dark"] #view-admin-financial .fd-table-heading{border-color:#1d2a4a}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-value{background:#111e38;border-color:#263758}
+  html[data-theme="dark"] #view-admin-financial .fd-projected-value{background:#15203a;border-color:#283a63}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value{background:#2c241b;border-color:#594322}
+  html[data-theme="dark"] #view-admin-financial .fd-compare-number{color:#d9e5f8}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value .fd-compare-number{color:#f4c66c}
+  html[data-theme="dark"] #view-admin-financial .fd-difference-value .fd-compare-number.fd-negative{color:#fb7185}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-label{color:#c2cde0}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-track{background:#253551}
+  html[data-theme="dark"] #view-admin-financial .fd-progress-marker{background:#e3f5ed;box-shadow:0 0 0 2px rgba(15,24,48,.9)}
+  html[data-theme="dark"] #view-admin-financial .fd-details summary{color:#aebbd1}
+  html[data-theme="dark"] #view-admin-financial .fd-details[open] summary,html[data-theme="dark"] #view-admin-financial .fd-invoice-table th{background:#111e38}
+  html[data-theme="dark"] #view-admin-financial .fd-month-table th,html[data-theme="dark"] #view-admin-financial .fd-month-table td,html[data-theme="dark"] #view-admin-financial .fd-invoice-table th,html[data-theme="dark"] #view-admin-financial .fd-invoice-table td{border-color:#1d2a4a;color:#cbd5e1}
+  html[data-theme="dark"] #view-admin-financial .fd-invoice-table tbody tr:hover{background:#14213f}
+  /* KPI de facturación: en oscuro no debe heredar el azul marino del tema claro */
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-billing .fd-kpi-value{color:#dbeafe}
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-billing .fd-kpi-label{color:#9dbce8}
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-expenses .fd-kpi-value{color:#fb7185}
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-expenses .fd-kpi-label{color:#fb7185}
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-profit .fd-kpi-value,html[data-theme="dark"] #view-admin-financial .fd-kpi-margin .fd-kpi-value{color:#34d399}
+  html[data-theme="dark"] #view-admin-financial .fd-kpi-profit .fd-kpi-label,html[data-theme="dark"] #view-admin-financial .fd-kpi-margin .fd-kpi-label{color:#34d399}
+  @media(max-width:1200px){#view-admin-financial .fd-header-grid{grid-template-columns:1fr;gap:16px}#view-admin-financial .fd-controls{justify-content:flex-start}#view-admin-financial .fd-field.fd-period{width:170px}#view-admin-financial .fd-field.fd-client{width:190px}}
+  @media(max-width:760px){#view-admin-financial .fd-header{padding:18px 16px 15px}#view-admin-financial .fd-heading h2{font-size:22px}#view-admin-financial .fd-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:9px}#view-admin-financial .fd-field,#view-admin-financial .fd-field.fd-period,#view-admin-financial .fd-field.fd-client,#view-admin-financial .fd-field.fd-type,#view-admin-financial .fd-field.fd-month,#view-admin-financial .fd-field.fd-year{width:auto;min-width:0}#view-admin-financial .fd-sync,#view-admin-financial .fd-upload{width:100%;grid-column:span 1;padding:0 8px}#view-admin-financial .fd-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}#view-admin-financial .fd-kpi{padding:16px 14px;min-height:111px}#view-admin-financial .fd-kpi-label{font-size:8.5px;min-height:22px}#view-admin-financial .fd-kpi-value{font-size:clamp(18px,4.7vw,24px)}#view-admin-financial .fd-kpi-note{font-size:9px}#view-admin-financial .fd-compare-head{align-items:flex-start;flex-direction:column;gap:5px;padding:16px}#view-admin-financial #fin-proj-period-label{text-align:left}#view-admin-financial .fd-compare-body{padding:15px 16px 17px}#view-admin-financial .fd-compare-values{gap:9px}#view-admin-financial .fd-compare-value{padding:13px 12px;min-height:80px}#view-admin-financial .fd-compare-number{font-size:clamp(17px,4.4vw,22px)}#view-admin-financial .fd-eyebrow{font-size:8.5px}#view-admin-financial .fd-progress-label{font-size:10.5px;max-width:75%}#view-admin-financial .fd-progress-percent{font-size:12px}}
+  @media(max-width:390px){#view-admin-financial .fd-controls{grid-template-columns:1fr}#view-admin-financial .fd-sync,#view-admin-financial .fd-upload{grid-column:1}#view-admin-financial .fd-compare-values{grid-template-columns:1fr}}
