@@ -1,0 +1,22 @@
+
+/* Diálogo de contraseña propio (reemplaza window.prompt: oculta los caracteres y funciona en móvil) */
+.hv-dlg-backdrop{--hv-acc:#059669;position:fixed;inset:0;z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(7,12,25,.66);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.hv-dlg-card{width:100%;max-width:400px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:22px 20px;border-radius:20px;background:#fff;color:#0f172a;box-shadow:0 24px 60px rgba(2,6,23,.4)}
+.hv-dlg-card h3{margin:0;font-size:17px;font-weight:800;line-height:1.25}
+.hv-dlg-card p{margin:0;font-size:13px;line-height:1.5;color:#475569}
+.hv-dlg-field{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;color:#334155}
+.hv-dlg-field input{height:46px;padding:0 14px;border:1.5px solid #cbd5e1;border-radius:12px;font:inherit;font-size:16px;font-weight:500;color:#0f172a;background:#f8fafc;outline:none}
+.hv-dlg-field input:focus-visible{border-color:var(--hv-acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--hv-acc) 28%,transparent)}
+.hv-dlg-err{padding:10px 12px;border-radius:10px;background:#fff1f2;border:1px solid #fecdd3;color:#be123c;font-size:12.5px;font-weight:600}
+.hv-dlg-err[hidden]{display:none}
+.hv-dlg-actions{display:flex;gap:10px;margin-top:4px}
+.hv-dlg-btn{flex:1;min-height:46px;border:0;border-radius:12px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:var(--hv-acc);color:#fff}
+.hv-dlg-btn.ghost{background:#e2e8f0;color:#334155}
+.hv-dlg-btn:focus-visible{outline:3px solid color-mix(in srgb,var(--hv-acc) 45%,transparent);outline-offset:2px}
+[data-theme="dark"] .hv-dlg-card{background:#0f172a;color:#e2e8f0;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+[data-theme="dark"] .hv-dlg-card p{color:#94a3b8}
+[data-theme="dark"] .hv-dlg-field{color:#cbd5e1}
+[data-theme="dark"] .hv-dlg-field input{background:#1e293b;border-color:#334155;color:#f1f5f9}
+[data-theme="dark"] .hv-dlg-err{background:rgba(190,18,60,.18);border-color:rgba(251,113,133,.35);color:#fda4af}
+[data-theme="dark"] .hv-dlg-btn.ghost{background:#1e293b;color:#cbd5e1}
+@media (prefers-reduced-motion:no-preference){.hv-dlg-card{animation:hvDlgIn .2s ease-out}@keyframes hvDlgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}}

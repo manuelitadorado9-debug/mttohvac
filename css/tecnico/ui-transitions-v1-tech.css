@@ -1,0 +1,14 @@
+
+/* Técnico: modales del módulo QR / asistencia (.mx-back se abre con .open) */
+.mx-back,.mx-back.open{display:flex!important}
+.mx-back{opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--ui-dur-out) ease,visibility 0s linear var(--ui-dur-out)}
+.mx-back.open{opacity:1;visibility:visible;pointer-events:auto;
+  transition:opacity var(--ui-dur) ease-out,visibility 0s linear 0s}
+.mx-back > .mx-card{opacity:0;transform:translateY(var(--ui-shift));
+  transition:opacity var(--ui-dur-out) ease,transform var(--ui-dur-out) ease}
+.mx-back.open > .mx-card{opacity:1;transform:none;
+  transition:opacity var(--ui-dur) ease-out,transform var(--ui-dur) ease-out}
+@media (prefers-reduced-motion:reduce){
+  .mx-back,.mx-back > .mx-card{transition-duration:.01ms!important;transition-delay:0s!important}
+}

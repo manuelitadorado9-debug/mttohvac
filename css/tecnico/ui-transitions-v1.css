@@ -1,0 +1,43 @@
+
+/* ============================================================
+   Transiciones suaves (fade + slide) · v1
+   Duración 0.26s · curva ease-out · desplazamiento 8px
+   ============================================================ */
+:root{--ui-dur:.26s;--ui-dur-out:.2s;--ui-shift:8px;--ui-ease:cubic-bezier(.22,.61,.36,1)}
+@keyframes uiFadeSlide{from{opacity:0;transform:translateY(var(--ui-shift))}to{opacity:1;transform:none}}
+
+/* 1) Cambio de pestaña / vista principal: se anima cada vez que la sección pasa de oculta a visible */
+main > section:not(.hidden){animation:uiFadeSlide var(--ui-dur) ease-out backwards}
+
+/* 2) Modales y paneles flotantes: nunca desaparecen con display:none,
+      así pueden hacer fade-out; al estar ocultos no reciben clics ni foco. */
+.modal-backdrop,.mx-modal{
+  opacity:1;visibility:visible;
+  transition:opacity var(--ui-dur) ease-out,visibility 0s linear 0s;
+}
+.modal-backdrop.hidden,.mx-modal.hidden,
+#tech-sync-modal.modal-backdrop.hidden{
+  display:flex!important;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity var(--ui-dur-out) ease,visibility 0s linear var(--ui-dur-out);
+}
+/* La tarjeta interior sube 8px mientras aparece y baja 8px al cerrarse */
+.modal-backdrop > *,.mx-modal > *{
+  opacity:1;transform:none;
+  transition:opacity var(--ui-dur) ease-out,transform var(--ui-dur) ease-out;
+}
+.modal-backdrop.hidden > *,.mx-modal.hidden > *{
+  opacity:0;transform:translateY(var(--ui-shift));
+  transition:opacity var(--ui-dur-out) ease,transform var(--ui-dur-out) ease;
+}
+/* Se desactivan las animaciones antiguas de entrada: ahora lo hacen las transiciones de arriba */
+.modal-backdrop > .sheet,
+.modal-backdrop > .modal-card,
+.modal-backdrop > .tech-sync-card,
+.modal-backdrop .modal-card,
+#tech-sync-modal .tech-sync-card{animation:none!important}
+
+@media (prefers-reduced-motion:reduce){
+  main > section:not(.hidden){animation:none}
+  .modal-backdrop,.mx-modal,.modal-backdrop > *,.mx-modal > *{transition-duration:.01ms!important;transition-delay:0s!important}
+}
