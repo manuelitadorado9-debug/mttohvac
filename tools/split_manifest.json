@@ -1,0 +1,640 @@
+{
+ "index.html": {
+  "source": "index__3_.html",
+  "blocks": [
+   {
+    "file": "js/admin/theme-init.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/theme-init.js?v=f0\"></script>",
+    "orig_lines": [
+     17,
+     41
+    ],
+    "bytes": 1633,
+    "lines": 25
+   },
+   {
+    "file": "css/admin/app-ui.css",
+    "tag": "style",
+    "open_tag": "<style id=\"app-ui\">",
+    "replacement": "<link id=\"app-ui\" rel=\"stylesheet\" href=\"css/admin/app-ui.css?v=f0\">",
+    "orig_lines": [
+     56,
+     677
+    ],
+    "bytes": 54596,
+    "lines": 622
+   },
+   {
+    "file": "css/admin/v5-overrides.css",
+    "tag": "style",
+    "open_tag": "<style id=\"v5-overrides\">",
+    "replacement": "<link id=\"v5-overrides\" rel=\"stylesheet\" href=\"css/admin/v5-overrides.css?v=f0\">",
+    "orig_lines": [
+     679,
+     702
+    ],
+    "bytes": 2860,
+    "lines": 24
+   },
+   {
+    "file": "css/admin/v6-overrides.css",
+    "tag": "style",
+    "open_tag": "<style id=\"v6-overrides\">",
+    "replacement": "<link id=\"v6-overrides\" rel=\"stylesheet\" href=\"css/admin/v6-overrides.css?v=f0\">",
+    "orig_lines": [
+     703,
+     762
+    ],
+    "bytes": 5422,
+    "lines": 60
+   },
+   {
+    "file": "css/admin/v7-overrides.css",
+    "tag": "style",
+    "open_tag": "<style id=\"v7-overrides\">",
+    "replacement": "<link id=\"v7-overrides\" rel=\"stylesheet\" href=\"css/admin/v7-overrides.css?v=f0\">",
+    "orig_lines": [
+     763,
+     808
+    ],
+    "bytes": 5363,
+    "lines": 46
+   },
+   {
+    "file": "css/admin/nav-qr-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"nav-qr-css\">",
+    "replacement": "<link id=\"nav-qr-css\" rel=\"stylesheet\" href=\"css/admin/nav-qr-css.css?v=f0\">",
+    "orig_lines": [
+     810,
+     917
+    ],
+    "bytes": 10635,
+    "lines": 108
+   },
+   {
+    "file": "css/admin/billing-breakdown-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"billing-breakdown-css\">",
+    "replacement": "<link id=\"billing-breakdown-css\" rel=\"stylesheet\" href=\"css/admin/billing-breakdown-css.css?v=f0\">",
+    "orig_lines": [
+     919,
+     949
+    ],
+    "bytes": 2807,
+    "lines": 31
+   },
+   {
+    "file": "css/admin/billing-theme-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"billing-theme-css\">",
+    "replacement": "<link id=\"billing-theme-css\" rel=\"stylesheet\" href=\"css/admin/billing-theme-css.css?v=f0\">",
+    "orig_lines": [
+     950,
+     960
+    ],
+    "bytes": 893,
+    "lines": 11
+   },
+   {
+    "file": "css/admin/ui-transitions-v1.css",
+    "tag": "style",
+    "open_tag": "<style id=\"ui-transitions-v1\">",
+    "replacement": "<link id=\"ui-transitions-v1\" rel=\"stylesheet\" href=\"css/admin/ui-transitions-v1.css?v=f0\">",
+    "orig_lines": [
+     961,
+     1032
+    ],
+    "bytes": 4398,
+    "lines": 72
+   },
+   {
+    "file": "css/admin/ui-transitions-v1-admin.css",
+    "tag": "style",
+    "open_tag": "<style id=\"ui-transitions-v1-admin\">",
+    "replacement": "<link id=\"ui-transitions-v1-admin\" rel=\"stylesheet\" href=\"css/admin/ui-transitions-v1-admin.css?v=f0\">",
+    "orig_lines": [
+     1034,
+     1040
+    ],
+    "bytes": 379,
+    "lines": 7
+   },
+   {
+    "file": "js/admin/security.js",
+    "tag": "script",
+    "open_tag": "<script id=\"hvac-security\">",
+    "replacement": "<script id=\"hvac-security\" src=\"js/admin/security.js?v=f0\"></script>",
+    "orig_lines": [
+     1044,
+     1141
+    ],
+    "bytes": 6192,
+    "lines": 98
+   },
+   {
+    "file": "css/admin/app-footer-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"app-footer-css\">",
+    "replacement": "<link id=\"app-footer-css\" rel=\"stylesheet\" href=\"css/admin/app-footer-css.css?v=f0\">",
+    "orig_lines": [
+     1143,
+     1148
+    ],
+    "bytes": 304,
+    "lines": 6
+   },
+   {
+    "file": "css/admin/auth-dialog-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"auth-dialog-css\">",
+    "replacement": "<link id=\"auth-dialog-css\" rel=\"stylesheet\" href=\"css/admin/auth-dialog-css.css?v=f0\">",
+    "orig_lines": [
+     1149,
+     1171
+    ],
+    "bytes": 2384,
+    "lines": 23
+   },
+   {
+    "file": "css/admin/finance-dashboard-approved-design.css",
+    "tag": "style",
+    "open_tag": "<style id=\"finance-dashboard-approved-design\">",
+    "replacement": "<link id=\"finance-dashboard-approved-design\" rel=\"stylesheet\" href=\"css/admin/finance-dashboard-approved-design.css?v=f0\">",
+    "orig_lines": [
+     1173,
+     1284
+    ],
+    "bytes": 14915,
+    "lines": 112
+   },
+   {
+    "file": "js/admin/app.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/app.js?v=f0\"></script>",
+    "orig_lines": [
+     3156,
+     12271
+    ],
+    "bytes": 605058,
+    "lines": 9116
+   },
+   {
+    "file": "js/admin/nav-tabs.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/nav-tabs.js?v=f0\"></script>",
+    "orig_lines": [
+     12273,
+     12349
+    ],
+    "bytes": 5244,
+    "lines": 77
+   },
+   {
+    "file": "js/admin/double-click-guard.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/double-click-guard.js?v=f0\"></script>",
+    "orig_lines": [
+     12351,
+     12362
+    ],
+    "bytes": 502,
+    "lines": 12
+   },
+   {
+    "file": "js/admin/pagination.js",
+    "tag": "script",
+    "open_tag": "<script id=\"client-side-pagination\">",
+    "replacement": "<script id=\"client-side-pagination\" src=\"js/admin/pagination.js?v=f0\"></script>",
+    "orig_lines": [
+     12363,
+     12498
+    ],
+    "bytes": 5576,
+    "lines": 136
+   },
+   {
+    "file": "js/admin/attendance.js",
+    "tag": "script",
+    "open_tag": "<script id=\"attendance-module\">",
+    "replacement": "<script id=\"attendance-module\" src=\"js/admin/attendance.js?v=f0\"></script>",
+    "orig_lines": [
+     12500,
+     12680
+    ],
+    "bytes": 16758,
+    "lines": 181
+   },
+   {
+    "file": "js/admin/plan-calendar.js",
+    "tag": "script",
+    "open_tag": "<script id=\"plan-calendar-module\">",
+    "replacement": "<script id=\"plan-calendar-module\" src=\"js/admin/plan-calendar.js?v=f0\"></script>",
+    "orig_lines": [
+     12682,
+     12750
+    ],
+    "bytes": 5942,
+    "lines": 69
+   },
+   {
+    "file": "css/admin/plan-calendar-dark.css",
+    "tag": "style",
+    "open_tag": "<style>",
+    "replacement": "<link rel=\"stylesheet\" href=\"css/admin/plan-calendar-dark.css?v=f0\">",
+    "orig_lines": [
+     12751,
+     12751
+    ],
+    "bytes": 647,
+    "lines": 1
+   },
+   {
+    "file": "js/admin/geocode.js",
+    "tag": "script",
+    "open_tag": "<script id=\"geocode-module\">",
+    "replacement": "<script id=\"geocode-module\" src=\"js/admin/geocode.js?v=f0\"></script>",
+    "orig_lines": [
+     12777,
+     12909
+    ],
+    "bytes": 10474,
+    "lines": 133
+   },
+   {
+    "file": "js/admin/period.js",
+    "tag": "script",
+    "open_tag": "<script id=\"period-module\">",
+    "replacement": "<script id=\"period-module\" src=\"js/admin/period.js?v=f0\"></script>",
+    "orig_lines": [
+     12910,
+     13059
+    ],
+    "bytes": 12862,
+    "lines": 150
+   },
+   {
+    "file": "js/admin/day-modal.js",
+    "tag": "script",
+    "open_tag": "<script id=\"daymodal-module\">",
+    "replacement": "<script id=\"daymodal-module\" src=\"js/admin/day-modal.js?v=f0\"></script>",
+    "orig_lines": [
+     13070,
+     13139
+    ],
+    "bytes": 8727,
+    "lines": 70
+   },
+   {
+    "file": "js/admin/prog.js",
+    "tag": "script",
+    "open_tag": "<script id=\"prog-module\">",
+    "replacement": "<script id=\"prog-module\" src=\"js/admin/prog.js?v=f0\"></script>",
+    "orig_lines": [
+     13140,
+     13313
+    ],
+    "bytes": 15554,
+    "lines": 174
+   },
+   {
+    "file": "js/admin/att-edit.js",
+    "tag": "script",
+    "open_tag": "<script id=\"att-edit-module\">",
+    "replacement": "<script id=\"att-edit-module\" src=\"js/admin/att-edit.js?v=f0\"></script>",
+    "orig_lines": [
+     13336,
+     13395
+    ],
+    "bytes": 4901,
+    "lines": 60
+   },
+   {
+    "file": "js/admin/qr.js",
+    "tag": "script",
+    "open_tag": "<script id=\"qr-module\">",
+    "replacement": "<script id=\"qr-module\" src=\"js/admin/qr.js?v=f0\"></script>",
+    "orig_lines": [
+     13464,
+     13854
+    ],
+    "bytes": 24587,
+    "lines": 391
+   },
+   {
+    "file": "js/admin/ui-transitions.js",
+    "tag": "script",
+    "open_tag": "<script id=\"ui-transitions-v1-js\">",
+    "replacement": "<script id=\"ui-transitions-v1-js\" src=\"js/admin/ui-transitions.js?v=f0\"></script>",
+    "orig_lines": [
+     13857,
+     13918
+    ],
+    "bytes": 2811,
+    "lines": 62
+   },
+   {
+    "file": "css/admin/row-dblclick-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"row-dblclick-css\">",
+    "replacement": "<link id=\"row-dblclick-css\" rel=\"stylesheet\" href=\"css/admin/row-dblclick-css.css?v=f0\">",
+    "orig_lines": [
+     13920,
+     13924
+    ],
+    "bytes": 236,
+    "lines": 5
+   },
+   {
+    "file": "js/admin/row-dblclick.js",
+    "tag": "script",
+    "open_tag": "<script id=\"row-dblclick-js\">",
+    "replacement": "<script id=\"row-dblclick-js\" src=\"js/admin/row-dblclick.js?v=f0\"></script>",
+    "orig_lines": [
+     13925,
+     13965
+    ],
+    "bytes": 2687,
+    "lines": 41
+   },
+   {
+    "file": "js/admin/footer-year.js",
+    "tag": "script",
+    "open_tag": "<script id=\"footer-year\">",
+    "replacement": "<script id=\"footer-year\" src=\"js/admin/footer-year.js?v=f0\"></script>",
+    "orig_lines": [
+     13967,
+     13967
+    ],
+    "bytes": 108,
+    "lines": 1
+   },
+   {
+    "file": "js/admin/zones.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/zones.js?v=f0\"></script>",
+    "orig_lines": [
+     14000,
+     14162
+    ],
+    "bytes": 13919,
+    "lines": 163
+   },
+   {
+    "file": "js/admin/new-routine.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/new-routine.js?v=f0\"></script>",
+    "orig_lines": [
+     14165,
+     14312
+    ],
+    "bytes": 10957,
+    "lines": 148
+   },
+   {
+    "file": "js/admin/report.js",
+    "tag": "script",
+    "open_tag": "<script id=\"report-module\">",
+    "replacement": "<script id=\"report-module\" src=\"js/admin/report.js?v=f0\"></script>",
+    "orig_lines": [
+     14314,
+     15372
+    ],
+    "bytes": 117250,
+    "lines": 1059
+   },
+   {
+    "file": "js/admin/report-trigger.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/admin/report-trigger.js?v=f0\"></script>",
+    "orig_lines": [
+     15375,
+     15444
+    ],
+    "bytes": 2921,
+    "lines": 70
+   },
+   {
+    "file": "js/admin/modal-outside-click.js",
+    "tag": "script",
+    "open_tag": "<script id=\"modal-outside-click\">",
+    "replacement": "<script id=\"modal-outside-click\" src=\"js/admin/modal-outside-click.js?v=f0\"></script>",
+    "orig_lines": [
+     15446,
+     15508
+    ],
+    "bytes": 3675,
+    "lines": 63
+   },
+   {
+    "file": "js/admin/select-all-sync.js",
+    "tag": "script",
+    "open_tag": "<script id=\"select-all-sync\">",
+    "replacement": "<script id=\"select-all-sync\" src=\"js/admin/select-all-sync.js?v=f0\"></script>",
+    "orig_lines": [
+     15510,
+     15526
+    ],
+    "bytes": 904,
+    "lines": 17
+   },
+   {
+    "file": "js/admin/no-split-reset.js",
+    "tag": "script",
+    "open_tag": "<script id=\"no-split-reset\">",
+    "replacement": "<script id=\"no-split-reset\" src=\"js/admin/no-split-reset.js?v=f0\"></script>",
+    "orig_lines": [
+     15527,
+     15536
+    ],
+    "bytes": 485,
+    "lines": 10
+   }
+  ],
+  "orig_bytes": 1146584,
+  "html_bytes": 162547
+ },
+ "tecnico.html": {
+  "source": "tecnico__5_.html",
+  "blocks": [
+   {
+    "file": "js/tecnico/theme-init.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/tecnico/theme-init.js?v=f0\"></script>",
+    "orig_lines": [
+     24,
+     32
+    ],
+    "bytes": 385,
+    "lines": 9
+   },
+   {
+    "file": "css/tecnico/app.css",
+    "tag": "style",
+    "open_tag": "<style>",
+    "replacement": "<link rel=\"stylesheet\" href=\"css/tecnico/app.css?v=f0\">",
+    "orig_lines": [
+     34,
+     412
+    ],
+    "bytes": 30613,
+    "lines": 379
+   },
+   {
+    "file": "css/tecnico/ui-transitions-v1.css",
+    "tag": "style",
+    "open_tag": "<style id=\"ui-transitions-v1\">",
+    "replacement": "<link id=\"ui-transitions-v1\" rel=\"stylesheet\" href=\"css/tecnico/ui-transitions-v1.css?v=f0\">",
+    "orig_lines": [
+     416,
+     459
+    ],
+    "bytes": 2044,
+    "lines": 44
+   },
+   {
+    "file": "css/tecnico/ui-transitions-v1-tech.css",
+    "tag": "style",
+    "open_tag": "<style id=\"ui-transitions-v1-tech\">",
+    "replacement": "<link id=\"ui-transitions-v1-tech\" rel=\"stylesheet\" href=\"css/tecnico/ui-transitions-v1-tech.css?v=f0\">",
+    "orig_lines": [
+     461,
+     475
+    ],
+    "bytes": 820,
+    "lines": 15
+   },
+   {
+    "file": "css/tecnico/auth-dialog-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"auth-dialog-css\">",
+    "replacement": "<link id=\"auth-dialog-css\" rel=\"stylesheet\" href=\"css/tecnico/auth-dialog-css.css?v=f0\">",
+    "orig_lines": [
+     476,
+     498
+    ],
+    "bytes": 2384,
+    "lines": 23
+   },
+   {
+    "file": "js/tecnico/app.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/tecnico/app.js?v=f0\"></script>",
+    "orig_lines": [
+     814,
+     4420
+    ],
+    "bytes": 226823,
+    "lines": 3607
+   },
+   {
+    "file": "css/tecnico/mx.css",
+    "tag": "style",
+    "open_tag": "<style>",
+    "replacement": "<link rel=\"stylesheet\" href=\"css/tecnico/mx.css?v=f0\">",
+    "orig_lines": [
+     4422,
+     4436
+    ],
+    "bytes": 1906,
+    "lines": 15
+   },
+   {
+    "file": "js/tecnico/mx.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/tecnico/mx.js?v=f0\"></script>",
+    "orig_lines": [
+     4485,
+     4922
+    ],
+    "bytes": 30282,
+    "lines": 438
+   },
+   {
+    "file": "js/tecnico/qr-deeplink.js",
+    "tag": "script",
+    "open_tag": "<script id=\"qr-deeplink\">",
+    "replacement": "<script id=\"qr-deeplink\" src=\"js/tecnico/qr-deeplink.js?v=f0\"></script>",
+    "orig_lines": [
+     4925,
+     4964
+    ],
+    "bytes": 1847,
+    "lines": 40
+   },
+   {
+    "file": "css/tecnico/lm-css.css",
+    "tag": "style",
+    "open_tag": "<style id=\"lm-css\">",
+    "replacement": "<link id=\"lm-css\" rel=\"stylesheet\" href=\"css/tecnico/lm-css.css?v=f0\">",
+    "orig_lines": [
+     4967,
+     4983
+    ],
+    "bytes": 1389,
+    "lines": 17
+   },
+   {
+    "file": "js/tecnico/last-maint.js",
+    "tag": "script",
+    "open_tag": "<script id=\"last-maint\">",
+    "replacement": "<script id=\"last-maint\" src=\"js/tecnico/last-maint.js?v=f0\"></script>",
+    "orig_lines": [
+     4991,
+     5087
+    ],
+    "bytes": 7910,
+    "lines": 97
+   },
+   {
+    "file": "js/tecnico/ui-transitions.js",
+    "tag": "script",
+    "open_tag": "<script id=\"ui-transitions-v1-js\">",
+    "replacement": "<script id=\"ui-transitions-v1-js\" src=\"js/tecnico/ui-transitions.js?v=f0\"></script>",
+    "orig_lines": [
+     5090,
+     5151
+    ],
+    "bytes": 2811,
+    "lines": 62
+   },
+   {
+    "file": "js/tecnico/lazy-execution-load.js",
+    "tag": "script",
+    "open_tag": "<script>",
+    "replacement": "<script src=\"js/tecnico/lazy-execution-load.js?v=f0\"></script>",
+    "orig_lines": [
+     5152,
+     5177
+    ],
+    "bytes": 1282,
+    "lines": 26
+   },
+   {
+    "file": "js/tecnico/update-sync-hook.js",
+    "tag": "script",
+    "open_tag": "<script id=\"hvac-update-sync-hook\">",
+    "replacement": "<script id=\"hvac-update-sync-hook\" src=\"js/tecnico/update-sync-hook.js?v=f0\"></script>",
+    "orig_lines": [
+     5179,
+     5189
+    ],
+    "bytes": 660,
+    "lines": 11
+   }
+  ],
+  "orig_bytes": 339090,
+  "html_bytes": 28514
+ }
+}
