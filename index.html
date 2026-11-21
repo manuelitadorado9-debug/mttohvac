@@ -130,6 +130,7 @@
             </div>
         </div>
         <div class="tb-right">
+            <button type="button" onclick="opsCfgOpen()" class="tb-btn" id="ops-cfg-btn" title="Configuración Operativa" aria-label="Configuración Operativa"><i class="fa-solid fa-gear"></i> <span>Config. operativa</span></button>
             <button type="button" onclick="window.hvacAdminManualSync && window.hvacAdminManualSync(this)" class="tb-btn" id="admin-manual-sync-btn">
                 <i class="fa-solid fa-rotate"></i> <span>Sincronizar</span>
             </button>
@@ -1995,6 +1996,24 @@
   </div>
 </div>
 <script id="att-edit-module" src="js/admin/att-edit.js?v=f0"></script>
+
+<!-- ===================== MÓDULO: CONFIGURACIÓN OPERATIVA (Etapa 1B) ===================== -->
+<div id="ops-cfg-modal" class="mx-modal hidden" onclick="if(event.target===this)opsCfgClose()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="ops-cfg-title">
+    <div class="mx-head"><h3 id="ops-cfg-title"><i class="fa-solid fa-gear text-teal-600"></i> Configuración Operativa</h3><button type="button" class="mx-x" onclick="opsCfgClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="oc-tabs" role="tablist">
+      <button type="button" class="oc-tab on" data-tab="transport" onclick="opsCfgTab('transport')">Transportes</button>
+      <button type="button" class="oc-tab" data-tab="overtime" disabled>Horas extras y roles <small>(1C)</small></button>
+      <button type="button" class="oc-tab" data-tab="meal" disabled>Alimentación y horarios <small>(1C)</small></button>
+      <button type="button" class="oc-tab" data-tab="brand" disabled>Membretes <small>(1C)</small></button>
+    </div>
+    <div class="mx-body" id="ops-cfg-body"></div>
+    <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="opsCfgClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
+  </div>
+</div>
+<link rel="stylesheet" href="css/admin/ops-config.css?v=1b">
+<script id="ops-config-module" src="js/admin/ops-config.js?v=1b"></script>
+
 
 
 <!-- ===================== MÓDULO: CÓDIGOS QR DE EQUIPOS ===================== -->
