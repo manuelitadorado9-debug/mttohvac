@@ -19,3 +19,7 @@
 #trcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
 .tr-prev{font-size:.74rem;line-height:1.5;color:#334155}
 .tr-warn{color:#b45309;font-weight:700}
+/* Transportes · Etapa 4A (PDF) */
+.tr-pdf-btn{background:#dc2626!important;color:#fff!important;display:inline-flex;align-items:center;gap:4px}
+.tr-pdf-btn:hover{background:#b91c1c!important}
+.tr-pdf-btn i{font-size:.7rem}
