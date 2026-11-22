@@ -8,3 +8,6 @@
 .tr-kpi.ot-meal-kpi{background:#d1fae5}.tr-kpi.ot-meal-kpi span{color:#065f46}.tr-kpi.ot-meal-kpi b{color:#064e3b}
 .tr-kpi.ot-grand-kpi{background:#fef3c7;border:1.5px solid #fbbf24}.tr-kpi.ot-grand-kpi span{color:#92400e}.tr-kpi.ot-grand-kpi b{color:#78350f}
 .ot-grand{color:#065f46;font-weight:900}
+/* 4B: botón PDF */
+.ot-pdf-btn{background:#dc2626!important;color:#fff!important;border-color:#dc2626!important}
+.ot-pdf-btn:hover{background:#b91c1c!important;border-color:#b91c1c!important}
