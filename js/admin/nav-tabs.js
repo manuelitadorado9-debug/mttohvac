@@ -1,6 +1,6 @@
 
     (function () {
-        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-tools','admin-transports','admin-billing','admin-financial','admin-settings'];
+        const TABS = ['admin-dashboard','admin-clients','admin-users','admin-planning','admin-agenda','admin-caja','admin-history','admin-attendance','admin-equipment','admin-tools','admin-transports','admin-overtime','admin-billing','admin-financial','admin-settings'];
         const META = {
             'admin-dashboard': ['Panel', 'Panel Principal'], 'admin-clients': ['Gestión', 'Gestión de Clientes'],
             'admin-users': ['Gestión', 'Gestión de Usuarios'], 'admin-planning': ['Operación', 'Planificación'],
@@ -8,6 +8,7 @@
             'admin-history': ['Operación', 'Histórico & Avance Global'], 'admin-attendance': ['Operación', 'Asistencia & GPS'], 'admin-equipment': ['Gestión', 'Gestión de Equipos'],
             'admin-tools': ['Operación', 'Recogida de Herramientas'],
             'admin-transports': ['Operación', 'Transportes'],
+            'admin-overtime': ['Operación', 'Horas Extras'],
             'admin-billing': ['Finanzas', 'Facturación'], 'admin-financial': ['Finanzas', 'Finanzas'], 'admin-settings': ['Sistema', 'Configuración']
         };
         const $ = id => document.getElementById(id);

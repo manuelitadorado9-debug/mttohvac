@@ -1903,6 +1903,7 @@ async function authPedirNuevaClave() {
             'admin-equipment': { tables: ['hvac_clients'], state: ['HVAC_FORMS_CONFIG_BACKUP'], equipmentsProgressive: true }, // equipos: por páginas
             'admin-billing': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_MANUAL_INVOICES_BACKUP', HVAC_UI_SETTINGS_KEY] }, // facturas históricas y política compartida
             'admin-transports': { tables: ['hvac_users', 'hvac_clients'], state: [] },     // transportes (datos en Supabase ops_*)
+            'admin-overtime': { tables: ['hvac_users'], state: [] },                        // horas extras (datos en Supabase ops_*)
             'admin-tools': { tables: ['hvac_orders', 'hvac_clients'], state: [] },          // recogida de herramientas (campo toolPickup de cada orden)
             'admin-financial': { tables: ['hvac_orders', 'hvac_clients'], state: ['HVAC_PROJECTIONS_BACKUP', 'HVAC_FINANCIAL_PROJECTIONS_BACKUP', 'HVAC_CAJA_BACKUP', 'HVAC_LEGALIZATIONS_BACKUP', 'HVAC_MANUAL_INVOICES_BACKUP', HVAC_UI_SETTINGS_KEY] },
             'admin-settings': { tables: [], state: [HVAC_UI_SETTINGS_KEY] }
@@ -1933,6 +1934,7 @@ async function authPedirNuevaClave() {
             'admin-equipment': () => renderEquipmentCatalog(),
             'admin-billing': () => renderBillingModule(),
             'admin-transports': () => { if (typeof trInit === 'function') trInit(); },
+            'admin-overtime': () => { if (typeof otInit === 'function') otInit(); },
             'admin-tools': () => renderToolsModule(),
             'admin-financial': () => renderFinancialModule(),
             'admin-settings': () => renderSettingsModule()
@@ -2991,6 +2993,7 @@ async function authPedirNuevaClave() {
                 toolsLink.insertAdjacentHTML('beforeend', '<span id="nav-tools-badge" class="ml-auto hidden bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>');
                 list.appendChild(toolsLink);
                 list.appendChild(makeLink('fa-route', 'Transportes', 'admin-transports'));
+                list.appendChild(makeLink('fa-user-clock', 'Horas Extras', 'admin-overtime'));
                 list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
                 if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
