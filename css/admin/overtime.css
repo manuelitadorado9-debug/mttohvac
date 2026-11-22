@@ -1,5 +1,10 @@
-/* Horas Extras · Etapa 3A (reutiliza tr-* y oc-*) */
+/* Horas Extras · Etapa 3A/3B (reutiliza tr-* y oc-*) */
 .ot-type{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap;background:#e2e8f0;color:#334155}
 .ot-type.diurna{background:#fef9c3;color:#854d0e}.ot-type.nocturna{background:#e0e7ff;color:#3730a3}
 .ot-type.dominical{background:#fce7f3;color:#9d174d}.ot-type.festiva{background:#ffedd5;color:#9a3412}
 #otcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
+/* 3B: alimentación */
+.ot-meal-badge{display:inline-block;font-size:.65rem;font-weight:800;padding:1px 7px;border-radius:99px;background:#d1fae5;color:#065f46;white-space:nowrap}
+.tr-kpi.ot-meal-kpi{background:#d1fae5}.tr-kpi.ot-meal-kpi span{color:#065f46}.tr-kpi.ot-meal-kpi b{color:#064e3b}
+.tr-kpi.ot-grand-kpi{background:#fef3c7;border:1.5px solid #fbbf24}.tr-kpi.ot-grand-kpi span{color:#92400e}.tr-kpi.ot-grand-kpi b{color:#78350f}
+.ot-grand{color:#065f46;font-weight:900}
