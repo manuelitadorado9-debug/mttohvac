@@ -714,6 +714,25 @@
             <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm overflow-x-auto" id="tr-list"></div>
         </section>
 
+        <section id="view-admin-overtime" class="hidden space-y-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h2 class="text-base font-black text-slate-900 tracking-tight">Horas Extras</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Calculadas desde la asistencia: diurna, nocturna, dominical y festiva. Aprueba o rechaza y cierra el corte del periodo.</p>
+                </div>
+                <div class="flex items-end gap-2 flex-wrap">
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Desde</label><input type="date" id="ot-from" class="input-box text-xs" onchange="otLoad()"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hasta</label><input type="date" id="ot-to" class="input-box text-xs" onchange="otLoad()"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                        <select id="ot-status" class="input-box font-bold text-xs w-36" onchange="otLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobadas</option><option value="Rechazado">Rechazadas</option><option value="">Todas</option></select></div>
+                    <button type="button" class="mx-btn" id="ot-detect-btn" onclick="otDetect()"><i class="fa-solid fa-wand-magic-sparkles"></i> Detectar</button>
+                    <button type="button" class="mx-btn" onclick="otOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
+                </div>
+            </div>
+            <div id="ot-kpis" class="tr-kpis"></div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm overflow-x-auto" id="ot-list"></div>
+        </section>
+
         <section id="view-admin-financial" class="hidden finance-dashboard space-y-4">
     <header class="fd-card fd-header">
         <div class="fd-header-grid">
@@ -2059,7 +2078,22 @@
     </div></div>
   </div>
 </div>
-<link rel="stylesheet" href="css/admin/transports.css?v=2c">
+<div id="otcut-modal" class="mx-modal hidden" onclick="if(event.target===this)otCloseCuts()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="otcut-title">
+    <div class="mx-head"><h3 id="otcut-title"><i class="fa-solid fa-scissors text-teal-600"></i> Cortes de horas extras</h3><button type="button" class="mx-x" onclick="otCloseCuts()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="oc-card" style="margin:14px"><div class="oc-form">
+      <div><label>Desde</label><input id="otcut-from" type="date" class="input-box text-xs" onchange="otCutPreview()"></div>
+      <div><label>Hasta</label><input id="otcut-to" type="date" class="input-box text-xs" onchange="otCutPreview()"></div>
+      <div class="full"><label>Nota (opcional)</label><input id="otcut-note" class="input-box text-xs" maxlength="150" placeholder="Ej: Nómina noviembre"></div>
+      <div class="full tr-prev" id="otcut-prev"></div>
+      <div class="full"><button type="button" id="otcut-btn" class="mx-btn mx-btn-pri" onclick="otCutCreate()" disabled><i class="fa-solid fa-lock"></i> Cerrar corte</button></div>
+    </div></div>
+    <div class="oc-card" style="margin:0 14px 14px"><h4><i class="fa-solid fa-clock-rotate-left"></i> Cortes realizados</h4><div id="otcut-list"></div></div>
+  </div>
+</div>
+<link rel="stylesheet" href="css/admin/transports.css?v=3a">
+<link rel="stylesheet" href="css/admin/overtime.css?v=3a">
+<script id="overtime-module" src="js/admin/overtime.js?v=3a"></script>
 <script id="transports-module" src="js/admin/transports.js?v=2c"></script>
 <link rel="stylesheet" href="css/admin/ops-config.css?v=1c">
 <script id="ops-config-module" src="js/admin/ops-config.js?v=1c"></script>
