@@ -1,4 +1,4 @@
-/* ===== Transportes · Etapas 2A, 2B y 2C (tabla, registro manual, aprobar/rechazar, detección por GPS y cortes) =====
+/* ===== Transportes · Etapas 2A, 2B, 2C y 4A (tabla, registro manual, aprobar/rechazar, detección por GPS, cortes y PDF) =====
    Solo ADMIN. Usa las funciones SQL ops_transfer_* (SQL 02) que validan rol + hash. */
 (function () {
     const q = id => document.getElementById(id);
@@ -78,7 +78,7 @@
         trLoad();
     };
 
-    /* 2B · Detección automática: salida en un cliente + entrada en otro (mismo técnico y día). Repetirla no duplica. */
+    /* 2B · Detección automática */
     window.trDetect = async function () {
         if (busy) return;
         if (!isAdmin()) return showToast('Solo el administrador puede detectar traslados.', 'error');
@@ -100,7 +100,7 @@
         q('tr-status').value = 'Pendiente'; trLoad();
     };
 
-    /* 2C · Cortes de periodo: cerrar (marca los Aprobados con cut_id) y revertir (los libera) */
+    /* 2C · Cortes de periodo */
     let cutDays = { start_day: 26, end_day: 25 };
     const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
     function suggestPeriod() {
@@ -130,10 +130,16 @@
         const d = r.data || {}; cutDays = d.cut_days || cutDays;
         if (setDates) { const p = suggestPeriod(); q('trcut-from').value = p[0]; q('trcut-to').value = p[1]; }
         const cuts = d.cuts || [];
-        box.innerHTML = cuts.length ? cuts.map(c => '<div class="oc-row"><div class="l"><b>' + dmy(c.period_start) + ' → ' + dmy(c.period_end) + ' · ' + money(c.total) + '</b>' +
+        box.innerHTML = cuts.length ? cuts.map(c =>
+            '<div class="oc-row"><div class="l"><b>' + dmy(c.period_start) + ' → ' + dmy(c.period_end) + ' · ' + money(c.total) + '</b>' +
             '<span>' + c.n + ' traslado(s) · cerrado ' + dmy(c.closed_at) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
-            '<div style="display:flex;gap:6px;align-items:center"><span class="oc-badge ' + (c.status === 'pagado' ? 'ok' : 'sch') + '">' + (c.status === 'pagado' ? 'Pagado' : 'Cerrado') + '</span>' +
-            (c.status === 'cerrado' ? '<button type="button" class="oc-mini" onclick="trCutRevert(\'' + esc(c.id) + '\')">Revertir</button>' : '') + '</div></div>').join('')
+            '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+            '<span class="oc-badge ' + (c.status === 'pagado' ? 'ok' : 'sch') + '">' + (c.status === 'pagado' ? 'Pagado' : 'Cerrado') + '</span>' +
+            /* 4A: botón PDF siempre visible en cortes cerrados y pagados */
+            '<button type="button" class="oc-mini tr-pdf-btn" onclick="trCutPDF(\'' + esc(c.id) + '\',\'' + esc(dmy(c.period_start)) + ' – ' + esc(dmy(c.period_end)) + '\')"><i class="fa-solid fa-file-pdf"></i> PDF</button>' +
+            (c.status === 'cerrado' ? '<button type="button" class="oc-mini" onclick="trCutRevert(\'' + esc(c.id) + '\')">Revertir</button>' : '') +
+            '</div></div>'
+        ).join('')
             : '<div class="oc-empty">Aún no hay cortes de transportes.</div>';
         trCutPreview();
     }
@@ -185,6 +191,180 @@
         await trCutsLoad(false); trLoad();
     };
 
+    /* ================================================================
+       4A · PDF de liquidación de transportes
+       Usa jsPDF desde CDN. Carga el script solo la primera vez.
+    ================================================================ */
+    function loadJsPDF() {
+        return new Promise((resolve, reject) => {
+            if (window.jspdf && window.jspdf.jsPDF) return resolve(window.jspdf.jsPDF);
+            if (document.getElementById('jspdf-cdn')) {
+                // ya se está cargando: espera
+                const iv = setInterval(() => {
+                    if (window.jspdf && window.jspdf.jsPDF) { clearInterval(iv); resolve(window.jspdf.jsPDF); }
+                }, 80);
+                return;
+            }
+            const s = document.createElement('script');
+            s.id = 'jspdf-cdn';
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+            s.onload = () => resolve(window.jspdf.jsPDF);
+            s.onerror = () => reject(new Error('No se pudo cargar jsPDF. Verifica tu conexión.'));
+            document.head.appendChild(s);
+        });
+    }
+
+    window.trCutPDF = async function (cutId, label) {
+        if (busy) return;
+        busy = true;
+        showToast('Generando PDF…');
+        try {
+            /* 1 · Cargar jsPDF */
+            let JsPDF;
+            try { JsPDF = await loadJsPDF(); }
+            catch (e) { return showToast(e.message, 'error'); }
+
+            /* 2 · Obtener datos del corte */
+            const r = await rpc('ops_tr_cut_detail', Object.assign(auth(), { p_cut_id: cutId }));
+            if (!r.ok) return showToast(r.msg || 'Error al obtener detalle del corte.', 'error');
+            const d = r.data || {};
+            const cut = d.cut || {};
+            const lh  = d.letterhead || {};
+            const filas = d.rows || [];
+            const byTech = d.by_tech || [];
+            const grand = Number(d.grand_total || 0);
+
+            /* 3 · Construir PDF */
+            const doc = new JsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const W = 210, ML = 14, MR = 14, TW = W - ML - MR;
+            let y = 14;
+
+            // --- Logo (si existe y es URL válida, intenta cargar como Data URL) ---
+            if (lh.logo_url) {
+                try {
+                    const img = await fetchImgBase64(lh.logo_url);
+                    if (img) { doc.addImage(img.data, img.ext, ML, y, 28, 14); }
+                } catch (_) { /* logo opcional, continúa sin él */ }
+            }
+
+            // --- Membrete ---
+            const hx = lh.logo_url ? ML + 32 : ML;
+            doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(15, 23, 42);
+            doc.text(lh.company_name || 'Empresa', hx, y + 5);
+            doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(71, 85, 105);
+            if (lh.nit) doc.text('NIT: ' + lh.nit, hx, y + 11);
+
+            // --- Título del documento ---
+            doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(15, 23, 42);
+            doc.text('LIQUIDACIÓN DE TRANSPORTES', W / 2, y + 5, { align: 'center' });
+            doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(71, 85, 105);
+            doc.text('Periodo: ' + dmy(cut.period_start) + ' al ' + dmy(cut.period_end), W / 2, y + 11, { align: 'center' });
+            doc.text('Estado: ' + (cut.status || '—') + '   |   Corte ID: ' + String(cut.id || '').slice(0, 8) + '…', W / 2, y + 16, { align: 'center' });
+            if (cut.note) doc.text('Nota: ' + cut.note, W / 2, y + 21, { align: 'center' });
+
+            y += 28;
+            doc.setDrawColor(203, 213, 225).setLineWidth(0.3).line(ML, y, W - MR, y);
+            y += 5;
+
+            /* 4 · Tabla de traslados */
+            const cols = [
+                { h: 'Fecha',          w: 18, key: r => dmy(r.work_date),                                      align: 'left'  },
+                { h: 'Técnico',        w: 36, key: r => (r.employee_name || '—'),                              align: 'left'  },
+                { h: 'Origen → Destino', w: 54, key: r => (r.from_client_name || '—') + ' → ' + (r.to_client_name || '—'), align: 'left' },
+                { h: 'Km',             w: 10, key: r => r.distance_km != null ? String(r.distance_km) : '—',  align: 'right' },
+                { h: 'Valor',          w: 24, key: r => money(r.amount),                                       align: 'right' },
+                { h: 'GPS',            w: 10, key: r => r.source === 'gps' ? 'Sí' : 'No',                     align: 'center'},
+            ];
+            const colX = (() => { let x = ML; return cols.map(c => { const cx = x; x += c.w; return cx; }); })();
+
+            // Cabecera de tabla
+            doc.setFillColor(241, 245, 249).rect(ML, y, TW, 7, 'F');
+            doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(71, 85, 105);
+            cols.forEach((c, i) => {
+                const tx = c.align === 'right' ? colX[i] + c.w - 1 : c.align === 'center' ? colX[i] + c.w / 2 : colX[i] + 1;
+                doc.text(c.h, tx, y + 4.5, { align: c.align === 'center' ? 'center' : c.align });
+            });
+            y += 7;
+
+            // Filas
+            doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(15, 23, 42);
+            filas.forEach((row, idx) => {
+                if (y > 262) { doc.addPage(); y = 14; } // nueva página si se llena
+                if (idx % 2 === 0) { doc.setFillColor(248, 250, 252).rect(ML, y, TW, 7, 'F'); }
+                cols.forEach((c, i) => {
+                    const val = c.key(row);
+                    const tx = c.align === 'right' ? colX[i] + c.w - 1 : c.align === 'center' ? colX[i] + c.w / 2 : colX[i] + 1;
+                    // truncar texto largo
+                    const maxW = c.w - 2;
+                    const txt = doc.getStringUnitWidth(val) * 7 / doc.internal.scaleFactor > maxW
+                        ? doc.splitTextToSize(val, maxW)[0] + '…'
+                        : val;
+                    doc.text(txt, tx, y + 4.5, { align: c.align === 'center' ? 'center' : c.align });
+                });
+                y += 7;
+            });
+
+            y += 4;
+            doc.setDrawColor(203, 213, 225).line(ML, y, W - MR, y);
+            y += 6;
+
+            /* 5 · Totales por técnico */
+            if (byTech.length) {
+                doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(15, 23, 42);
+                doc.text('Resumen por técnico', ML, y); y += 5;
+                doc.setFillColor(241, 245, 249).rect(ML, y, TW, 6, 'F');
+                doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(71, 85, 105);
+                doc.text('Técnico', ML + 1, y + 4); doc.text('Traslados', ML + 100, y + 4, { align: 'right' }); doc.text('Total', W - MR - 1, y + 4, { align: 'right' });
+                y += 6;
+                doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(15, 23, 42);
+                byTech.forEach((t2, idx) => {
+                    if (y > 268) { doc.addPage(); y = 14; }
+                    if (idx % 2 === 0) { doc.setFillColor(248, 250, 252).rect(ML, y, TW, 6, 'F'); }
+                    doc.text(t2.employee_name || '—', ML + 1, y + 4);
+                    doc.text(String(t2.n), ML + 100, y + 4, { align: 'right' });
+                    doc.text(money(t2.total), W - MR - 1, y + 4, { align: 'right' });
+                    y += 6;
+                });
+                y += 4;
+            }
+
+            /* 6 · Gran total */
+            doc.setFillColor(15, 23, 42).rect(ML, y, TW, 9, 'F');
+            doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(255, 255, 255);
+            doc.text('GRAN TOTAL', ML + 2, y + 6);
+            doc.text(money(grand), W - MR - 1, y + 6, { align: 'right' });
+            y += 14;
+
+            /* 7 · Pie */
+            doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(148, 163, 184);
+            doc.text('Generado el ' + new Date().toLocaleString('es-CO') + '   ·   ' + (lh.company_name || ''), ML, y);
+
+            /* 8 · Descargar */
+            const fname = 'liquidacion_transportes_' + String(cut.period_start || '').replace(/-/g, '') + '_' + String(cut.period_end || '').replace(/-/g, '') + '.pdf';
+            doc.save(fname);
+            showToast('PDF descargado: ' + fname);
+        } catch (e) {
+            showToast('Error al generar PDF: ' + (e.message || e), 'error');
+        } finally { busy = false; }
+    };
+
+    /* Convierte una URL de imagen a base64 para incrustarla en jsPDF */
+    async function fetchImgBase64(url) {
+        try {
+            const r = await fetch(url);
+            if (!r.ok) return null;
+            const blob = await r.blob();
+            const ext = blob.type.includes('png') ? 'PNG' : blob.type.includes('gif') ? 'GIF' : 'JPEG';
+            return new Promise((res, rej) => {
+                const fr = new FileReader();
+                fr.onload = () => res({ data: fr.result, ext });
+                fr.onerror = rej;
+                fr.readAsDataURL(blob);
+            });
+        } catch (_) { return null; }
+    }
+
+    /* ============================================================ */
     window.trOpenNew = function () {
         if (!isAdmin()) return showToast('Solo el administrador puede registrar traslados.', 'error');
         const users = (systemUsers || []).filter(u => u && u.name).sort((a, b) => a.name.localeCompare(b.name, 'es'));
