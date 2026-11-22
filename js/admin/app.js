@@ -2936,7 +2936,11 @@ async function authPedirNuevaClave() {
         });
 
         const NAV_GESTION_TABS = ['admin-clients', 'admin-equipment', 'admin-users'];
+        const NAV_NOMINA_TABS = ['admin-transports', 'admin-overtime'];
+        const NAV_PLAN_TABS = ['admin-planning', 'admin-agenda'];
         let navGestionOpen = (() => { try { return sessionStorage.getItem('HVAC_NAV_GESTION') === '1'; } catch (_) { return false; } })();
+        let navNominaOpen = (() => { try { return sessionStorage.getItem('HVAC_NAV_NOMINA') === '1'; } catch (_) { return false; } })();
+        let navPlanOpen = (() => { try { return sessionStorage.getItem('HVAC_NAV_PLAN') === '1'; } catch (_) { return false; } })();
 
         function updateSidebarLinks() {
             const list = document.getElementById('sidebar-nav-list');
@@ -2957,9 +2961,10 @@ async function authPedirNuevaClave() {
             };
 
             if (u.role === 'ADMIN') {
-                // Grupo desplegable "Gestión": Clientes · Equipos · Usuarios
                 const curSec = document.querySelector('main > section:not(.hidden)');
                 const curTab = curSec ? curSec.id.replace('view-', '') : '';
+
+                // Grupo desplegable "Gestión": Clientes · Equipos · Usuarios
                 const groupOpen = navGestionOpen || NAV_GESTION_TABS.includes(curTab);
                 const group = document.createElement('div');
                 group.className = 'nav-group' + (groupOpen ? ' open' : '');
@@ -2971,9 +2976,9 @@ async function authPedirNuevaClave() {
                     </button>
                     <div class="nav-sub" id="nav-sub-gestion"><div class="nav-sub-in"></div></div>`;
                 const sub = group.querySelector('.nav-sub-in');
-                sub.appendChild(makeLink('fa-users', 'Gestión de Clientes', 'admin-clients'));
-                sub.appendChild(makeLink('fa-screwdriver-wrench', 'Gestión de Equipos', 'admin-equipment'));
-                sub.appendChild(makeLink('fa-user-shield', 'Gestión de Usuarios', 'admin-users'));
+                sub.appendChild(makeLink('fa-users', 'Clientes', 'admin-clients'));
+                sub.appendChild(makeLink('fa-screwdriver-wrench', 'Equipos', 'admin-equipment'));
+                sub.appendChild(makeLink('fa-user-shield', 'Usuarios', 'admin-users'));
                 group.querySelector('.nav-group-btn').onclick = function () {
                     const open = !group.classList.contains('open');
                     group.classList.toggle('open', open);
@@ -2982,18 +2987,62 @@ async function authPedirNuevaClave() {
                     try { sessionStorage.setItem('HVAC_NAV_GESTION', open ? '1' : '0'); } catch (_) {}
                 };
 
-                list.appendChild(makeLink('fa-chart-pie', 'Panel Principal', 'admin-dashboard'));
-                list.appendChild(group);
-                list.appendChild(makeLink('fa-calendar-days', 'Planificación', 'admin-planning'));
-                list.appendChild(makeLink('fa-clipboard-list', 'Agenda de Gestión', 'admin-agenda'));
-                list.appendChild(makeLink('fa-wallet', 'Caja Menor', 'admin-caja'));
-                list.appendChild(makeLink('fa-clock-rotate-left', 'Histórico & Avance Global', 'admin-history'));
-                list.appendChild(makeLink('fa-location-crosshairs', 'Asistencia & GPS', 'admin-attendance'));
+                // Grupo desplegable "Planificación": Planificación + Agenda de Gestión
+                const planOpen = navPlanOpen || NAV_PLAN_TABS.includes(curTab);
+                const groupPlan = document.createElement('div');
+                groupPlan.className = 'nav-group' + (planOpen ? ' open' : '');
+                groupPlan.innerHTML = `
+                    <button type="button" class="nav-group-btn" aria-expanded="${planOpen}" aria-controls="nav-sub-plan">
+                        <span class="ng-ico"><i class="fa-solid fa-calendar-days"></i></span>
+                        <span class="ng-label">Planificación</span>
+                        <i class="fa-solid fa-chevron-down ng-chev"></i>
+                    </button>
+                    <div class="nav-sub" id="nav-sub-plan"><div class="nav-sub-in"></div></div>`;
+                const subPlan = groupPlan.querySelector('.nav-sub-in');
+                subPlan.appendChild(makeLink('fa-calendar-plus', 'Programación mensual', 'admin-planning'));
+                subPlan.appendChild(makeLink('fa-clipboard-list', 'Agenda de Gestión', 'admin-agenda'));
+                groupPlan.querySelector('.nav-group-btn').onclick = function () {
+                    const open = !groupPlan.classList.contains('open');
+                    groupPlan.classList.toggle('open', open);
+                    this.setAttribute('aria-expanded', String(open));
+                    navPlanOpen = open;
+                    try { sessionStorage.setItem('HVAC_NAV_PLAN', open ? '1' : '0'); } catch (_) {}
+                };
+
+                // Grupo desplegable "Nómina Operativa": Transportes · Horas Extras
+                const nominaOpen = navNominaOpen || NAV_NOMINA_TABS.includes(curTab);
+                const groupNomina = document.createElement('div');
+                groupNomina.className = 'nav-group' + (nominaOpen ? ' open' : '');
+                groupNomina.innerHTML = `
+                    <button type="button" class="nav-group-btn" aria-expanded="${nominaOpen}" aria-controls="nav-sub-nomina">
+                        <span class="ng-ico"><i class="fa-solid fa-people-arrows"></i></span>
+                        <span class="ng-label">Nómina Operativa</span>
+                        <i class="fa-solid fa-chevron-down ng-chev"></i>
+                    </button>
+                    <div class="nav-sub" id="nav-sub-nomina"><div class="nav-sub-in"></div></div>`;
+                const subNomina = groupNomina.querySelector('.nav-sub-in');
+                subNomina.appendChild(makeLink('fa-route', 'Transportes', 'admin-transports'));
+                subNomina.appendChild(makeLink('fa-user-clock', 'Horas Extras', 'admin-overtime'));
+                groupNomina.querySelector('.nav-group-btn').onclick = function () {
+                    const open = !groupNomina.classList.contains('open');
+                    groupNomina.classList.toggle('open', open);
+                    this.setAttribute('aria-expanded', String(open));
+                    navNominaOpen = open;
+                    try { sessionStorage.setItem('HVAC_NAV_NOMINA', open ? '1' : '0'); } catch (_) {}
+                };
+
+                // Recogida de Herramientas: ítem suelto (con badge)
                 const toolsLink = makeLink('fa-toolbox', 'Recogida de Herramientas', 'admin-tools');
                 toolsLink.insertAdjacentHTML('beforeend', '<span id="nav-tools-badge" class="ml-auto hidden bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full">0</span>');
+
+                list.appendChild(makeLink('fa-chart-pie', 'Panel Principal', 'admin-dashboard'));
+                list.appendChild(group);
+                list.appendChild(groupPlan);
+                list.appendChild(makeLink('fa-wallet', 'Caja Menor', 'admin-caja'));
+                list.appendChild(makeLink('fa-clock-rotate-left', 'Histórico & Avance', 'admin-history'));
+                list.appendChild(makeLink('fa-location-crosshairs', 'Asistencia & GPS', 'admin-attendance'));
                 list.appendChild(toolsLink);
-                list.appendChild(makeLink('fa-route', 'Transportes', 'admin-transports'));
-                list.appendChild(makeLink('fa-user-clock', 'Horas Extras', 'admin-overtime'));
+                list.appendChild(groupNomina);
                 list.appendChild(makeLink('fa-file-invoice-dollar', 'Facturación', 'admin-billing'));
                 list.appendChild(makeLink('fa-chart-line', 'Finanzas', 'admin-financial'));
                 if (typeof hvacUpdateToolsBadge === 'function') hvacUpdateToolsBadge();
