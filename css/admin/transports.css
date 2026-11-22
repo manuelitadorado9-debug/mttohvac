@@ -15,3 +15,7 @@
 .tr-act .ok{background:#059669}.tr-act .no{background:#dc2626}
 .tr-sub{display:block;color:#64748b;font-size:.64rem;margin-top:1px}
 #tr-modal .mx-sheet{max-width:560px}
+/* Transportes · Etapa 2C (cortes) */
+#trcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
+.tr-prev{font-size:.74rem;line-height:1.5;color:#334155}
+.tr-warn{color:#b45309;font-weight:700}
