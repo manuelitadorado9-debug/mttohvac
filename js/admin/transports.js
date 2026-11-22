@@ -1,4 +1,4 @@
-/* ===== Transportes · Etapa 2A (tabla, registro manual, aprobar y rechazar) =====
+/* ===== Transportes · Etapas 2A y 2B (tabla, registro manual, aprobar/rechazar y detección por GPS) =====
    Solo ADMIN. Usa las funciones SQL ops_transfer_* (SQL 02) que validan rol + hash. */
 (function () {
     const q = id => document.getElementById(id);
@@ -17,7 +17,7 @@
             const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (r.ok) { let d = null; try { d = await r.json(); } catch (_) {} return { ok: true, data: d }; }
             let m = ''; try { m = (await r.json()).message || ''; } catch (_) {}
-            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar el SQL de la Etapa 2A (02_transportes_etapa2A.sql) en Supabase.';
+            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar el SQL de la Etapa 2A/2B (02_transportes_etapa2A.sql y 03_transportes_gps_etapa2B.sql) en Supabase.';
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
@@ -76,6 +76,28 @@
             showToast(decision === 'Aprobado' ? 'Traslado aprobado.' : 'Traslado rechazado.');
         } finally { busy = false; }
         trLoad();
+    };
+
+    /* 2B · Detección automática: salida en un cliente + entrada en otro (mismo técnico y día). Repetirla no duplica. */
+    window.trDetect = async function () {
+        if (busy) return;
+        if (!isAdmin()) return showToast('Solo el administrador puede detectar traslados.', 'error');
+        const f = q('tr-from').value, t = q('tr-to').value, gap = parseInt(q('tr-gap').value, 10) || 180;
+        if (!f || !t) return showToast('Indica el rango de fechas.', 'error');
+        if (t < f) return showToast('La fecha final no puede ser anterior a la inicial.', 'error');
+        if ((new Date(t) - new Date(f)) / 864e5 > 92) return showToast('Máximo 92 días por detección.', 'error');
+        const btn = q('tr-detect-btn'); busy = true; if (btn) btn.disabled = true;
+        try {
+            const r = await rpc('ops_transfers_detect', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: gap }));
+            if (!r.ok) return showToast(/could not find the function|PGRST202/i.test(r.msg) ? r.msg : (r.msg || 'No se pudo detectar.'), 'error');
+            const d = r.data || {}, extra = [];
+            if (d.duplicates) extra.push(d.duplicates + ' ya existían');
+            if (d.out_of_range) extra.push(d.out_of_range + ' con marcación fuera de rango');
+            if (d.no_rate) extra.push(d.no_rate + ' sin tarifa vigente');
+            if (typeof registrarAuditoria === 'function') registrarAuditoria('CREATE', 'hvac_transfers', 'Detección GPS ' + f + ' a ' + t + ': ' + (d.created || 0) + ' nuevos');
+            showToast((d.created ? d.created + ' traslado(s) nuevo(s) pendientes de aprobación' : 'No se encontraron traslados nuevos') + (extra.length ? ' · ' + extra.join(', ') : '') + '.', (d.no_rate ? 'error' : undefined));
+        } finally { busy = false; if (btn) btn.disabled = false; }
+        q('tr-status').value = 'Pendiente'; trLoad();
     };
 
     window.trOpenNew = function () {
