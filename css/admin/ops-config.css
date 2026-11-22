@@ -1,4 +1,4 @@
-/* Configuración Operativa · Etapa 1B */
+/* Configuración Operativa · Etapas 1B y 1C */
 #ops-cfg-modal .mx-sheet{max-width:760px;max-height:min(100dvh - 24px,860px)}
 .oc-tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 0;border-bottom:1px solid var(--line);flex:none}
 .oc-tab{flex:none;padding:8px 12px;border:0;background:transparent;color:var(--text-2);font-size:.78rem;font-weight:800;border-bottom:2px solid transparent;white-space:nowrap}
