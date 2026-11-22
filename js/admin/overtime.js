@@ -1,5 +1,5 @@
-/* ===== Horas Extras · Etapa 3A (detección y clasificación, aprobar/rechazar, cortes) =====
-   Solo ADMIN. Usa las funciones SQL ops_ot_* (SQL 05) que validan rol + hash. */
+/* ===== Horas Extras · Etapa 3B (alimentación + recálculo al editar) =====
+   Solo ADMIN. Usa las funciones SQL ops_ot_* (SQL 05+06). */
 (function () {
     const q = id => document.getElementById(id);
     const me = () => systemUsers.find(u => String(u.id) === String(activeUser));
@@ -20,7 +20,7 @@
             const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (r.ok) { let d = null; try { d = await r.json(); } catch (_) {} return { ok: true, data: d }; }
             let m = ''; try { m = (await r.json()).message || ''; } catch (_) {}
-            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar el SQL de la Etapa 3A (05_horas_extras_etapa3A.sql) en Supabase.';
+            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar el SQL de la Etapa 3A/3B en Supabase.';
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
@@ -45,21 +45,27 @@
         const f = st => rows.filter(x => x.status === st);
         const sumA = (a, k) => a.reduce((s, x) => s + Number(x[k] || 0), 0);
         const pen = f('Pendiente'), apr = f('Aprobado');
+        const aprAmt = sumA(apr, 'amount'), aprMeal = sumA(apr, 'meal_amount');
         q('ot-kpis').innerHTML =
             '<div class="tr-kpi"><span>Pendientes</span><b>' + pen.length + '</b></div>' +
             '<div class="tr-kpi"><span>Horas pendientes</span><b>' + hrs(sumA(pen, 'hours')) + '</b></div>' +
             '<div class="tr-kpi"><span>Valor pendiente</span><b>' + money(sumA(pen, 'amount')) + '</b></div>' +
-            '<div class="tr-kpi"><span>Aprobado</span><b>' + money(sumA(apr, 'amount')) + '</b><span style="text-transform:none;font-weight:700">' + hrs(sumA(apr, 'hours')) + '</span></div>';
+            '<div class="tr-kpi"><span>HH Aprobadas</span><b>' + money(aprAmt) + '</b><span style="text-transform:none;font-weight:700">' + hrs(sumA(apr, 'hours')) + '</span></div>' +
+            (aprMeal > 0 ? '<div class="tr-kpi ot-meal-kpi"><span>Alimentación aprobada</span><b>' + money(aprMeal) + '</b></div>' : '') +
+            (aprMeal > 0 ? '<div class="tr-kpi ot-grand-kpi"><span>Total a pagar</span><b>' + money(aprAmt + aprMeal) + '</b></div>' : '');
         if (!rows.length) { q('ot-list').innerHTML = '<div class="oc-empty">No hay horas extras con estos filtros. Usa «Detectar» para calcularlas desde la asistencia.</div>'; return; }
         const cls = { Pendiente: 'p', Aprobado: 'a', Rechazado: 'r' };
-        q('ot-list').innerHTML = '<table class="tr-table"><thead><tr><th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Horario</th><th style="text-align:right">Horas</th><th style="text-align:right">Total</th><th>Estado</th><th></th></tr></thead><tbody>' +
+        q('ot-list').innerHTML = '<table class="tr-table"><thead><tr><th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Horario</th><th style="text-align:right">Horas</th><th style="text-align:right">HH Extra</th><th style="text-align:right">Aliment.</th><th>Estado</th><th></th></tr></thead><tbody>' +
             rows.map(x => '<tr><td>' + dmy(x.work_date) + '</td>' +
                 '<td><b>' + esc(x.employee_name) + '</b>' + (x.employee_role ? '<span class="tr-sub">' + esc(x.employee_role) + '</span>' : '') + '</td>' +
                 '<td><span class="ot-type ' + esc(x.overtime_type) + '">' + esc(TYPES[x.overtime_type] || x.overtime_type) + '</span></td>' +
                 '<td>' + hm(x.start_at) + ' – ' + hm(x.end_at) + '</td>' +
                 '<td class="num">' + hrs(x.hours) + '</td>' +
                 '<td class="num">' + money(x.amount) + '<span class="tr-sub" style="font-weight:600">' + money(x.rate_value) + '/h</span></td>' +
-                '<td><span class="tr-st ' + cls[x.status] + '">' + esc(x.status) + '</span>' + (x.reject_reason ? '<span class="tr-sub">Rechazo: ' + esc(x.reject_reason) + '</span>' : '') + (x.cut_id ? '<span class="tr-sub"><i class="fa-solid fa-lock"></i> En corte</span>' : '') + '</td>' +
+                '<td class="num">' + (Number(x.meal_amount) > 0 ? '<span class="ot-meal-badge">' + money(x.meal_amount) + '</span>' : '—') + '</td>' +
+                '<td><span class="tr-st ' + cls[x.status] + '">' + esc(x.status) + '</span>' +
+                    (x.reject_reason ? '<span class="tr-sub">Rechazo: ' + esc(x.reject_reason) + '</span>' : '') +
+                    (x.cut_id ? '<span class="tr-sub"><i class="fa-solid fa-lock"></i> En corte</span>' : '') + '</td>' +
                 '<td>' + (x.status === 'Pendiente' ? '<div class="tr-act"><button type="button" class="ok" onclick="otDecide(\'' + esc(x.id) + '\',\'Aprobado\')">Aprobar</button><button type="button" class="no" onclick="otDecide(\'' + esc(x.id) + '\',\'Rechazado\')">Rechazar</button></div>' : '') + '</td></tr>').join('') +
             '</tbody></table>';
     }
@@ -82,7 +88,7 @@
         otLoad();
     };
 
-    /* Detección: lee la asistencia del rango, clasifica y crea/actualiza registros Pendientes */
+    /* Detección */
     window.otDetect = async function () {
         if (busy) return;
         if (!isAdmin()) return showToast('Solo el administrador puede detectar horas extras.', 'error');
@@ -104,7 +110,7 @@
         q('ot-status').value = 'Pendiente'; otLoad();
     };
 
-    /* Cortes de periodo (kind 'overtime'): cerrar marca los Aprobados con cut_id; revertir los libera */
+    /* Cortes */
     let cutDays = { start_day: 26, end_day: 25 };
     const lastDay = (y, m) => new Date(y, m + 1, 0).getDate();
     function suggestPeriod() {
@@ -134,11 +140,16 @@
         const d = r.data || {}; cutDays = d.cut_days || cutDays;
         if (setDates) { const p = suggestPeriod(); q('otcut-from').value = p[0]; q('otcut-to').value = p[1]; }
         const cuts = d.cuts || [];
-        box.innerHTML = cuts.length ? cuts.map(c => '<div class="oc-row"><div class="l"><b>' + dmy(c.period_start) + ' → ' + dmy(c.period_end) + ' · ' + money(c.total) + '</b>' +
-            '<span>' + c.n + ' registro(s) · ' + hrs(c.hours) + ' · cerrado ' + dmy(c.closed_at) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
-            '<div style="display:flex;gap:6px;align-items:center"><span class="oc-badge ' + (c.status === 'pagado' ? 'ok' : 'sch') + '">' + (c.status === 'pagado' ? 'Pagado' : 'Cerrado') + '</span>' +
-            (c.status === 'cerrado' ? '<button type="button" class="oc-mini" onclick="otCutRevert(\'' + esc(c.id) + '\')">Revertir</button>' : '') + '</div></div>').join('')
-            : '<div class="oc-empty">Aún no hay cortes de horas extras.</div>';
+        box.innerHTML = cuts.length ? cuts.map(c => {
+            const hasMeal = Number(c.meal_total) > 0;
+            return '<div class="oc-row"><div class="l">' +
+                '<b>' + dmy(c.period_start) + ' → ' + dmy(c.period_end) + ' · HH: ' + money(c.total) +
+                (hasMeal ? ' · Aliment: ' + money(c.meal_total) : '') +
+                ' · <u>Total: ' + money(c.grand_total || (Number(c.total) + Number(c.meal_total || 0))) + '</u></b>' +
+                '<span>' + c.n + ' registro(s) · ' + hrs(c.hours) + ' · cerrado ' + dmy(c.closed_at) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
+                '<div style="display:flex;gap:6px;align-items:center"><span class="oc-badge ' + (c.status === 'pagado' ? 'ok' : 'sch') + '">' + (c.status === 'pagado' ? 'Pagado' : 'Cerrado') + '</span>' +
+                (c.status === 'cerrado' ? '<button type="button" class="oc-mini" onclick="otCutRevert(\'' + esc(c.id) + '\')">Revertir</button>' : '') + '</div></div>';
+        }).join('') : '<div class="oc-empty">Aún no hay cortes de horas extras.</div>';
         otCutPreview();
     }
 
@@ -150,8 +161,10 @@
         const r = await rpc('ops_ot_cut_preview', Object.assign(auth(), { p_from: f, p_to: t }));
         if (f !== q('otcut-from').value || t !== q('otcut-to').value) return;
         if (!r.ok) { box.innerHTML = '<span class="tr-warn">' + esc(r.msg) + '</span>'; return; }
-        const d = r.data || {};
-        let h = 'Entran al corte: <b>' + d.approved_n + '</b> aprobado(s), <b>' + hrs(d.approved_hours) + '</b> por <b>' + money(d.approved_total) + '</b>.';
+        const d = r.data || {}, meal = Number(d.meal_total || 0), grand = Number(d.grand_total || 0);
+        let h = 'Entran al corte: <b>' + d.approved_n + '</b> aprobado(s), <b>' + hrs(d.approved_hours) + '</b>.<br>' +
+            'HH extras: <b>' + money(d.approved_total) + '</b>' +
+            (meal > 0 ? ' + Alimentación: <b>' + money(meal) + '</b> = <b class="ot-grand">' + money(grand) + '</b>' : '') + '.';
         if (d.pending_n > 0) h += '<br><span class="tr-warn">Hay ' + d.pending_n + ' pendiente(s) (' + money(d.pending_total) + ') que NO entrarán. Apruébalos o recházalos antes de cortar.</span>';
         if (d.overlap) h += '<br><span class="tr-warn">Se cruza con el corte del ' + dmy(d.overlap.from) + ' al ' + dmy(d.overlap.to) + '.</span>';
         else if (d.approved_n > 0) btn.disabled = false;
@@ -168,9 +181,11 @@
         try {
             const r = await rpc('ops_ot_cut_create', Object.assign(auth(), { p_from: f, p_to: t, p_note: q('otcut-note').value.trim() || null }));
             if (!r.ok) return showToast(r.msg, 'error');
-            const d = r.data || {};
+            const d = r.data || {}, meal = Number(d.meal_total || 0);
             if (typeof registrarAuditoria === 'function') registrarAuditoria('CREATE', 'operational_cuts', 'Corte horas extras ' + f + ' a ' + t + ': ' + d.count + ' registros');
-            showToast('Corte cerrado: ' + d.count + ' registro(s) por ' + money(d.total) + '.' + (d.pending_left ? ' Quedaron ' + d.pending_left + ' pendiente(s) fuera.' : ''));
+            showToast('Corte cerrado: ' + d.count + ' registro(s) · HH: ' + money(d.total) +
+                (meal > 0 ? ' · Aliment: ' + money(meal) + ' · Total: ' + money(d.grand_total) : '') + '.' +
+                (d.pending_left ? ' Quedaron ' + d.pending_left + ' pendiente(s) fuera.' : ''));
             q('otcut-note').value = '';
         } finally { busy = false; }
         await cutsLoad(false); otLoad();
