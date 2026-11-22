@@ -68,7 +68,7 @@
                     <h2>Mantenimiento HVAC <span>inteligente</span> y trazable.</h2>
                     <p class="lead">Planifica rutinas, ejecuta en campo, firma digitalmente y factura desde un solo lugar, sincronizado en la nube.</p>
                     <div class="login-feats">
-                        <div><i class="fa-solid fa-calendar-check"></i> Planificación mensual y agenda de gestión</div>
+                        <div><i class="fa-solid fa-calendar-check"></i> Programación y agenda de gestión</div>
                         <div><i class="fa-solid fa-file-pdf"></i> Informes PDF oficiales con firma del cliente</div>
                         <div><i class="fa-solid fa-cloud-arrow-up"></i> Datos y evidencias seguras en Supabase y R2</div>
                     </div>
@@ -706,6 +706,7 @@
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="tr-status" class="input-box font-bold text-xs w-36" onchange="trLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobados</option><option value="Rechazado">Rechazados</option><option value="">Todos</option></select></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Máx. entre salida y entrada</label><select id="tr-gap" class="input-box font-bold text-xs w-28"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
+                    <button type="button" class="mx-btn" onclick="vmOpen('tr')"><i class="fa-solid fa-magnifying-glass-chart"></i> Validar marcaciones</button>
                     <button type="button" class="mx-btn" id="tr-detect-btn" onclick="trDetect()"><i class="fa-solid fa-location-crosshairs"></i> Detectar por GPS</button>
                     <button type="button" class="mx-btn" onclick="trOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                     <button type="button" class="mx-btn mx-btn-pri" onclick="trOpenNew()"><i class="fa-solid fa-plus"></i> Registro manual</button>
@@ -726,6 +727,7 @@
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hasta</label><input type="date" id="ot-to" class="input-box text-xs" onchange="otLoad()"></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="ot-status" class="input-box font-bold text-xs w-36" onchange="otLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobadas</option><option value="Rechazado">Rechazadas</option><option value="">Todas</option></select></div>
+                    <button type="button" class="mx-btn" onclick="vmOpen('ot')"><i class="fa-solid fa-magnifying-glass-chart"></i> Validar marcaciones</button>
                     <button type="button" class="mx-btn" id="ot-detect-btn" onclick="otDetect()"><i class="fa-solid fa-wand-magic-sparkles"></i> Detectar</button>
                     <button type="button" class="mx-btn" onclick="otOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                 </div>
@@ -871,71 +873,52 @@
         <section id="view-admin-settings" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
                 <h2 class="text-base font-black text-slate-900 tracking-tight">Configuración</h2>
-                <p class="text-xs text-slate-500 mt-1">Apariencia, preferencias globales y configuración operativa del sistema en un solo lugar.</p>
+                <p class="text-xs text-slate-500 mt-1">Apariencia, accesos, tarifas, horas extra y reportes. Elige una categoría.</p>
             </div>
-            <!-- SECCIÓN: CONFIGURACIÓN OPERATIVA (antes solo accesible desde el topbar) -->
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
-                <div class="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                        <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-sliders text-teal-600 mr-2"></i>Configuración Operativa</h3>
-                        <p class="text-xs text-slate-500 mt-1">Tarifas de transporte, recargos por horas extra, rangos horarios, política de alimentación y membrete de los informes PDF.</p>
+            <div class="set-layout">
+                <nav class="set-nav" role="tablist" aria-label="Categorías de configuración">
+                    <button type="button" class="set-nav-btn on" data-sec="general" onclick="setSection('general')"><i class="fa-solid fa-palette"></i><span>Apariencia</span></button>
+                    <button type="button" class="set-nav-btn" data-sec="access" onclick="setSection('access')"><i class="fa-solid fa-toggle-on"></i><span>Accesos y facturación</span></button>
+                    <button type="button" class="set-nav-btn" data-sec="transport" onclick="setSection('transport')"><i class="fa-solid fa-route"></i><span>Transportes</span></button>
+                    <button type="button" class="set-nav-btn" data-sec="overtime" onclick="setSection('overtime')"><i class="fa-solid fa-user-clock"></i><span>Horas extra</span></button>
+                    <button type="button" class="set-nav-btn" data-sec="meal" onclick="setSection('meal')"><i class="fa-solid fa-utensils"></i><span>Jornada y corte</span></button>
+                    <button type="button" class="set-nav-btn" data-sec="brand" onclick="setSection('brand')"><i class="fa-solid fa-id-card"></i><span>Membretes PDF</span></button>
+                </nav>
+                <div class="set-pane">
+                    <div id="set-pane-general" class="set-sec">
+                        <div class="set-card">
+                            <h3><i class="fa-solid fa-palette text-indigo-600"></i> Apariencia</h3>
+                            <p class="set-sub">Tema visual de este dispositivo. No cambia el de los demás administradores.</p>
+                            <div class="theme-switch max-w-sm" role="group" aria-label="Tema de la aplicación">
+                                <button type="button" id="theme-btn-light" onclick="setTheme('light')" aria-pressed="false" title="Modo claro"><i class="fa-solid fa-sun"></i><span>Claro</span></button>
+                                <button type="button" id="theme-btn-dark" onclick="setTheme('dark')" aria-pressed="false" title="Modo oscuro"><i class="fa-solid fa-moon"></i><span>Oscuro</span></button>
+                            </div>
+                        </div>
                     </div>
-                    <button type="button" onclick="opsCfgOpen()" class="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white transition shadow-sm">
-                        <i class="fa-solid fa-gear"></i> Abrir configuración operativa
-                    </button>
-                </div>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-500">
-                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-route text-slate-400 mb-1 block"></i>Transportes</div>
-                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-user-clock text-slate-400 mb-1 block"></i>Horas extra y roles</div>
-                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-utensils text-slate-400 mb-1 block"></i>Alimentación y horarios</div>
-                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-id-card text-slate-400 mb-1 block"></i>Membretes PDF</div>
-                </div>
-            </div>
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
-                <div>
-                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-palette text-indigo-600 mr-2"></i>Apariencia</h3>
-                    <p class="text-xs text-slate-500 mt-1">Selecciona el tema visual de este dispositivo. No cambia el tema de los demás administradores.</p>
-                </div>
-                <div class="theme-switch max-w-sm" role="group" aria-label="Tema de la aplicación">
-                    <button type="button" id="theme-btn-light" onclick="setTheme('light')" aria-pressed="false" title="Modo claro"><i class="fa-solid fa-sun"></i><span>Claro</span></button>
-                    <button type="button" id="theme-btn-dark" onclick="setTheme('dark')" aria-pressed="false" title="Modo oscuro"><i class="fa-solid fa-moon"></i><span>Oscuro</span></button>
-                </div>
-            </div>
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4">
-                <div>
-                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-eye-slash text-amber-600 mr-2"></i>Mostrar u ocultar funciones</h3>
-                    <p class="text-xs text-slate-500 mt-1">Estas preferencias son globales: se aplican a todos los administradores y permanecen guardadas después de cerrar sesión o recargar la aplicación.</p>
-                </div>
-                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                    <span><b class="block text-xs text-slate-800">Carga manual de facturas</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar la opción para registrar una factura histórica individual.</small></span>
-                    <input type="checkbox" id="setting-show-manual-invoice" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
-                </label>
-                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                    <span><b class="block text-xs text-slate-800">Carga masiva de facturas por Excel</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar la opción para importar varias facturas de una vez.</small></span>
-                    <input type="checkbox" id="setting-show-bulk-invoice" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
-                </label>
-                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                    <span><b class="block text-xs text-slate-800">Carga de proyección anual</b><small class="block text-[11px] text-slate-500 mt-0.5">Mostrar el acceso para importar las metas mensuales de facturación.</small></span>
-                    <input type="checkbox" id="setting-show-financial-projection" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-teal-600">
-                </label>
-                <div class="flex items-center justify-between gap-3 flex-wrap">
-                    <p id="app-settings-permission-note" class="text-[11px] text-slate-500">Solo el administrador principal puede cambiar estas preferencias.</p>
-                    <button type="button" id="setting-reset-access" onclick="resetAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700">Restablecer accesos</button>
-                </div>
-            </div>
-            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
-                <div>
-                    <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-shield-halved text-rose-600 mr-2"></i>Política global de facturación</h3>
-                    <p class="text-xs text-slate-500 mt-1">Controla si se pueden guardar facturas con gastos operativos en cero. La regla se comparte con todos los administradores.</p>
-                </div>
-                <label class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                    <span><b class="block text-xs text-slate-800">Permitir facturar con gastos en $0</b><small class="block text-[11px] text-slate-500 mt-0.5">Activado: se solicita confirmación antes de guardar. Desactivado: bloquea la factura hasta ingresar gastos mayores que cero.</small></span>
-                    <input type="checkbox" id="setting-allow-zero-expenses" onchange="saveAppFeatureSettings()" class="h-4 w-4 accent-rose-600">
-                </label>
-                <p class="text-[11px] text-slate-500">El administrador principal (cuenta inicial) define esta regla. Los demás administradores la reciben automáticamente al sincronizar.</p>
-                <div class="flex items-center justify-between gap-3 flex-wrap">
-                    <p id="app-settings-sync-status" class="text-[11px] text-slate-500" aria-live="polite">Preferencias compartidas con Supabase.</p>
-                    <button type="button" id="setting-save-global" onclick="saveAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white">Guardar preferencias para todos</button>
+                    <div id="set-pane-access" class="set-sec hidden">
+                        <div class="set-card">
+                            <h3><i class="fa-solid fa-eye-slash text-amber-600"></i> Funciones visibles</h3>
+                            <p class="set-sub">Globales: se aplican a todos los administradores.</p>
+                            <label class="set-row"><span><b>Carga manual de facturas</b><small>Registrar una factura histórica individual.</small></span><input type="checkbox" id="setting-show-manual-invoice" onchange="saveAppFeatureSettings()" class="set-check"></label>
+                            <label class="set-row"><span><b>Carga masiva de facturas por Excel</b><small>Importar varias facturas de una vez.</small></span><input type="checkbox" id="setting-show-bulk-invoice" onchange="saveAppFeatureSettings()" class="set-check"></label>
+                            <label class="set-row"><span><b>Carga de proyección anual</b><small>Importar las metas mensuales de facturación.</small></span><input type="checkbox" id="setting-show-financial-projection" onchange="saveAppFeatureSettings()" class="set-check"></label>
+                        </div>
+                        <div class="set-card">
+                            <h3><i class="fa-solid fa-shield-halved text-rose-600"></i> Política de facturación</h3>
+                            <label class="set-row"><span><b>Permitir facturar con gastos en $0</b><small>Activado: pide confirmación. Desactivado: bloquea hasta ingresar gastos.</small></span><input type="checkbox" id="setting-allow-zero-expenses" onchange="saveAppFeatureSettings()" class="set-check set-check-rose"></label>
+                        </div>
+                        <div class="set-foot">
+                            <div>
+                                <p id="app-settings-permission-note" class="text-[11px] text-slate-500">Solo el administrador principal puede cambiar estas preferencias.</p>
+                                <p id="app-settings-sync-status" class="text-[11px] text-slate-500" aria-live="polite">Preferencias compartidas con Supabase.</p>
+                            </div>
+                            <div class="flex gap-2 flex-wrap">
+                                <button type="button" id="setting-reset-access" onclick="resetAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700">Restablecer accesos</button>
+                                <button type="button" id="setting-save-global" onclick="saveAppFeatureSettings()" class="px-3 py-2 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white">Guardar para todos</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="set-pane-ops" class="set-sec hidden"><div id="set-ops-body" class="set-ops"></div></div>
                 </div>
             </div>
         </section>
@@ -2056,20 +2039,6 @@
 </div>
 <script id="att-edit-module" src="js/admin/att-edit.js?v=f0"></script>
 
-<!-- ===================== MÓDULO: CONFIGURACIÓN OPERATIVA (Etapas 1B y 1C) ===================== -->
-<div id="ops-cfg-modal" class="mx-modal hidden" onclick="if(event.target===this)opsCfgClose()">
-  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="ops-cfg-title">
-    <div class="mx-head"><h3 id="ops-cfg-title"><i class="fa-solid fa-gear text-teal-600"></i> Configuración Operativa</h3><button type="button" class="mx-x" onclick="opsCfgClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="oc-tabs" role="tablist">
-      <button type="button" class="oc-tab on" data-tab="transport" onclick="opsCfgTab('transport')">Transportes</button>
-      <button type="button" class="oc-tab" data-tab="overtime" onclick="opsCfgTab('overtime')">Horas extras y roles</button>
-      <button type="button" class="oc-tab" data-tab="meal" onclick="opsCfgTab('meal')">Alimentación y horarios</button>
-      <button type="button" class="oc-tab" data-tab="brand" onclick="opsCfgTab('brand')">Membretes</button>
-    </div>
-    <div class="mx-body" id="ops-cfg-body"></div>
-    <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="opsCfgClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
-  </div>
-</div>
 <div id="trcut-modal" class="mx-modal hidden" onclick="if(event.target===this)trCloseCuts()">
   <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="trcut-title">
     <div class="mx-head"><h3 id="trcut-title"><i class="fa-solid fa-scissors text-teal-600"></i> Cortes de transportes</h3><button type="button" class="mx-x" onclick="trCloseCuts()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
@@ -2114,8 +2083,27 @@
 <link rel="stylesheet" href="css/admin/overtime.css?v=3a">
 <script id="overtime-module" src="js/admin/overtime.js?v=3a"></script>
 <script id="transports-module" src="js/admin/transports.js?v=2c"></script>
-<link rel="stylesheet" href="css/admin/ops-config.css?v=1c">
-<script id="ops-config-module" src="js/admin/ops-config.js?v=1c"></script>
+<div id="vm-modal" class="mx-modal hidden" onclick="if(event.target===this)vmClose()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="vm-title">
+    <div class="mx-head"><h3 id="vm-title"><i class="fa-solid fa-magnifying-glass-chart text-teal-600"></i> Validar marcaciones</h3><button type="button" class="mx-x" onclick="vmClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="vm-range">
+      <div><label>Desde</label><input type="date" id="vm-from" class="input-box text-xs"></div>
+      <div><label>Hasta</label><input type="date" id="vm-to" class="input-box text-xs"></div>
+      <div><label>Máx. salida→entrada</label><select id="vm-gap" class="input-box font-bold text-xs"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
+      <button type="button" id="vm-run" class="mx-btn mx-btn-pri" onclick="vmRun()"><i class="fa-solid fa-play"></i> Validar</button>
+    </div>
+    <div class="oc-tabs" role="tablist">
+      <button type="button" class="oc-tab on" data-v="ot" onclick="vmTab('ot')">Horas extras</button>
+      <button type="button" class="oc-tab" data-v="tr" onclick="vmTab('tr')">Transportes</button>
+    </div>
+    <div class="mx-body" id="vm-body"></div>
+    <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="vmClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="css/admin/ops-config.css?v=2b">
+<script id="ops-config-module" src="js/admin/ops-config.js?v=2a"></script>
+<script id="validate-marks-module" src="js/admin/validate-marks.js?v=2b"></script>
 
 
 
