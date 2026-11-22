@@ -21,7 +21,7 @@
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
-    const auth = () => { const u = me(); return { p_admin_id: String(u.id), p_hash: u.passwordHash || '' }; };
+    const auth = () => window.opsAuth();
     const isAdmin = () => { const u = me(); return !!(u && u.role === 'ADMIN'); };
 
     window.trInit = function () {

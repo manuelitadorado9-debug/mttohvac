@@ -2885,6 +2885,7 @@ async function authPedirNuevaClave() {
 
             errorBox.classList.add('hidden');
             beginActiveSession(matchedUser);
+            try { if (window.opsSessionLogin) await window.opsSessionLogin(matchedUser, passwordInput); } catch (_) {}
             document.getElementById('app-login-screen').classList.add('hidden');
             document.getElementById('header-role-badge').innerText = matchedUser.role;
             document.getElementById('header-user-welcome').innerText = matchedUser.name || matchedUser.username || '';
@@ -2895,6 +2896,7 @@ async function authPedirNuevaClave() {
         }
 
         function logoutSession() {
+            try { if (window.opsSessionLogout) window.opsSessionLogout(); } catch (_) {}
             clearStoredAuthSession();
             updateSidebarLinks();
             document.getElementById('header-user-welcome').innerText = '';

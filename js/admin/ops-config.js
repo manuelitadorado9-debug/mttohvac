@@ -25,7 +25,7 @@
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
-    const auth = () => { const u = me(); return { p_admin_id: String(u.id), p_hash: u.passwordHash || '' }; };
+    const auth = () => window.opsAuth();
 
     async function load() {
         const body = ob(); body.innerHTML = '<div class="oc-empty">Cargando…</div>';

@@ -5,7 +5,7 @@
     const q = id => document.getElementById(id);
     const me = () => systemUsers.find(u => String(u.id) === String(activeUser));
     const isAdmin = () => { const u = me(); return !!(u && u.role === 'ADMIN'); };
-    const auth = () => { const u = me(); return { p_admin_id: String(u.id), p_hash: u.passwordHash || '' }; };
+    const auth = () => window.opsAuth();
     const money = n => '$ ' + Number(n || 0).toLocaleString('es-CO');
     const nf = n => Number(n || 0).toLocaleString('es-CO');
     const hrs = n => (Math.round(Number(n || 0) * 100) / 100).toLocaleString('es-CO') + ' h';

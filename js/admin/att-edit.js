@@ -67,7 +67,7 @@ async function attEditSave() {
     if (newTechId  && newFecha)  toRecalc.add(newTechId  + '|' + newFecha);
     for (const key of toRecalc) {
         const [tid, fec] = key.split('|');
-        attRpc('ops_ot_recalc_day', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_tech_id: tid, p_date: fec })
+        attRpc('ops_ot_recalc_day', { ...window.opsAuth(), p_tech_id: tid, p_date: fec })
             .then(res => {
                 if (!res.ok) return; // silencioso; no interrumpe el flujo
                 const d = res.data || {};
@@ -93,7 +93,7 @@ async function attDelete(id) {
 
     // Recalcular HH extras del técnico y día eliminado
     if (techId && fecha) {
-        attRpc('ops_ot_recalc_day', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_tech_id: techId, p_date: fecha })
+        attRpc('ops_ot_recalc_day', { ...window.opsAuth(), p_tech_id: techId, p_date: fecha })
             .then(res => { if ((res.data || {}).deleted && typeof window.otLoad === 'function') window.otLoad(); })
             .catch(() => {});
     }

@@ -24,7 +24,7 @@
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
-    const auth = () => { const u = me(); return { p_admin_id: String(u.id), p_hash: u.passwordHash || '' }; };
+    const auth = () => window.opsAuth();
     const isAdmin = () => { const u = me(); return !!(u && u.role === 'ADMIN'); };
 
     window.otInit = function () {
@@ -148,7 +148,7 @@
                 ' · <u>Total: ' + money(c.grand_total || (Number(c.total) + Number(c.meal_total || 0))) + '</u></b>' +
                 '<span>' + c.n + ' registro(s) · ' + hrs(c.hours) + ' · cerrado ' + dmy(c.closed_at) + (c.note ? ' · ' + esc(c.note) : '') + '</span></div>' +
                 '<div style="display:flex;gap:6px;align-items:center"><span class="oc-badge ' + (c.status === 'pagado' ? 'ok' : 'sch') + '">' + (c.status === 'pagado' ? 'Pagado' : 'Cerrado') + '</span>' +
-                '<button type="button" class="oc-mini ot-pdf-btn" onclick="otCutPDF(\\'' + esc(c.id) + '\\')"><i class="fa-solid fa-file-pdf"></i> PDF</button>' +
+                '<button type="button" class="oc-mini ot-pdf-btn" onclick="otCutPDF(\'' + esc(c.id) + '\')"><i class="fa-solid fa-file-pdf"></i> PDF</button>' +
                 (c.status === 'cerrado' ? '<button type="button" class="oc-mini" onclick="otCutRevert(\'' + esc(c.id) + '\')">Revertir</button>' : '') + '</div></div>';
         }).join('') : '<div class="oc-empty">Aún no hay cortes de horas extras.</div>';
         otCutPreview();
