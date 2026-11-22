@@ -693,6 +693,26 @@
             </div>
         </section>
 
+        <section id="view-admin-transports" class="hidden space-y-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
+                <div>
+                    <h2 class="text-base font-black text-slate-900 tracking-tight">Transportes</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">Traslados del personal entre clientes. Registra, aprueba o rechaza cada uno; el valor sale de la tarifa vigente.</p>
+                </div>
+                <div class="flex items-end gap-2 flex-wrap">
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Desde</label><input type="date" id="tr-from" class="input-box text-xs" onchange="trLoad()"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hasta</label><input type="date" id="tr-to" class="input-box text-xs" onchange="trLoad()"></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
+                        <select id="tr-status" class="input-box font-bold text-xs w-36" onchange="trLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobados</option><option value="Rechazado">Rechazados</option><option value="">Todos</option></select></div>
+                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Máx. entre salida y entrada</label><select id="tr-gap" class="input-box font-bold text-xs w-28"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
+                    <button type="button" class="mx-btn" id="tr-detect-btn" onclick="trDetect()"><i class="fa-solid fa-location-crosshairs"></i> Detectar por GPS</button>
+                    <button type="button" class="mx-btn mx-btn-pri" onclick="trOpenNew()"><i class="fa-solid fa-plus"></i> Registro manual</button>
+                </div>
+            </div>
+            <div id="tr-kpis" class="tr-kpis"></div>
+            <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm overflow-x-auto" id="tr-list"></div>
+        </section>
+
         <section id="view-admin-financial" class="hidden finance-dashboard space-y-4">
     <header class="fd-card fd-header">
         <div class="fd-header-grid">
@@ -2011,6 +2031,22 @@
     <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="opsCfgClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
   </div>
 </div>
+<div id="tr-modal" class="mx-modal hidden" onclick="if(event.target===this)trCloseNew()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="tr-title">
+    <div class="mx-head"><h3 id="tr-title"><i class="fa-solid fa-route text-teal-600"></i> Registro manual de traslado</h3><button type="button" class="mx-x" onclick="trCloseNew()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="oc-card" style="margin:14px"><div class="oc-form">
+      <div class="full"><label>Empleado</label><select id="tr-emp" class="input-box text-xs"></select></div>
+      <div><label>Fecha</label><input id="tr-date" type="date" class="input-box text-xs"></div>
+      <div><label>Valor (opcional)</label><input id="tr-amt" class="input-box text-xs" inputmode="numeric" placeholder="Vacío = tarifa vigente" autocomplete="off"></div>
+      <div><label>Origen (cliente)</label><select id="tr-from-cli" class="input-box text-xs"></select></div>
+      <div><label>Destino (cliente)</label><select id="tr-to-cli" class="input-box text-xs"></select></div>
+      <div class="full"><label>Motivo</label><input id="tr-reason" class="input-box text-xs" maxlength="200" placeholder="Ej: Traslado a obra por falla urgente"></div>
+      <div class="full"><button type="button" class="mx-btn mx-btn-pri" onclick="trSaveNew()"><i class="fa-solid fa-floppy-disk"></i> Guardar (queda Pendiente)</button></div>
+    </div></div>
+  </div>
+</div>
+<link rel="stylesheet" href="css/admin/transports.css?v=2a">
+<script id="transports-module" src="js/admin/transports.js?v=2b"></script>
 <link rel="stylesheet" href="css/admin/ops-config.css?v=1c">
 <script id="ops-config-module" src="js/admin/ops-config.js?v=1c"></script>
 
