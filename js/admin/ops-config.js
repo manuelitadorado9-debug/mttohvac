@@ -2,6 +2,7 @@
    Solo ADMIN. Todo pasa por las funciones SQL ops_* de la Etapa 1A (validan rol + hash). */
 (function () {
     const q = id => document.getElementById(id);
+    const ob = () => q('set-ops-body');
     const me = () => systemUsers.find(u => String(u.id) === String(activeUser));
     const isAdmin = () => { const u = me(); return !!(u && u.role === 'ADMIN'); };
     const money = n => '$ ' + Number(n || 0).toLocaleString('es-CO');
@@ -27,15 +28,14 @@
     const auth = () => { const u = me(); return { p_admin_id: String(u.id), p_hash: u.passwordHash || '' }; };
 
     async function load() {
-        const body = q('ops-cfg-body'); body.innerHTML = '<div class="oc-empty">Cargando…</div>';
+        const body = ob(); body.innerHTML = '<div class="oc-empty">Cargando…</div>';
         const r = await rpc('ops_config_get', auth());
         if (!r.ok) { cfg = null; body.innerHTML = '<div class="oc-err">' + esc(r.msg) + '</div>'; return; }
         cfg = r.data || {}; render();
     }
 
     function render() {
-        document.querySelectorAll('#ops-cfg-modal .oc-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-        if (!cfg) return;
+                if (!cfg) return;
         if (tab === 'transport') renderTransport();
         else if (tab === 'overtime') renderOvertime();
         else if (tab === 'meal') renderMeal();
@@ -61,7 +61,7 @@
         }).join('') || '<div class="oc-empty">Sin tarifas especiales. Los traslados usan la tarifa general.</div>';
 
         const names = [...new Map(clientsCatalog.filter(c => c && c.name).map(c => [String(c.id), c.name])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
-        q('ops-cfg-body').innerHTML =
+        ob().innerHTML =
             '<div class="oc-card"><h4><i class="fa-solid fa-route"></i> Tarifa general de transporte</h4>' +
             '<div class="oc-now"><b>' + (cur ? money(cur.amount) : 'Sin definir') + '</b><span class="oc-hint">' + (cur ? 'vigente desde ' + dmy(cur.effective_date) : 'por traslado') + '</span></div>' +
             '<div class="oc-form"><div><label>Nuevo valor (COP)</label><input id="oc-g-amt" class="input-box text-xs" inputmode="numeric" placeholder="Ej: 15.000" autocomplete="off"></div>' +
@@ -115,7 +115,7 @@
             '<button type="button" class="oc-mini" data-act="hol-del" data-date="' + esc(h.holiday_date) + '" data-name="' + esc(h.name) + '">Quitar</button></div>').join('') ||
             '<div class="oc-err">No hay festivos cargados para ' + hYear + '. Sin ellos, las horas festivas no se detectarán.</div>';
 
-        q('ops-cfg-body').innerHTML =
+        ob().innerHTML =
             '<div class="oc-card"><h4><i class="fa-solid fa-user-clock"></i> Valor de la hora extra por cargo</h4>' +
             '<div class="oc-form"><div class="full"><label>Cargo</label><input id="oc-o-role" class="input-box text-xs" list="oc-o-roles" maxlength="60" placeholder="Ej: Técnico, Auxiliar, Supervisor" autocomplete="off"><datalist id="oc-o-roles">' + roles.map(r => '<option value="' + esc(r) + '">').join('') + '</datalist></div>' +
             OT_TYPES.map(([k, l]) => '<div><label>' + l + ' (COP/hora)</label><input id="oc-o-' + k + '" class="input-box text-xs" inputmode="numeric" placeholder="Sin cambio" autocomplete="off"></div>').join('') +
@@ -138,7 +138,7 @@
 
     function renderMeal() {
         const meal = setting('meal_night_amount', { amount: 0 }), sch = setting('schedule', { workday_end: '16:30', tolerance_end: '17:00' }), cut = setting('cut_days', { start_day: 11, end_day: 25 });
-        q('ops-cfg-body').innerHTML =
+        ob().innerHTML =
             '<div class="oc-card"><h4><i class="fa-solid fa-utensils"></i> Alimentación nocturna</h4>' +
             '<div class="oc-form"><div class="full"><label>Valor (COP)</label><input id="oc-m-amt" class="input-box text-xs" inputmode="numeric" placeholder="Ej: 20.000" autocomplete="off" value="' + (num(meal.amount) ? num(meal.amount).toLocaleString('es-CO') : '') + '"></div>' +
             '<div class="full"><button type="button" class="mx-btn mx-btn-pri" data-act="set-meal"><i class="fa-solid fa-floppy-disk"></i> Guardar alimentación</button></div></div>' +
@@ -161,7 +161,7 @@
     /* ---------- 1C · Membretes ---------- */
     function renderBrand() {
         const c = setting('company', { header_text: '', footer_text: '', logo_url: '', legalization_text: '' });
-        q('ops-cfg-body').innerHTML =
+        ob().innerHTML =
             '<div class="oc-card"><h4><i class="fa-solid fa-file-signature"></i> Membretes de los reportes</h4>' +
             '<div class="oc-form"><div class="full"><label>Encabezado</label><input id="oc-b-head" class="input-box text-xs" maxlength="200" placeholder="Nombre de la empresa" value="' + esc(c.header_text) + '"></div>' +
             '<div class="full"><label>Pie de página</label><input id="oc-b-foot" class="input-box text-xs" maxlength="200" placeholder="Dirección, teléfono, correo" value="' + esc(c.footer_text) + '"></div>' +
@@ -261,13 +261,18 @@
         }
     }
 
-    window.opsCfgOpen = function () {
-        if (!isAdmin()) return showToast('Solo el administrador puede abrir la configuración operativa.', 'error');
-        q('ops-cfg-modal').classList.remove('hidden'); load();
+    const OPS_SECS = ['transport', 'overtime', 'meal', 'brand'];
+    window.setSection = function (sec) {
+        document.querySelectorAll('.set-nav-btn').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
+        const ops = OPS_SECS.includes(sec);
+        ['general', 'access'].forEach(k => { const el = q('set-pane-' + k); if (el) el.classList.toggle('hidden', ops || k !== sec); });
+        const po = q('set-pane-ops'); if (po) po.classList.toggle('hidden', !ops);
+        if (!ops) return;
+        tab = sec;
+        if (!isAdmin()) { ob().innerHTML = '<div class="oc-err">Solo el administrador puede ver esta configuración.</div>'; return; }
+        if (cfg) render(); else load();
     };
-    window.opsCfgClose = function () { q('ops-cfg-modal').classList.add('hidden'); };
-    window.opsCfgTab = function (t) { tab = t; render(); };
-    document.addEventListener('DOMContentLoaded', () => { const m = q('ops-cfg-modal'); if (m) m.addEventListener('click', onClick); });
-    if (document.readyState !== 'loading') { const m = q('ops-cfg-modal'); if (m) m.addEventListener('click', onClick); }
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && q('ops-cfg-modal') && !q('ops-cfg-modal').classList.contains('hidden')) window.opsCfgClose(); });
+    window.opsCfgTab = window.setSection;
+    function bind() { const m = q('set-ops-body'); if (m && !m._b) { m._b = 1; m.addEventListener('click', onClick); } }
+    document.addEventListener('DOMContentLoaded', bind); bind();
 })();

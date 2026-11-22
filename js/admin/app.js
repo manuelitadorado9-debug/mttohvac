@@ -2999,7 +2999,7 @@ async function authPedirNuevaClave() {
                     </button>
                     <div class="nav-sub" id="nav-sub-plan"><div class="nav-sub-in"></div></div>`;
                 const subPlan = groupPlan.querySelector('.nav-sub-in');
-                subPlan.appendChild(makeLink('fa-calendar-plus', 'Programación mensual', 'admin-planning'));
+                subPlan.appendChild(makeLink('fa-calendar-plus', 'Programación', 'admin-planning'));
                 subPlan.appendChild(makeLink('fa-clipboard-list', 'Agenda de Gestión', 'admin-agenda'));
                 groupPlan.querySelector('.nav-group-btn').onclick = function () {
                     const open = !groupPlan.classList.contains('open');
