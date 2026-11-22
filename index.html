@@ -130,7 +130,6 @@
             </div>
         </div>
         <div class="tb-right">
-            <button type="button" onclick="opsCfgOpen()" class="tb-btn" id="ops-cfg-btn" title="Configuración Operativa" aria-label="Configuración Operativa"><i class="fa-solid fa-gear"></i> <span>Config. operativa</span></button>
             <button type="button" onclick="window.hvacAdminManualSync && window.hvacAdminManualSync(this)" class="tb-btn" id="admin-manual-sync-btn">
                 <i class="fa-solid fa-rotate"></i> <span>Sincronizar</span>
             </button>
@@ -320,12 +319,17 @@
                 </div>
             </div>
             
-            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <h2 class="text-base font-black text-slate-900 tracking-tight">Planificación y Proyección Mensual</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Base de mantenimientos programados para el mes seleccionado.</p>
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <h2 class="text-base font-black text-slate-900 tracking-tight">Planificación y Proyección Mensual</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Base de mantenimientos programados para el mes seleccionado.</p>
+                    </div>
+                    <button onclick="openNewRoutineModal()" class="btn-teal text-xs py-2.5">
+                        <i class="fa-solid fa-plus"></i> Nueva Rutina
+                    </button>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100">
                     <select id="plan-filter-status" onchange="renderPlanningModule()" class="input-box text-xs font-bold w-44 py-2">
                         <option value="ALL">Todos los Estados</option>
                         <option value="PENDING">Pendientes por Programar</option>
@@ -348,11 +352,8 @@
                         </select>
                         <input type="number" id="plan-filter-year" value="2026" onchange="renderPlanningModule()" class="input-box text-xs font-bold w-20 py-1.5 text-center">
                     </div>
-                    <button onclick="openBatchProjectionModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl flex items-center gap-2 transition shadow-sm">
-                        <i class="fa-solid fa-file-excel"></i> Carga Masiva (Plantilla Proyección)
-                    </button>
-                    <button onclick="openNewRoutineModal()" class="btn-teal text-xs py-2.5">
-                        <i class="fa-solid fa-plus"></i> Nueva Rutina de Mantenimiento
+                    <button onclick="openBatchProjectionModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-2 transition shadow-sm">
+                        <i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">Carga Masiva</span><span class="sm:hidden">Excel</span>
                     </button>
                 </div>
             </div>
@@ -869,8 +870,26 @@
     
         <section id="view-admin-settings" class="hidden space-y-4">
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head">
-                <h2 class="text-base font-black text-slate-900 tracking-tight">Configuración de la aplicación</h2>
-                <p class="text-xs text-slate-500 mt-1">La apariencia se conserva en este dispositivo. Las preferencias operativas se guardan en Supabase y se comparten con todos los administradores; solo el administrador principal puede modificarlas.</p>
+                <h2 class="text-base font-black text-slate-900 tracking-tight">Configuración</h2>
+                <p class="text-xs text-slate-500 mt-1">Apariencia, preferencias globales y configuración operativa del sistema en un solo lugar.</p>
+            </div>
+            <!-- SECCIÓN: CONFIGURACIÓN OPERATIVA (antes solo accesible desde el topbar) -->
+            <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-900"><i class="fa-solid fa-sliders text-teal-600 mr-2"></i>Configuración Operativa</h3>
+                        <p class="text-xs text-slate-500 mt-1">Tarifas de transporte, recargos por horas extra, rangos horarios, política de alimentación y membrete de los informes PDF.</p>
+                    </div>
+                    <button type="button" onclick="opsCfgOpen()" class="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white transition shadow-sm">
+                        <i class="fa-solid fa-gear"></i> Abrir configuración operativa
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-slate-500">
+                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-route text-slate-400 mb-1 block"></i>Transportes</div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-user-clock text-slate-400 mb-1 block"></i>Horas extra y roles</div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-utensils text-slate-400 mb-1 block"></i>Alimentación y horarios</div>
+                    <div class="rounded-xl bg-slate-50 border border-slate-200 p-2.5 text-center"><i class="fa-solid fa-id-card text-slate-400 mb-1 block"></i>Membretes PDF</div>
+                </div>
             </div>
             <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-3">
                 <div>
