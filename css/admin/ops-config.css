@@ -1,5 +1,4 @@
 /* Configuración Operativa · Etapas 1B y 1C */
-#ops-cfg-modal .mx-sheet{max-width:760px;max-height:min(100dvh - 24px,860px)}
 .oc-tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 16px 0;border-bottom:1px solid var(--line);flex:none}
 .oc-tab{flex:none;padding:8px 12px;border:0;background:transparent;color:var(--text-2);font-size:.78rem;font-weight:800;border-bottom:2px solid transparent;white-space:nowrap}
 .oc-tab.on{color:#0b9e91;border-bottom-color:#0b9e91}
@@ -21,3 +20,48 @@
 .oc-mini{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:8px;font-size:.68rem;font-weight:800;padding:4px 8px}
 .oc-err{padding:14px;border-radius:12px;background:#fef2f2;color:#b91c1c;font-size:.78rem;font-weight:700}
 .oc-empty{font-size:.74rem;color:var(--text-2);padding:6px 0}
+
+/* ===== Configuración: navegación por categorías (v2a) ===== */
+.set-layout{display:grid;gap:12px;grid-template-columns:1fr;align-items:start}
+@media (min-width:860px){.set-layout{grid-template-columns:220px minmax(0,1fr)}}
+.set-nav{display:flex;gap:6px;overflow-x:auto;padding:6px;background:var(--card,#fff);border:1px solid var(--line,#e2e8f0);border-radius:16px;scrollbar-width:none}
+.set-nav::-webkit-scrollbar{display:none}
+@media (min-width:860px){.set-nav{flex-direction:column;overflow:visible;position:sticky;top:12px}}
+.set-nav-btn{flex:none;display:flex;align-items:center;gap:10px;padding:9px 12px;border:0;border-radius:11px;background:transparent;color:var(--text-2,#64748b);font-size:.78rem;font-weight:800;white-space:nowrap;text-align:left;transition:background .15s,color .15s}
+.set-nav-btn i{width:16px;text-align:center;font-size:.8rem}
+.set-nav-btn:hover{background:var(--ctl,#f1f5f9)}
+.set-nav-btn.on{background:rgba(11,158,145,.12);color:#0b9e91}
+.set-pane{min-width:0;display:grid;gap:12px}
+.set-sec{display:grid;gap:12px}
+.set-sec.hidden{display:none}
+.set-ops{display:grid;gap:12px}
+.set-card{background:var(--card,#fff);border:1px solid var(--line,#e2e8f0);border-radius:16px;padding:16px;display:grid;gap:10px}
+.set-card h3{margin:0;font-size:.85rem;font-weight:900;display:flex;align-items:center;gap:8px}
+.set-sub{margin:-4px 0 0;font-size:.72rem;color:var(--text-2,#64748b)}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-top:1px solid var(--line,#e2e8f0);cursor:pointer}
+.set-row:first-of-type{border-top:0}
+.set-row span{min-width:0}
+.set-row b{display:block;font-size:.78rem;font-weight:800}
+.set-row small{display:block;font-size:.68rem;color:var(--text-2,#64748b);margin-top:2px}
+.set-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:2px 4px}
+/* Interruptores: mismo tamaño en todas las opciones */
+.set-check{appearance:none;-webkit-appearance:none;flex:none;width:42px;height:24px;margin:0;border-radius:99px;background:#cbd5e1;position:relative;cursor:pointer;transition:background .18s;border:0;outline-offset:2px}
+.set-check::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s}
+.set-check:checked{background:#0b9e91}
+.set-check-rose:checked{background:#e11d48}
+.set-check:checked::after{transform:translateX(18px)}
+.set-check:disabled{opacity:.5;cursor:not-allowed}
+/* Tarjetas de operación dentro de la configuración */
+.set-ops .oc-card{background:var(--card,#fff);border-radius:16px;padding:16px}
+/* ===== Validar marcaciones (v2a) ===== */
+#vm-modal .mx-sheet{max-width:820px;max-height:min(100dvh - 24px,880px)}
+.vm-range{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.vm-range label{display:block;font-size:.62rem;font-weight:800;text-transform:uppercase;color:var(--text-2);margin-bottom:4px}
+.vm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media (min-width:640px){.vm-grid{grid-template-columns:repeat(4,1fr)}}
+.vm-kpi{border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:2px}
+.vm-kpi small{font-size:.62rem;font-weight:800;text-transform:uppercase;color:var(--text-2)}
+.vm-kpi b{font-size:1.05rem;font-weight:900}.vm-kpi span{font-size:.64rem;color:var(--text-2)}
+.vm-list{border:1px solid var(--line);border-radius:12px;padding:2px 12px;max-height:300px;overflow:auto}
+.vm-actions{display:flex;justify-content:flex-end}
+#vm-body{display:grid;gap:10px;align-content:start}
