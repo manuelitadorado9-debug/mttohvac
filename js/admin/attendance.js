@@ -101,7 +101,7 @@ async function attPersistClientRecalc(client) {
         const patch = {};
         ['tipo', 'fecha', 'hora', 'tecnico_id', 'tecnico_nombre', 'cliente_id', 'cliente_nombre'].forEach(k => { if (r[k] != null) patch[k] = r[k]; });
         Object.assign(patch, { sede_lat: f.sede_lat, sede_lng: f.sede_lng, radio_permitido_m: f.radio_permitido_m, distancia_m: f.distancia_m, dentro_rango: f.dentro_rango });
-        return attRpc('admin_asistencia_update', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_id: r.id, p_patch: patch, p_motivo: motivo });
+        return attRpc('admin_asistencia_update', { ...window.opsAuth(), p_id: r.id, p_patch: patch, p_motivo: motivo });
     };
     const first = await send(todo[0]);                              // prueba: ¿el servidor acepta y guarda estos campos?
     if (!first.ok) return out;

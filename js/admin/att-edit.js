@@ -53,7 +53,7 @@ async function attEditSave() {
         } else if (q('att-e-rmfoto').checked) patch.foto_url = '';
     } catch (e) { return showToast('Error procesando la foto.', 'error'); }
 
-    const r = await attRpc('admin_asistencia_update', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_id: id, p_patch: patch, p_motivo: motivo || '' });
+    const r = await attRpc('admin_asistencia_update', { ...window.opsAuth(), p_id: id, p_patch: patch, p_motivo: motivo || '' });
     if (!r.ok) return showToast(r.msg, 'error');
     registrarAuditoria('UPDATE', 'asistencia', id);
     attEditClose();
@@ -85,7 +85,7 @@ async function attDelete(id) {
     const techId = row ? String(row.tecnico_id) : null;
     const fecha  = row ? row.fecha : null;
 
-    const r = await attRpc('admin_asistencia_delete', { p_admin_id: String(me.id), p_hash: me.passwordHash || '', p_id: id, p_motivo: motivo || '' });
+    const r = await attRpc('admin_asistencia_delete', { ...window.opsAuth(), p_id: id, p_motivo: motivo || '' });
     if (!r.ok) return showToast(r.msg, 'error');
     registrarAuditoria('DELETE', 'asistencia', id);
     showToast('Marcación eliminada.');
