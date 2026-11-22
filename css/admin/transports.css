@@ -1,0 +1,17 @@
+/* Transportes · Etapa 2A */
+.tr-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media (min-width:640px){.tr-kpis{grid-template-columns:repeat(4,1fr)}}
+.tr-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:12px}
+.tr-kpi span{display:block;font-size:.62rem;font-weight:800;text-transform:uppercase;color:#64748b}
+.tr-kpi b{font-size:1.15rem;font-weight:900;color:#0f172a}
+.tr-table{width:100%;border-collapse:collapse;font-size:.74rem}
+.tr-table th{text-align:left;font-size:.62rem;text-transform:uppercase;color:#64748b;padding:8px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
+.tr-table td{padding:8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+.tr-table td.num{text-align:right;font-weight:800;white-space:nowrap}
+.tr-st{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.tr-st.p{background:#fef3c7;color:#92400e}.tr-st.a{background:#d1fae5;color:#047857}.tr-st.r{background:#fee2e2;color:#b91c1c}
+.tr-act{display:flex;gap:6px}
+.tr-act button{border:0;border-radius:8px;padding:5px 9px;font-size:.68rem;font-weight:800;color:#fff}
+.tr-act .ok{background:#059669}.tr-act .no{background:#dc2626}
+.tr-sub{display:block;color:#64748b;font-size:.64rem;margin-top:1px}
+#tr-modal .mx-sheet{max-width:560px}
