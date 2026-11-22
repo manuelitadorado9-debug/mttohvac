@@ -697,7 +697,7 @@
             <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm page-head flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <h2 class="text-base font-black text-slate-900 tracking-tight">Transportes</h2>
-                    <p class="text-xs text-slate-500 mt-0.5">Traslados del personal entre clientes. Registra, aprueba o rechaza cada uno; el valor sale de la tarifa vigente.</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Traslados del personal entre clientes. Registra, aprueba o rechaza cada uno y cierra el corte del periodo.</p>
                 </div>
                 <div class="flex items-end gap-2 flex-wrap">
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Desde</label><input type="date" id="tr-from" class="input-box text-xs" onchange="trLoad()"></div>
@@ -706,6 +706,7 @@
                         <select id="tr-status" class="input-box font-bold text-xs w-36" onchange="trLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobados</option><option value="Rechazado">Rechazados</option><option value="">Todos</option></select></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Máx. entre salida y entrada</label><select id="tr-gap" class="input-box font-bold text-xs w-28"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
                     <button type="button" class="mx-btn" id="tr-detect-btn" onclick="trDetect()"><i class="fa-solid fa-location-crosshairs"></i> Detectar por GPS</button>
+                    <button type="button" class="mx-btn" onclick="trOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                     <button type="button" class="mx-btn mx-btn-pri" onclick="trOpenNew()"><i class="fa-solid fa-plus"></i> Registro manual</button>
                 </div>
             </div>
@@ -2031,6 +2032,19 @@
     <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="opsCfgClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
   </div>
 </div>
+<div id="trcut-modal" class="mx-modal hidden" onclick="if(event.target===this)trCloseCuts()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="trcut-title">
+    <div class="mx-head"><h3 id="trcut-title"><i class="fa-solid fa-scissors text-teal-600"></i> Cortes de transportes</h3><button type="button" class="mx-x" onclick="trCloseCuts()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="oc-card" style="margin:14px"><div class="oc-form">
+      <div><label>Desde</label><input id="trcut-from" type="date" class="input-box text-xs" onchange="trCutPreview()"></div>
+      <div><label>Hasta</label><input id="trcut-to" type="date" class="input-box text-xs" onchange="trCutPreview()"></div>
+      <div class="full"><label>Nota (opcional)</label><input id="trcut-note" class="input-box text-xs" maxlength="150" placeholder="Ej: Quincena noviembre"></div>
+      <div class="full tr-prev" id="trcut-prev"></div>
+      <div class="full"><button type="button" id="trcut-btn" class="mx-btn mx-btn-pri" onclick="trCutCreate()" disabled><i class="fa-solid fa-lock"></i> Cerrar corte</button></div>
+    </div></div>
+    <div class="oc-card" style="margin:0 14px 14px"><h4><i class="fa-solid fa-clock-rotate-left"></i> Cortes realizados</h4><div id="trcut-list"></div></div>
+  </div>
+</div>
 <div id="tr-modal" class="mx-modal hidden" onclick="if(event.target===this)trCloseNew()">
   <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="tr-title">
     <div class="mx-head"><h3 id="tr-title"><i class="fa-solid fa-route text-teal-600"></i> Registro manual de traslado</h3><button type="button" class="mx-x" onclick="trCloseNew()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
@@ -2045,8 +2059,8 @@
     </div></div>
   </div>
 </div>
-<link rel="stylesheet" href="css/admin/transports.css?v=2a">
-<script id="transports-module" src="js/admin/transports.js?v=2b"></script>
+<link rel="stylesheet" href="css/admin/transports.css?v=2c">
+<script id="transports-module" src="js/admin/transports.js?v=2c"></script>
 <link rel="stylesheet" href="css/admin/ops-config.css?v=1c">
 <script id="ops-config-module" src="js/admin/ops-config.js?v=1c"></script>
 
