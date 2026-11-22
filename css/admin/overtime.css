@@ -1,0 +1,5 @@
+/* Horas Extras · Etapa 3A (reutiliza tr-* y oc-*) */
+.ot-type{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap;background:#e2e8f0;color:#334155}
+.ot-type.diurna{background:#fef9c3;color:#854d0e}.ot-type.nocturna{background:#e0e7ff;color:#3730a3}
+.ot-type.dominical{background:#fce7f3;color:#9d174d}.ot-type.festiva{background:#ffedd5;color:#9a3412}
+#otcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
