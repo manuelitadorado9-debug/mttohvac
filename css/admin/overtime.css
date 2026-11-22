@@ -1,13 +1,68 @@
-/* Horas Extras · Etapa 3A/3B (reutiliza tr-* y oc-*) */
-.ot-type{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap;background:#e2e8f0;color:#334155}
-.ot-type.diurna{background:#fef9c3;color:#854d0e}.ot-type.nocturna{background:#e0e7ff;color:#3730a3}
-.ot-type.dominical{background:#fce7f3;color:#9d174d}.ot-type.festiva{background:#ffedd5;color:#9a3412}
+/* Horas Extras · Etapa 3A/3B */
+
+/* Badges de tipo de hora extra */
+.ot-type{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap;background:var(--card-alt,#e2e8f0);color:var(--text-2,#334155)}
+.ot-type.diurna  {background:#fef9c3;color:#854d0e}
+.ot-type.nocturna{background:#e0e7ff;color:#3730a3}
+.ot-type.dominical{background:#fce7f3;color:#9d174d}
+.ot-type.festiva {background:#ffedd5;color:#9a3412}
+
+/* Modo oscuro: badges de tipo con buen contraste */
+[data-theme="dark"] .ot-type.diurna  {background:#422006;color:#fde68a}
+[data-theme="dark"] .ot-type.nocturna{background:#1e1b4b;color:#a5b4fc}
+[data-theme="dark"] .ot-type.dominical{background:#4a044e;color:#f0abfc}
+[data-theme="dark"] .ot-type.festiva {background:#431407;color:#fdba74}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .ot-type.diurna  {background:#422006;color:#fde68a}
+  :root:not([data-theme="light"]) .ot-type.nocturna{background:#1e1b4b;color:#a5b4fc}
+  :root:not([data-theme="light"]) .ot-type.dominical{background:#4a044e;color:#f0abfc}
+  :root:not([data-theme="light"]) .ot-type.festiva {background:#431407;color:#fdba74}
+}
+
+/* Cortes */
 #otcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
-/* 3B: alimentación */
+
+/* Badge de alimentación */
 .ot-meal-badge{display:inline-block;font-size:.65rem;font-weight:800;padding:1px 7px;border-radius:99px;background:#d1fae5;color:#065f46;white-space:nowrap}
-.tr-kpi.ot-meal-kpi{background:#d1fae5}.tr-kpi.ot-meal-kpi span{color:#065f46}.tr-kpi.ot-meal-kpi b{color:#064e3b}
-.tr-kpi.ot-grand-kpi{background:#fef3c7;border:1.5px solid #fbbf24}.tr-kpi.ot-grand-kpi span{color:#92400e}.tr-kpi.ot-grand-kpi b{color:#78350f}
+
+/* KPI especial: alimentación — usa variables de tema base, con tinte verde */
+.tr-kpi.ot-meal-kpi{
+  background:color-mix(in srgb, var(--card,#fff) 80%, #d1fae5 20%);
+  border-color:#a7f3d0
+}
+.tr-kpi.ot-meal-kpi span{color:#065f46}
+.tr-kpi.ot-meal-kpi b{color:#064e3b}
+
+/* KPI total (amarillo) */
+.tr-kpi.ot-grand-kpi{
+  background:color-mix(in srgb, var(--card,#fff) 75%, #fef3c7 25%);
+  border:1.5px solid #fbbf24
+}
+.tr-kpi.ot-grand-kpi span{color:#92400e}
+.tr-kpi.ot-grand-kpi b{color:#78350f}
+
+/* Modo oscuro: KPIs especiales */
+[data-theme="dark"] .tr-kpi.ot-meal-kpi {background:#052e16;border-color:#166534}
+[data-theme="dark"] .tr-kpi.ot-meal-kpi span{color:#86efac}
+[data-theme="dark"] .tr-kpi.ot-meal-kpi b{color:#bbf7d0}
+[data-theme="dark"] .tr-kpi.ot-grand-kpi{background:#451a03;border-color:#d97706}
+[data-theme="dark"] .tr-kpi.ot-grand-kpi span{color:#fcd34d}
+[data-theme="dark"] .tr-kpi.ot-grand-kpi b{color:#fef08a}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .tr-kpi.ot-meal-kpi {background:#052e16;border-color:#166534}
+  :root:not([data-theme="light"]) .tr-kpi.ot-meal-kpi span{color:#86efac}
+  :root:not([data-theme="light"]) .tr-kpi.ot-meal-kpi b{color:#bbf7d0}
+  :root:not([data-theme="light"]) .tr-kpi.ot-grand-kpi{background:#451a03;border-color:#d97706}
+  :root:not([data-theme="light"]) .tr-kpi.ot-grand-kpi span{color:#fcd34d}
+  :root:not([data-theme="light"]) .tr-kpi.ot-grand-kpi b{color:#fef08a}
+}
+
 .ot-grand{color:#065f46;font-weight:900}
-/* 4B: botón PDF */
+[data-theme="dark"] .ot-grand{color:#6ee7b7}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .ot-grand{color:#6ee7b7}
+}
+
+/* PDF */
 .ot-pdf-btn{background:#dc2626!important;color:#fff!important;border-color:#dc2626!important}
 .ot-pdf-btn:hover{background:#b91c1c!important;border-color:#b91c1c!important}

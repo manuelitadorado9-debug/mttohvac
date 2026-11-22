@@ -1,25 +1,54 @@
 /* Transportes · Etapa 2A */
 .tr-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 @media (min-width:640px){.tr-kpis{grid-template-columns:repeat(4,1fr)}}
-.tr-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:12px}
-.tr-kpi span{display:block;font-size:.62rem;font-weight:800;text-transform:uppercase;color:#64748b}
-.tr-kpi b{font-size:1.15rem;font-weight:900;color:#0f172a}
+
+/* KPI cards adaptadas al tema */
+.tr-kpi{
+  background:var(--card,#fff);
+  border:1px solid var(--line,#e2e8f0);
+  border-radius:16px;
+  padding:12px
+}
+.tr-kpi span{display:block;font-size:.62rem;font-weight:800;text-transform:uppercase;color:var(--text-2,#64748b)}
+.tr-kpi b{font-size:1.15rem;font-weight:900;color:var(--text,#0f172a)}
+
+/* Tabla */
 .tr-table{width:100%;border-collapse:collapse;font-size:.74rem}
-.tr-table th{text-align:left;font-size:.62rem;text-transform:uppercase;color:#64748b;padding:8px;border-bottom:1px solid #e2e8f0;white-space:nowrap}
-.tr-table td{padding:8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+.tr-table th{text-align:left;font-size:.62rem;text-transform:uppercase;color:var(--text-2,#64748b);padding:8px;border-bottom:1px solid var(--line,#e2e8f0);white-space:nowrap}
+.tr-table td{padding:8px;border-bottom:1px solid var(--line,#e2e8f0);vertical-align:top;color:var(--text,#0f172a)}
 .tr-table td.num{text-align:right;font-weight:800;white-space:nowrap}
+
+/* Badges de estado */
 .tr-st{font-size:.62rem;font-weight:900;padding:2px 8px;border-radius:99px;white-space:nowrap}
-.tr-st.p{background:#fef3c7;color:#92400e}.tr-st.a{background:#d1fae5;color:#047857}.tr-st.r{background:#fee2e2;color:#b91c1c}
+.tr-st.p{background:#fef3c7;color:#92400e}
+.tr-st.a{background:#d1fae5;color:#047857}
+.tr-st.r{background:#fee2e2;color:#b91c1c}
+
+/* Acciones */
 .tr-act{display:flex;gap:6px}
 .tr-act button{border:0;border-radius:8px;padding:5px 9px;font-size:.68rem;font-weight:800;color:#fff}
-.tr-act .ok{background:#059669}.tr-act .no{background:#dc2626}
-.tr-sub{display:block;color:#64748b;font-size:.64rem;margin-top:1px}
+.tr-act .ok{background:#059669}
+.tr-act .no{background:#dc2626}
+
+.tr-sub{display:block;color:var(--text-2,#64748b);font-size:.64rem;margin-top:1px}
 #tr-modal .mx-sheet{max-width:560px}
-/* Transportes · Etapa 2C (cortes) */
+
+/* Cortes */
 #trcut-modal .mx-sheet{max-width:560px;max-height:92vh;overflow-y:auto}
-.tr-prev{font-size:.74rem;line-height:1.5;color:#334155}
+.tr-prev{font-size:.74rem;line-height:1.5;color:var(--text,#334155)}
 .tr-warn{color:#b45309;font-weight:700}
-/* Transportes · Etapa 4A (PDF) */
+
+/* PDF */
 .tr-pdf-btn{background:#dc2626!important;color:#fff!important;display:inline-flex;align-items:center;gap:4px}
 .tr-pdf-btn:hover{background:#b91c1c!important}
 .tr-pdf-btn i{font-size:.7rem}
+
+/* Modo oscuro: ajustes finos para los badges de estado (mantienen su color semántico pero con mejor contraste) */
+[data-theme="dark"] .tr-st.p{background:#451a03;color:#fcd34d}
+[data-theme="dark"] .tr-st.a{background:#052e16;color:#6ee7b7}
+[data-theme="dark"] .tr-st.r{background:#450a0a;color:#fca5a5}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .tr-st.p{background:#451a03;color:#fcd34d}
+  :root:not([data-theme="light"]) .tr-st.a{background:#052e16;color:#6ee7b7}
+  :root:not([data-theme="light"]) .tr-st.r{background:#450a0a;color:#fca5a5}
+}
