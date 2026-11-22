@@ -1,6 +1,7 @@
 {
-  "version": "2026.11.18.1",
-  "minimumVersion": "2026.11.18.1",
+  "version": "2026.11.22.1",
+  "minimumVersion": "2026.11.22.1",
   "force": true,
-  "message": "Actualización obligatoria para proteger la sincronización offline."
+  "build": "dev",
+  "message": "Nueva versión disponible."
 }
