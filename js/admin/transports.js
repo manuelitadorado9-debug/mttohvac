@@ -1,12 +1,12 @@
-/* ===== Transportes · Etapas 2A, 2B, 2C y 4A (tabla, registro manual, aprobar/rechazar, detección por GPS, cortes y PDF) =====
-   Solo ADMIN. Usa las funciones SQL ops_transfer_* (SQL 02) que validan rol + hash. */
+/* ===== Transportes · Tabla, registro manual, revisión GPS, cortes y PDF =====
+   Solo ADMIN. Las operaciones SQL ops_transfer_* validan el rol administrador en servidor. */
 (function () {
     const q = id => document.getElementById(id);
     const me = () => systemUsers.find(u => String(u.id) === String(activeUser));
     const money = n => '$ ' + Number(n || 0).toLocaleString('es-CO');
     const dmy = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? m[3] + '/' + m[2] + '/' + m[1] : '—'; };
     const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    let rows = [], busy = false, started = false;
+    let rows = [], busy = false, started = false, gpsPreview = null;
 
     async function rpc(fn, body) {
         try {
@@ -17,7 +17,7 @@
             const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, { method: 'POST', headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             if (r.ok) { let d = null; try { d = await r.json(); } catch (_) {} return { ok: true, data: d }; }
             let m = ''; try { m = (await r.json()).message || ''; } catch (_) {}
-            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar el SQL de las Etapas 2A, 2B o 2C (02, 03 y 04_transportes_cortes_etapa2C.sql) en Supabase.';
+            if (/could not find the function|PGRST202/i.test(m)) m = 'Falta ejecutar las etapas SQL de transportes: 01–04 y 09_transportes_horas_extras_logica_unificada.sql en Supabase.';
             return { ok: false, msg: m || ('Error ' + r.status) };
         } catch (e) { return { ok: false, msg: 'Sin conexión.' }; }
     }
@@ -50,7 +50,7 @@
         const cls = { Pendiente: 'p', Aprobado: 'a', Rechazado: 'r' };
         const src = { general: 'Tarifa general', especial: 'Tarifa especial', manual: 'Valor manual' };
         q('tr-list').innerHTML = '<table class="tr-table"><thead><tr><th>Fecha</th><th>Empleado</th><th>Origen → Destino</th><th>Motivo</th><th style="text-align:right">Valor</th><th>Estado</th><th></th></tr></thead><tbody>' +
-            rows.map(x => '<tr><td>' + dmy(x.work_date) + '<span class="tr-sub">' + (x.source === 'gps' ? 'GPS' : 'Manual') + '</span></td>' +
+            rows.map(x => '<tr' + (x.status === 'Aprobado' ? ' class="tr-row-manage" title="Doble clic para devolver a evaluación o eliminar" ondblclick="trRowDbl(\'' + esc(x.id) + '\')"' : '') + '><td>' + dmy(x.work_date) + '<span class="tr-sub">' + (x.source === 'gps' ? 'GPS' : 'Manual') + '</span></td>' +
                 '<td><b>' + esc(x.employee_name) + '</b>' + (x.employee_role ? '<span class="tr-sub">' + esc(x.employee_role) + '</span>' : '') + '</td>' +
                 '<td>' + esc(x.from_client_name || '—') + ' → ' + esc(x.to_client_name || '—') + '</td>' +
                 '<td>' + esc(x.reason || '—') + (x.reject_reason ? '<span class="tr-sub">Rechazo: ' + esc(x.reject_reason) + '</span>' : '') + '</td>' +
@@ -59,6 +59,14 @@
                 '<td>' + (x.status === 'Pendiente' ? '<div class="tr-act"><button type="button" class="ok" onclick="trDecide(\'' + esc(x.id) + '\',\'Aprobado\')">Aprobar</button><button type="button" class="no" onclick="trDecide(\'' + esc(x.id) + '\',\'Rechazado\')">Rechazar</button></div>' : '') + '</td></tr>').join('') +
             '</tbody></table>';
     }
+
+    window.trRowDbl = function (id) {
+        const x = rows.find(r => String(r.id) === String(id));
+        if (!x || x.status !== 'Aprobado') return;
+        if (typeof window.opsRecordManageOpen === 'function') {
+            window.opsRecordManageOpen('transport', x.id, x.employee_name + ' · ' + dmy(x.work_date) + ' · ' + (x.from_client_name || '—') + ' → ' + (x.to_client_name || '—'), x.cut_id);
+        }
+    };
 
     window.trDecide = async function (id, decision) {
         if (busy) return;
@@ -78,7 +86,7 @@
         trLoad();
     };
 
-    /* 2B · Detección automática */
+    /* 2B · Detección GPS en dos pasos: previsualizar solo pares nuevos y luego importar. */
     window.trDetect = async function () {
         if (busy) return;
         if (!isAdmin()) return showToast('Solo el administrador puede detectar traslados.', 'error');
@@ -87,17 +95,80 @@
         if (t < f) return showToast('La fecha final no puede ser anterior a la inicial.', 'error');
         if ((new Date(t) - new Date(f)) / 864e5 > 92) return showToast('Máximo 92 días por detección.', 'error');
         const btn = q('tr-detect-btn'); busy = true; if (btn) btn.disabled = true;
+        q('tr-preview-body').innerHTML = '<div class="oc-empty">Revisando secuencia GPS y comparando con los transportes ya registrados…</div>';
+        q('tr-preview-modal').classList.remove('hidden');
         try {
-            const r = await rpc('ops_transfers_detect', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: gap }));
-            if (!r.ok) return showToast(/could not find the function|PGRST202/i.test(r.msg) ? r.msg : (r.msg || 'No se pudo detectar.'), 'error');
-            const d = r.data || {}, extra = [];
-            if (d.duplicates) extra.push(d.duplicates + ' ya existían');
-            if (d.out_of_range) extra.push(d.out_of_range + ' con marcación fuera de rango');
-            if (d.no_rate) extra.push(d.no_rate + ' sin tarifa vigente');
-            if (typeof registrarAuditoria === 'function') registrarAuditoria('CREATE', 'hvac_transfers', 'Detección GPS ' + f + ' a ' + t + ': ' + (d.created || 0) + ' nuevos');
-            showToast((d.created ? d.created + ' traslado(s) nuevo(s) pendientes de aprobación' : 'No se encontraron traslados nuevos') + (extra.length ? ' · ' + extra.join(', ') : '') + '.', (d.no_rate ? 'error' : undefined));
+            const r = await rpc('ops_transfers_preview', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: gap }));
+            if (!r.ok) {
+                gpsPreview = null;
+                q('tr-preview-body').innerHTML = '<div class="oc-err">' + esc(r.msg || 'No se pudo revisar la asistencia.') + '</div>';
+                return;
+            }
+            gpsPreview = r.data || null;
+            trPreviewRender(gpsPreview);
         } finally { busy = false; if (btn) btn.disabled = false; }
-        q('tr-status').value = 'Pendiente'; trLoad();
+    };
+
+    function trPreviewRender(d) {
+        if (!d) return;
+        const items = Array.isArray(d.items) ? d.items : [];
+        const nf = n => Number(n || 0).toLocaleString('es-CO');
+        const kpi = (label, value, note) => '<div class="tr-kpi"><span>' + label + '</span><b>' + nf(value) + '</b>' + (note ? '<span class="tr-preview-note">' + note + '</span>' : '') + '</div>';
+        let h = '<div class="tr-preview-intro">Se compararon las parejas GPS con los transportes guardados. Solo se muestran aquí los pares que todavía no existen en el listado.</div>';
+        h += '<div class="tr-kpis tr-preview-kpis">' +
+            kpi('Pares detectados', d.pairs) +
+            kpi('Nuevos para traer', d.new) +
+            kpi('Ya registrados', d.existing) +
+            kpi('Fuera de rango', d.out_of_range) +
+            kpi('Sin tarifa', d.no_rate) + '</div>';
+        if (items.length) {
+            h += '<div class="tr-preview-list">' + items.map(x => {
+                const missingRate = x.status === 'sin_tarifa';
+                const timing = esc(x.from_time || '—') + ' salida → ' + esc(x.to_time || '—') + ' entrada';
+                const dist = x.from_distance_m != null || x.to_distance_m != null
+                    ? '<span class="tr-sub">GPS: ' + (x.from_distance_m == null ? '—' : nf(x.from_distance_m) + ' m') + ' / ' + (x.to_distance_m == null ? '—' : nf(x.to_distance_m) + ' m') + '</span>' : '';
+                return '<div class="oc-row"><div class="l"><b>' + esc(x.employee_name || 'Técnico') + ' · ' + dmy(x.date) + '</b>' +
+                    '<span>' + esc(x.from || '—') + ' → ' + esc(x.to || '—') + '</span><span>' + timing + ' · ' + nf(x.gap_minutes) + ' min' + '</span>' + dist +
+                    '</div><div class="tr-preview-item-right">' + (missingRate ? '<span class="oc-badge off">Sin tarifa</span>' : '<b>' + money(x.amount) + '</b><span class="oc-badge ok">Nuevo</span>') + '</div></div>';
+            }).join('') + '</div>';
+        } else {
+            h += '<div class="oc-empty">No hay pares nuevos para importar con estos filtros.</div>';
+        }
+        if (d.out_of_range) h += '<div class="oc-hint">Las parejas fuera del radio se omitieron. La distancia se volvió a calcular con las coordenadas y el radio actuales de cada cliente.</div>';
+        if (d.no_rate) h += '<div class="oc-hint">Los pares sin tarifa aparecen para revisión, pero no se importarán hasta configurar una tarifa vigente.</div>';
+        if (d.truncated) h += '<div class="oc-hint">La vista muestra los primeros 300 pares nuevos o sin tarifa. La importación volverá a comprobar todos los pares válidos del rango.</div>';
+        h += '<div class="tr-preview-actions"><button type="button" class="mx-btn mx-btn-sec" onclick="trPreviewClose()">Cerrar</button>' +
+            '<button type="button" id="tr-preview-import" class="mx-btn mx-btn-pri" onclick="trImportGps()"' + (Number(d.new || 0) > 0 ? '' : ' disabled') + '><i class="fa-solid fa-download"></i> Traer solo nuevos (' + nf(d.new) + ')</button></div>';
+        q('tr-preview-body').innerHTML = h;
+    }
+
+    window.trPreviewClose = function () {
+        q('tr-preview-modal').classList.add('hidden');
+        gpsPreview = null;
+    };
+
+    window.trImportGps = async function () {
+        if (busy || !gpsPreview) return;
+        const rg = gpsPreview.range || {};
+        if (!Number(gpsPreview.new || 0)) return showToast('No hay traslados nuevos con tarifa para importar.', 'error');
+        if (!confirm('Se traerán únicamente los traslados GPS que aún no figuran en el listado, como Pendientes de aprobación. ¿Continuar?')) return;
+        busy = true;
+        const btn = q('tr-preview-import'); if (btn) btn.disabled = true;
+        try {
+            const r = await rpc('ops_transfers_detect', Object.assign(auth(), {
+                p_from: rg.from, p_to: rg.to, p_max_gap_min: Number(rg.gap_min) || 180
+            }));
+            if (!r.ok) return showToast(r.msg || 'No se pudieron importar los traslados.', 'error');
+            const d = r.data || {};
+            if (typeof registrarAuditoria === 'function') registrarAuditoria('CREATE', 'hvac_transfers', 'Importación GPS ' + rg.from + ' a ' + rg.to + ': ' + (d.created || 0) + ' nuevos');
+            showToast((d.created || 0) + ' traslado(s) nuevo(s) importado(s); ' + (d.duplicates || 0) + ' ya existían.');
+            q('tr-status').value = 'Pendiente';
+            q('tr-from').value = rg.from || q('tr-from').value;
+            q('tr-to').value = rg.to || q('tr-to').value;
+            q('tr-preview-modal').classList.add('hidden');
+            gpsPreview = null;
+            await trLoad();
+        } finally { busy = false; if (btn) btn.disabled = false; }
     };
 
     /* 2C · Cortes de periodo */

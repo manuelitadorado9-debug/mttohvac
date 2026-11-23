@@ -53,10 +53,10 @@
             '<div class="tr-kpi"><span>HH Aprobadas</span><b>' + money(aprAmt) + '</b><span style="text-transform:none;font-weight:700">' + hrs(sumA(apr, 'hours')) + '</span></div>' +
             (aprMeal > 0 ? '<div class="tr-kpi ot-meal-kpi"><span>Alimentación aprobada</span><b>' + money(aprMeal) + '</b></div>' : '') +
             (aprMeal > 0 ? '<div class="tr-kpi ot-grand-kpi"><span>Total a pagar</span><b>' + money(aprAmt + aprMeal) + '</b></div>' : '');
-        if (!rows.length) { q('ot-list').innerHTML = '<div class="oc-empty">No hay horas extras con estos filtros. Usa «Detectar» para calcularlas desde la asistencia.</div>'; return; }
+        if (!rows.length) { q('ot-list').innerHTML = '<div class="oc-empty">No hay horas extras con estos filtros. Usa «Detectar horas extras» para calcularlas desde la asistencia.</div>'; return; }
         const cls = { Pendiente: 'p', Aprobado: 'a', Rechazado: 'r' };
         q('ot-list').innerHTML = '<table class="tr-table"><thead><tr><th>Fecha</th><th>Empleado</th><th>Tipo</th><th>Horario</th><th style="text-align:right">Horas</th><th style="text-align:right">HH Extra</th><th style="text-align:right">Aliment.</th><th>Estado</th><th></th></tr></thead><tbody>' +
-            rows.map(x => '<tr><td>' + dmy(x.work_date) + '</td>' +
+            rows.map(x => '<tr' + (x.status === 'Aprobado' ? ' class="tr-row-manage" title="Doble clic para devolver a evaluación o eliminar" ondblclick="otRowDbl(\'' + esc(x.id) + '\')"' : '') + '><td>' + dmy(x.work_date) + '</td>' +
                 '<td><b>' + esc(x.employee_name) + '</b>' + (x.employee_role ? '<span class="tr-sub">' + esc(x.employee_role) + '</span>' : '') + '</td>' +
                 '<td><span class="ot-type ' + esc(x.overtime_type) + '">' + esc(TYPES[x.overtime_type] || x.overtime_type) + '</span></td>' +
                 '<td>' + hm(x.start_at) + ' – ' + hm(x.end_at) + '</td>' +
@@ -69,6 +69,14 @@
                 '<td>' + (x.status === 'Pendiente' ? '<div class="tr-act"><button type="button" class="ok" onclick="otDecide(\'' + esc(x.id) + '\',\'Aprobado\')">Aprobar</button><button type="button" class="no" onclick="otDecide(\'' + esc(x.id) + '\',\'Rechazado\')">Rechazar</button></div>' : '') + '</td></tr>').join('') +
             '</tbody></table>';
     }
+
+    window.otRowDbl = function (id) {
+        const x = rows.find(r => String(r.id) === String(id));
+        if (!x || x.status !== 'Aprobado') return;
+        if (typeof window.opsRecordManageOpen === 'function') {
+            window.opsRecordManageOpen('overtime', x.id, x.employee_name + ' · ' + dmy(x.work_date) + ' · ' + (TYPES[x.overtime_type] || x.overtime_type), x.cut_id);
+        }
+    };
 
     window.otDecide = async function (id, decision) {
         if (busy) return;
