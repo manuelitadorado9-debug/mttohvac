@@ -707,7 +707,6 @@
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="tr-status" class="input-box font-bold text-xs w-36" onchange="trLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobados</option><option value="Rechazado">Rechazados</option><option value="">Todos</option></select></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Máx. entre salida y entrada</label><select id="tr-gap" class="input-box font-bold text-xs w-28"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
-                    <button type="button" class="mx-btn" onclick="vmOpen('tr')"><i class="fa-solid fa-magnifying-glass-chart"></i> Validar marcaciones</button>
                     <button type="button" class="mx-btn" id="tr-detect-btn" onclick="trDetect()"><i class="fa-solid fa-location-crosshairs"></i> Detectar por GPS</button>
                     <button type="button" class="mx-btn" onclick="trOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                     <button type="button" class="mx-btn mx-btn-pri" onclick="trOpenNew()"><i class="fa-solid fa-plus"></i> Registro manual</button>
@@ -728,8 +727,7 @@
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hasta</label><input type="date" id="ot-to" class="input-box text-xs" onchange="otLoad()"></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="ot-status" class="input-box font-bold text-xs w-36" onchange="otLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobadas</option><option value="Rechazado">Rechazadas</option><option value="">Todas</option></select></div>
-                    <button type="button" class="mx-btn" onclick="vmOpen('ot')"><i class="fa-solid fa-magnifying-glass-chart"></i> Validar marcaciones</button>
-                    <button type="button" class="mx-btn" id="ot-detect-btn" onclick="otDetect()"><i class="fa-solid fa-wand-magic-sparkles"></i> Detectar</button>
+                    <button type="button" class="mx-btn" id="ot-detect-btn" onclick="otDetect()"><i class="fa-solid fa-wand-magic-sparkles"></i> Detectar horas extras</button>
                     <button type="button" class="mx-btn" onclick="otOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                 </div>
             </div>
@@ -2080,31 +2078,30 @@
     <div class="oc-card" style="margin:0 14px 14px"><h4><i class="fa-solid fa-clock-rotate-left"></i> Cortes realizados</h4><div id="otcut-list"></div></div>
   </div>
 </div>
-<link rel="stylesheet" href="css/admin/transports.css?v=3a">
+<link rel="stylesheet" href="css/admin/transports.css?v=3b">
 <link rel="stylesheet" href="css/admin/overtime.css?v=3a">
-<script id="overtime-module" src="js/admin/overtime.js?v=3a"></script>
-<script id="transports-module" src="js/admin/transports.js?v=2c"></script>
-<div id="vm-modal" class="mx-modal hidden" onclick="if(event.target===this)vmClose()">
-  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="vm-title">
-    <div class="mx-head"><h3 id="vm-title"><i class="fa-solid fa-magnifying-glass-chart text-teal-600"></i> Validar marcaciones</h3><button type="button" class="mx-x" onclick="vmClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
-    <div class="vm-range">
-      <div><label>Desde</label><input type="date" id="vm-from" class="input-box text-xs"></div>
-      <div><label>Hasta</label><input type="date" id="vm-to" class="input-box text-xs"></div>
-      <div><label>Máx. salida→entrada</label><select id="vm-gap" class="input-box font-bold text-xs"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
-      <button type="button" id="vm-run" class="mx-btn mx-btn-pri" onclick="vmRun()"><i class="fa-solid fa-play"></i> Validar</button>
-    </div>
-    <div class="oc-tabs" role="tablist">
-      <button type="button" class="oc-tab on" data-v="ot" onclick="vmTab('ot')">Horas extras</button>
-      <button type="button" class="oc-tab" data-v="tr" onclick="vmTab('tr')">Transportes</button>
-    </div>
-    <div class="mx-body" id="vm-body"></div>
-    <div class="mx-foot"><div class="mx-actions" style="grid-template-columns:1fr"><button type="button" onclick="vmClose()" class="mx-btn mx-btn-sec">Cerrar</button></div></div>
+<script id="overtime-module" src="js/admin/overtime.js?v=3b"></script>
+<script id="transports-module" src="js/admin/transports.js?v=2d"></script>
+<div id="tr-preview-modal" class="mx-modal hidden" onclick="if(event.target===this)trPreviewClose()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="tr-preview-title">
+    <div class="mx-head"><div><h3 id="tr-preview-title"><i class="fa-solid fa-route text-teal-600"></i> Revisión de transportes por GPS</h3><div class="tr-preview-subtitle">Pares nuevos de salida y entrada entre clientes</div></div><button type="button" class="mx-x" onclick="trPreviewClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mx-body" id="tr-preview-body"><div class="oc-empty">Preparando revisión GPS…</div></div>
   </div>
 </div>
-
+<div id="ops-record-actions-modal" class="mx-modal hidden" onclick="if(event.target===this)opsRecordManageClose()">
+  <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="ops-record-actions-title">
+    <div class="mx-head"><h3 id="ops-record-actions-title"><i class="fa-solid fa-rotate-left text-teal-600"></i> Registro aprobado</h3><button type="button" class="mx-x" onclick="opsRecordManageClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="mx-body"><p id="ops-record-actions-detail" class="text-sm font-bold text-slate-700"></p><p id="ops-record-actions-note" class="text-xs text-slate-500 mt-2">Puedes devolverlo a evaluación para aprobarlo nuevamente o eliminarlo definitivamente. Esta acción queda registrada en auditoría.</p></div>
+    <div class="mx-foot"><div class="mx-actions">
+      <button type="button" class="mx-btn mx-btn-sec" onclick="opsRecordManageClose()">Cancelar</button>
+      <button type="button" id="ops-record-reopen" class="mx-btn mx-btn-pri" onclick="opsRecordManageRun('reopen')"><i class="fa-solid fa-rotate-left"></i> Dejar en evaluación</button>
+      <button type="button" id="ops-record-delete" class="mx-btn" style="background:#dc2626;color:white;border-color:#dc2626" onclick="opsRecordManageRun('delete')"><i class="fa-solid fa-trash"></i> Eliminar</button>
+    </div></div>
+  </div>
+</div>
 <link rel="stylesheet" href="css/admin/ops-config.css?v=2b">
 <script id="ops-config-module" src="js/admin/ops-config.js?v=2a"></script>
-<script id="validate-marks-module" src="js/admin/validate-marks.js?v=2b"></script>
+<script id="ops-record-actions-module" src="js/admin/ops-record-actions.js?v=1a"></script>
 
 
 

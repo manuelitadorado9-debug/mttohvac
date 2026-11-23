@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.22.1",
-  "minimumVersion": "2026.11.22.1",
+  "version": "2026.11.23.1",
+  "minimumVersion": "2026.11.23.1",
   "force": true,
   "build": "dev",
-  "message": "Nueva versión disponible."
+  "message": "Actualización de transportes y horas extras."
 }
