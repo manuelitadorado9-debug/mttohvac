@@ -332,7 +332,7 @@
   };
 
   /* ---------- PWA: registro SW + actualización obligatoria segura ---------- */
-  const HVAC_APP_VERSION = '2026.11.22.1';
+  const HVAC_APP_VERSION = '2026.11.23.1';
   const HVAC_BUILD = 'dev';   // lo reemplaza tools/stamp-build.mjs en cada despliegue
   global.HVAC_BUILD = HVAC_BUILD;
   global.HVAC_APP_VERSION = HVAC_APP_VERSION;
