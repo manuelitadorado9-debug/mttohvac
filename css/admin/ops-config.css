@@ -53,15 +53,3 @@
 .set-check:disabled{opacity:.5;cursor:not-allowed}
 /* Tarjetas de operación dentro de la configuración */
 .set-ops .oc-card{background:var(--card,#fff);border-radius:16px;padding:16px}
-/* ===== Validar marcaciones (v2a) ===== */
-#vm-modal .mx-sheet{max-width:820px;max-height:min(100dvh - 24px,880px)}
-.vm-range{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
-.vm-range label{display:block;font-size:.62rem;font-weight:800;text-transform:uppercase;color:var(--text-2);margin-bottom:4px}
-.vm-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-@media (min-width:640px){.vm-grid{grid-template-columns:repeat(4,1fr)}}
-.vm-kpi{border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;gap:2px}
-.vm-kpi small{font-size:.62rem;font-weight:800;text-transform:uppercase;color:var(--text-2)}
-.vm-kpi b{font-size:1.05rem;font-weight:900}.vm-kpi span{font-size:.64rem;color:var(--text-2)}
-.vm-list{border:1px solid var(--line);border-radius:12px;padding:2px 12px;max-height:300px;overflow:auto}
-.vm-actions{display:flex;justify-content:flex-end}
-#vm-body{display:grid;gap:10px;align-content:start}

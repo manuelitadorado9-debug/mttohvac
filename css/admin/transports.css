@@ -52,3 +52,21 @@
   :root:not([data-theme="light"]) .tr-st.a{background:#052e16;color:#6ee7b7}
   :root:not([data-theme="light"]) .tr-st.r{background:#450a0a;color:#fca5a5}
 }
+
+/* Revisión previa de pares GPS y acciones por doble clic */
+.tr-row-manage{cursor:pointer}
+.tr-row-manage:hover{background:color-mix(in srgb,var(--card,#fff) 88%,#0d9488 12%)}
+.tr-preview-intro{font-size:.76rem;line-height:1.5;color:var(--text-2,#64748b);margin-bottom:12px}
+.tr-preview-subtitle{font-size:.68rem;color:var(--text-2,#64748b);margin-top:3px}
+.tr-preview-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px}
+.tr-preview-kpis .tr-kpi{padding:10px}
+.tr-preview-kpis .tr-kpi b{font-size:1.1rem}
+.tr-preview-note{font-size:.62rem!important;text-transform:none!important;font-weight:600!important}
+.tr-preview-list{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto;margin-top:10px}
+.tr-preview-item-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;white-space:nowrap}
+.tr-preview-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
+#tr-preview-modal .mx-sheet{max-width:760px;max-height:92vh;overflow-y:auto}
+#ops-record-actions-modal .mx-sheet{max-width:520px}
+#ops-record-actions-modal .mx-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+#ops-record-actions-modal .mx-actions button:first-child{grid-column:1/-1}
+@media(max-width:520px){.tr-preview-item-right{align-items:flex-start}.tr-preview-list .oc-row{align-items:flex-start;gap:8px}}
