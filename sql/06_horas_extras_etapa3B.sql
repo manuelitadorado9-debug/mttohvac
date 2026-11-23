@@ -1,6 +1,8 @@
 -- =====================================================================
 -- CONTROL OPERATIVO · ETAPA 3B · Auxilio de alimentación + recálculo al editar marcación
 -- Requiere 05_horas_extras_etapa3A.sql ejecutado. Idempotente.
+-- Compatibilidad: asistencia.fecha puede ser TEXT YYYY-MM-DD; se normaliza a DATE en la lectura.
+-- Corrección: el corte horario de alimentación se calcula en variable PL/pgSQL (sin CASE en IF).
 --
 -- SUPUESTO (confirma o ajusta):
 --   Se reconoce auxilio de alimentación cuando la hora de SALIDA nocturna
@@ -35,7 +37,8 @@ create or replace function ops_ot_decide(
   p_admin_id text, p_hash text, p_id uuid, p_decision text, p_reason text default null
 ) returns void language plpgsql security definer set search_path = public as $$
 declare
-  cur text; v_night_cutoff time := time '19:00'; v_reform date := date '2025-12-25';
+  v_night_cutoff time := time '19:00'; v_meal_cutoff time;
+  v_reform date := date '2025-12-25';
   v_meal_amount numeric := 0; v_meal jsonb; v_ot hvac_overtime%rowtype;
 begin
   perform ops_assert_admin(p_admin_id, p_hash);
@@ -59,10 +62,18 @@ begin
       elsif v_ot.overtime_type = 'nocturna' then
         null; -- aplica siempre (el tipo nocturno ya implica salida nocturna)
       else
-        -- tipo 'diurna': verificar si la salida real ya cruzó las 19:00
-        if (v_ot.end_at at time zone 'America/Bogota')::time
-           < case when v_ot.work_date < v_reform then time '21:00' else v_night_cutoff end
-        then v_meal_amount := 0; end if;
+        -- tipo 'diurna': la salida debe ser estrictamente posterior al corte vigente.
+        -- Se calcula el corte en una variable para evitar ambigüedad del parser PL/pgSQL.
+        if v_ot.work_date < v_reform then
+          v_meal_cutoff := time '21:00';
+        else
+          v_meal_cutoff := v_night_cutoff;
+        end if;
+
+        if v_ot.end_at is null
+           or (v_ot.end_at at time zone 'America/Bogota')::time <= v_meal_cutoff then
+          v_meal_amount := 0;
+        end if;
       end if;
     end if;
   end if;
@@ -208,7 +219,7 @@ declare
   r record; mx record; ex record;
   v_key text; v_amt numeric; v_n int;
   n_del int := 0; n_upd int := 0; n_new int := 0;
-  v_role text;
+  v_role text; v_tname text;
 begin
   perform ops_assert_admin(p_admin_id, p_hash);
   if p_tech_id is null or p_date is null then raise exception 'Técnico y fecha son obligatorios'; end if;
@@ -226,7 +237,11 @@ begin
     with m as (
       select a.id::text as id, a.hora, a.tipo
         from asistencia a
-       where a.fecha = p_date
+       where (case
+                when btrim(coalesce(a.fecha::text, '')) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                then btrim(a.fecha::text)::date
+                else null::date
+              end) = p_date
          and a.tecnico_id::text = p_tech_id
          and a.tipo in ('CHECK-IN','CHECK-OUT')
          and a.dentro_rango is not false
@@ -282,29 +297,32 @@ begin
                end_at   = r.e_l at time zone 'America/Bogota',
                mark_in  = r.m_in, mark_out = r.m_out, employee_role = v_role
          where id = ex.id
-           and (hours is distinct from r.hrs or rate_value is distinct from mx.rate_value);
+           and (hours is distinct from r.hrs
+                or rate_value is distinct from mx.rate_value
+                or amount is distinct from v_amt
+                or rate_ref is distinct from mx.id
+                or start_at is distinct from (r.s_l at time zone 'America/Bogota')
+                or end_at is distinct from (r.e_l at time zone 'America/Bogota')
+                or mark_in is distinct from r.m_in
+                or mark_out is distinct from r.m_out
+                or employee_role is distinct from v_role);
         get diagnostics v_n = row_count;
         if v_n > 0 then n_upd := n_upd + 1; end if;
       end if;
     else
-      -- Insertar nueva Pendiente
-      select tecnico_nombre into r.m_in from asistencia
-       where tecnico_id::text = p_tech_id and fecha = p_date limit 1;
-      -- reutilizamos r.m_in para nombre; ya tenemos name en hvac_users
-      declare v_tname text;
-      begin
-        select coalesce(u.payload->>'name', u.email) into v_tname from hvac_users u where u.id::text = p_tech_id;
-        insert into hvac_overtime(employee_id, employee_name, employee_role, work_date, overtime_type,
-                                  start_at, end_at, hours, rate_value, amount, rate_ref,
-                                  status, dedupe_key, mark_in, mark_out, created_by)
-        values (p_tech_id, coalesce(v_tname,'(sin nombre)'), v_role, p_date, r.typ,
-                r.s_l at time zone 'America/Bogota', r.e_l at time zone 'America/Bogota',
-                r.hrs, mx.rate_value, v_amt, mx.id,
-                'Pendiente', v_key, r.m_in, r.m_out, p_admin_id)
-        on conflict (dedupe_key) where dedupe_key is not null do nothing;
-        get diagnostics v_n = row_count;
-        if v_n > 0 then n_new := n_new + 1; end if;
-      end;
+      -- Insertar nueva Pendiente conservando r.m_in/r.m_out como IDs de asistencia.
+      select coalesce(u.payload->>'name', u.email) into v_tname
+        from hvac_users u where u.id::text = p_tech_id;
+      insert into hvac_overtime(employee_id, employee_name, employee_role, work_date, overtime_type,
+                                start_at, end_at, hours, rate_value, amount, rate_ref,
+                                status, dedupe_key, mark_in, mark_out, created_by)
+      values (p_tech_id, coalesce(v_tname,'(sin nombre)'), v_role, p_date, r.typ,
+              r.s_l at time zone 'America/Bogota', r.e_l at time zone 'America/Bogota',
+              r.hrs, mx.rate_value, v_amt, mx.id,
+              'Pendiente', v_key, r.m_in, r.m_out, p_admin_id)
+      on conflict (dedupe_key) where dedupe_key is not null do nothing;
+      get diagnostics v_n = row_count;
+      if v_n > 0 then n_new := n_new + 1; end if;
     end if;
   end loop;
 
@@ -318,7 +336,11 @@ begin
            with m as (
              select a.id::text as id, a.hora, a.tipo
                from asistencia a
-              where a.fecha = p_date and a.tecnico_id::text = p_tech_id
+              where (case
+                when btrim(coalesce(a.fecha::text, '')) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                then btrim(a.fecha::text)::date
+                else null::date
+              end) = p_date and a.tecnico_id::text = p_tech_id
                 and a.tipo in ('CHECK-IN','CHECK-OUT') and a.dentro_rango is not false
            ), s as (
              select m.*, lead(hora) over (order by hora, id) as n_hora,

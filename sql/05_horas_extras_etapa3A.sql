@@ -1,6 +1,7 @@
 -- =====================================================================
 -- CONTROL OPERATIVO · ETAPA 3A · Horas extras y festivos
 -- Requiere 1A (y 2C no es necesario). Idempotente. NO modifica "asistencia" (solo la lee).
+-- Compatibilidad: asistencia.fecha puede ser TEXT YYYY-MM-DD; se normaliza a DATE en la lectura.
 --
 -- REGLAS DE CLASIFICACIÓN (zona America/Bogota):
 --  * Se parean marcaciones CHECK-IN -> siguiente CHECK-OUT del mismo técnico y día.
@@ -95,9 +96,19 @@ begin
 
   for r in
     with m as (
-      select a.id::text as id, a.tecnico_id::text as tid, a.tecnico_nombre as tname, a.fecha, a.hora, a.tipo
+      select a.id::text as id, a.tecnico_id::text as tid, a.tecnico_nombre as tname,
+             case
+               when btrim(coalesce(a.fecha::text, '')) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+               then btrim(a.fecha::text)::date
+               else null::date
+             end as fecha,
+             a.hora, a.tipo
         from asistencia a
-       where a.fecha between p_from and p_to
+       where (case
+                when btrim(coalesce(a.fecha::text, '')) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                then btrim(a.fecha::text)::date
+                else null::date
+              end) between p_from and p_to
          and coalesce(a.tecnico_id::text,'') <> ''
          and a.tipo in ('CHECK-IN','CHECK-OUT')
          and a.dentro_rango is not false
