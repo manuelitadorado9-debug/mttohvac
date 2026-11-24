@@ -4935,6 +4935,71 @@ async function authPedirNuevaClave() {
             nrTypeChanged();
         }
 
+        // === Referencia de valores facturados (últimas 2 facturas PREVENTIVO para el cliente) ===
+        function nrShowBillingRef() {
+            const refEl = document.getElementById('nr-billing-ref');
+            if (!refEl) return;
+            const client = (document.getElementById('nr-client') || {}).value || '';
+            const type   = String((document.getElementById('nr-type')   || {}).value || '').toUpperCase();
+            if (!client || type !== 'PREVENTIVO') { refEl.innerHTML = ''; refEl.classList.add('hidden'); return; }
+
+            // Buscar las últimas órdenes BILLED de tipo PREVENTIVO para este cliente, con monto real
+            const billed = (workOrders || []).filter(o => {
+                if (!o || String(o.id || '').startsWith('HIST-')) return false;
+                if (String(o.status || '').toUpperCase() !== 'BILLED') return false;
+                if (billingRoutineType(o) !== 'PREVENTIVO') return false;
+                const clientMatch = normText(o.client || o.clientName || '') === normText(client);
+                if (!clientMatch) return false;
+                // Para matrices: solo el titular (evita contar las partes por separado)
+                if (hvacIsMatrixOrder(o)) { const h = hvacMatrixHolder(o); if (!h || String(h.id) !== String(o.id)) return false; }
+                const inv = o.invoice || {};
+                // matrixRef indica que es parte secundaria con amount=0: descartarla
+                if (inv.matrixRef) return false;
+                return Number(inv.amount || 0) > 0;
+            });
+
+            // Ordenar por fecha de factura (más reciente primero)
+            billed.sort((a, b) => {
+                const da = parseFlexDate((a.invoice || {}).date || a.date) || 0;
+                const db = parseFlexDate((b.invoice || {}).date || b.date) || 0;
+                return db - da;
+            });
+
+            const last2 = billed.slice(0, 2);
+            if (!last2.length) { refEl.innerHTML = ''; refEl.classList.add('hidden'); return; }
+
+            const fmt = v => '$ ' + Number(v).toLocaleString('es-CO');
+            const fmtDate = v => { const d = parseFlexDate(v); return d ? new Date(d).toLocaleDateString('es-CO', { month: 'short', year: 'numeric' }) : ''; };
+
+            const a1 = Number((last2[0].invoice || {}).amount || 0);
+            const a2 = last2.length > 1 ? Number((last2[1].invoice || {}).amount || 0) : null;
+
+            // Si hay 2 valores iguales (o diferencia <= 1%), mostrar solo uno
+            const similar = a2 !== null && a1 > 0 && Math.abs(a1 - a2) / a1 <= 0.01;
+
+            let html = '<div class="flex items-start gap-2 bg-sky-50 border border-sky-200/70 rounded-xl px-3 py-2 text-xs text-sky-800">'
+                + '<i class="fa-solid fa-circle-info mt-0.5 text-sky-400 flex-none"></i>'
+                + '<div><span class="font-bold">Referencia preventivo:</span> ';
+
+            if (similar || a2 === null) {
+                const d1 = fmtDate((last2[0].invoice || {}).date || last2[0].date);
+                html += '<span class="font-black">' + fmt(a1) + '</span>'
+                    + (d1 ? ' <span class="text-sky-600 font-normal">(' + d1 + ')</span>' : '');
+            } else {
+                const d1 = fmtDate((last2[0].invoice || {}).date || last2[0].date);
+                const d2 = fmtDate((last2[1].invoice || {}).date || last2[1].date);
+                html += '<span class="font-black">' + fmt(a1) + '</span>'
+                    + (d1 ? ' <span class="text-sky-600">(' + d1 + ')</span>' : '')
+                    + ' &nbsp;·&nbsp; '
+                    + '<span class="font-black">' + fmt(a2) + '</span>'
+                    + (d2 ? ' <span class="text-sky-600">(' + d2 + ')</span>' : '');
+            }
+            html += '</div></div>';
+
+            refEl.innerHTML = html;
+            refEl.classList.remove('hidden');
+        }
+
         // Solo el PREVENTIVO es programado/recurrente. Correctivo y Revisión nacen de una novedad del cliente: sin periodicidad.
         let nrLastPeriodicity = 'Trimestral';
         function nrTypeChanged() {
@@ -4958,6 +5023,7 @@ async function authPedirNuevaClave() {
             if (budgetWrap) { budgetWrap.classList.toggle('hidden', isRev); budgetWrap.classList.toggle('col-span-2', !isPrev); }
             if (budget) { budget.required = !isRev && !pbHidden; if (isRev) budget.value = ''; }
             try { if (typeof window.hvacNrUpdateZonePreview === 'function') window.hvacNrUpdateZonePreview(); } catch (_) {}
+            nrShowBillingRef();
         }
 
         function nrResetForm() {
@@ -5163,8 +5229,10 @@ async function authPedirNuevaClave() {
             }
 
             container.innerHTML = '<p class="text-slate-400 p-2 text-center text-xs">Cargando equipos del cliente…</p>';
+            nrShowBillingRef();
             await ensureClientEquipments(client);
             if (document.getElementById('nr-client').value !== client) return; // cambió de cliente mientras cargaba
+            nrShowBillingRef(); // actualizar con datos completos si se cargaron órdenes adicionales
             await window.hvacPopulateRoutineZoneFilter?.(client, 'nr');
             container.innerHTML = '';
             const list = equipmentCatalog.filter(e => eqBelongsToClient(e, client));
