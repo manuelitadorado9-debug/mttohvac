@@ -8782,8 +8782,7 @@ async function authPedirNuevaClave() {
                 try { registrarAuditoria(done ? 'RECOGER_HERRAMIENTAS' : 'REABRIR_RECOGIDA', 'hvac_orders', o.id); } catch (e) {}
             }
             localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
-            renderToolsModule();
-            renderToolsHistory();
+            renderToolsModule(); // ya llama a renderToolsHistory() internamente
             showToast(done ? 'Recogida de herramientas registrada.' : 'Recogida reabierta.', 'success');
         }
         function renderToolsModule() {
@@ -9051,8 +9050,17 @@ async function authPedirNuevaClave() {
                 const active = document.querySelector('main > section[id^="view-"]:not(.hidden)');
                 const tabId = active && active.id ? active.id.replace(/^view-/, '') : '';
                 const cfg = CLOUD_SECTION_CONFIG[tabId];
-                if (!cfg || !cfg.state || !cfg.state.length || !['admin-dashboard', 'admin-caja', 'admin-agenda', 'admin-billing', 'admin-financial'].includes(tabId)) return;
-                if (appBusyCount > 0) return;
+                if (!cfg || appBusyCount > 0) return;
+                // Secciones que dependen de hvac_orders: se refresca la tabla si está vencida (TTL 5 min)
+                // y se repinta la vista. Esto evita el retraso de ~10 min para ver nuevas rutinas finalizadas.
+                if (['admin-billing', 'admin-tools'].includes(tabId)) {
+                    if (cloudTableStale('hvac_orders')) {
+                        await loadCloudSection(tabId, false);
+                    }
+                    return;
+                }
+                // Resto de secciones: solo revisan claves de estado (caja, agenda, financiero, dashboard)
+                if (!cfg.state || !cfg.state.length || !['admin-dashboard', 'admin-caja', 'admin-agenda', 'admin-financial'].includes(tabId)) return;
                 const tableKeys = cfg.state.filter(k => ESTADO_TABLAS[k]);
                 const genericKeys = cfg.state.filter(k => !ESTADO_TABLAS[k]);
                 let changed = tableKeys.length ? await estadoPullKeys(tableKeys, true) : false;
