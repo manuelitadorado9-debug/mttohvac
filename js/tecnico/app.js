@@ -2280,13 +2280,32 @@ async function authPedirNuevaClave() {
             return order.executions && (order.executions[eqId] || (eq && order.executions[eq.code]));
         }
 
+        function techExecHasEvidencePhoto(exec) {
+            return !!(exec && (Number(exec.photosCount) > 0 || ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales']
+                .some(k => Array.isArray(exec[k]) && exec[k].some(Boolean))));
+        }
+        function techOrderWasAlreadyClosed(order) {
+            const status = String(order && order.status || '').toUpperCase();
+            return status === 'BILLED' || techSignatureDecision(order) !== 'PENDING';
+        }
+
         // Estado efectivo calculado desde TODOS los equipos asignados, no desde el estado antiguo de la orden.
         // Una orden marcada COMPLETED vuelve a estar disponible si se añadieron equipos sin informe completo.
         function techOrderProgress(order) {
             const ids = [...new Set((order && order.equipmentIds || []).map(String).filter(Boolean))];
             const total = ids.length;
             const server = order && order._serverProgress;
-            if (server && Number(server.total) === total && (!server.orderUpdatedAt || !order.updatedAt || String(server.orderUpdatedAt) === String(order.updatedAt))) {
+            // Si el detalle local ya contiene la nueva regla de evidencia, el cálculo RPC
+            // antiguo no puede declarar completa una ejecución sin foto.
+            const hasLocalEvidenceRule = ids.some(id => {
+                const ex = techExecFor(order, id);
+                return !!(ex && (ex.evidenceRequired === true || Number(ex.evidenceRequirementVersion) >= 1));
+            });
+            const hasLocalMissingRequiredPhoto = !techOrderWasAlreadyClosed(order) && ids.some(id => {
+                const ex = techExecFor(order, id);
+                return !!(ex && ex.timestamp && !techExecHasEvidencePhoto(ex));
+            });
+            if (server && !hasLocalEvidenceRule && !hasLocalMissingRequiredPhoto && Number(server.total) === total && (!server.orderUpdatedAt || !order.updatedAt || String(server.orderUpdatedAt) === String(order.updatedAt))) {
                 const done = Math.min(total, Math.max(0, Number(server.done) || 0));
                 return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone: total > 0 && done === total, known: true, source: 'rpc' };
             }
@@ -2295,10 +2314,14 @@ async function authPedirNuevaClave() {
                 return { total, done: null, pending: null, percent: null, allDone: false, known: false, source: 'metadata' };
             }
             let done = 0;
+            const preserveLegacyClosedEvidence = techOrderWasAlreadyClosed(order);
             ids.forEach(id => {
                 const eq = techFindEq(id) || { id, code: id, type: 'EXTRACTOR' };
                 const exec = techExecFor(order, id);
-                if (getEquipmentExecutionStatus(eq, id, exec) === 'done') done++;
+                // Las ejecuciones antiguas que siguen abiertas también deben aportar foto.
+                // Órdenes históricas ya firmadas/facturadas se mantienen intactas.
+                const needsNewPhoto = !preserveLegacyClosedEvidence && exec && exec.timestamp && !techExecHasEvidencePhoto(exec);
+                if (!needsNewPhoto && getEquipmentExecutionStatus(eq, id, exec) === 'done') done++;
             });
             const allDone = total > 0 && done === total;
             return { total, done, pending: Math.max(0, total - done), percent: total ? Math.round(done / total * 100) : 0, allDone, known: true, source: 'local' };
@@ -2444,7 +2467,17 @@ async function authPedirNuevaClave() {
                 else missing.push(label);
             });
 
-            const total = paramItems.length + checklistItems.length;
+            const evidenceRequired = !!(exec && (exec.evidenceRequired === true || Number(exec.evidenceRequirementVersion) >= 1));
+            const hasEvidence = !!(exec && (
+                Number(exec.photosCount) > 0 ||
+                ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales'].some(k => Array.isArray(exec[k]) && exec[k].some(Boolean))
+            ));
+            if (evidenceRequired) {
+                const evidenceLabel = 'Fotografía de evidencia (mínimo 1)';
+                if (hasEvidence) done++;
+                else missing.push(evidenceLabel);
+            }
+            const total = paramItems.length + checklistItems.length + (evidenceRequired ? 1 : 0);
             return { done, total, missing, percent: total ? Math.round(done / total * 100) : 0 };
         }
 
@@ -2461,9 +2494,12 @@ async function authPedirNuevaClave() {
             const statusFilter = document.getElementById('hub-equipment-status-filter')?.value || 'all';
             const allItems = [];
 
+            const preserveLegacyClosedEvidence = techOrderWasAlreadyClosed(order);
             eqIds.forEach(eqId => {
                 const eq = techFindEq(eqId) || { id: eqId, code: eqId, name: 'Desconocido', type: 'HVAC' };
-                const exec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
+                const originalExec = order.executions && (order.executions[eqId] || order.executions[eq.id] || order.executions[eq.code]);
+                const needsNewPhoto = !preserveLegacyClosedEvidence && originalExec && originalExec.timestamp && !techExecHasEvidencePhoto(originalExec);
+                const exec = needsNewPhoto ? { ...originalExec, evidenceRequired: true, evidenceRequirementVersion: 1 } : originalExec;
                 const status = getEquipmentExecutionStatus(eq, eqId, exec);
                 allItems.push({ eqId, eq, exec, status });
             });
@@ -3506,6 +3542,11 @@ async function authPedirNuevaClave() {
                     // Se conserva únicamente el resultado calculado por los campos clásicos.
                     e.partial = !!e.partial;
                 }
+                const hasEvidencePhoto = ordenFotos.antes.length + ordenFotos.despues.length > 0;
+                e.evidenceRequired = true;
+                e.evidenceRequirementVersion = 1;
+                e.evidenceMissing = !hasEvidencePhoto;
+                if (!hasEvidencePhoto) e.partial = true;
                 order.tipoRutina = e.tipoRutina;
             }
             return ordenPersistOriginal.apply(this, arguments);
@@ -3516,15 +3557,23 @@ async function authPedirNuevaClave() {
         // solo durante el guardado original y luego se restauran en el formulario.
         const ordenSaveOriginal = saveEquipmentExecution;
         saveEquipmentExecution = async function() {
-            if (ordenTipoActual() === 'PREVENTIVO') return ordenSaveOriginal.apply(this, arguments);
+            const evidenceMissing = ordenFotos.antes.length + ordenFotos.despues.length === 0;
+            if (ordenTipoActual() === 'PREVENTIVO') {
+                const result = await ordenSaveOriginal.apply(this, arguments);
+                if (evidenceMissing) showToast('Avance guardado, pero el equipo sigue EN PROGRESO: agrega mínimo una fotografía para poder completarlo.', 'error');
+                return result;
+            }
             const inputs = Array.from(document.querySelectorAll('.exec-param-input'));
             const checks = Array.from(document.querySelectorAll('.exec-chk-input'));
             const oldValues = inputs.map(el => el.value);
             const oldChecks = checks.map(el => el.checked);
             inputs.forEach(el => { if (!String(el.value || '').trim()) el.value = 'N/A'; });
             checks.forEach(el => { el.checked = true; });
-            try { return await ordenSaveOriginal.apply(this, arguments); }
-            finally {
+            try {
+                const result = await ordenSaveOriginal.apply(this, arguments);
+                if (evidenceMissing) showToast('Avance guardado, pero el equipo sigue EN PROGRESO: agrega mínimo una fotografía antes de completarlo.', 'error');
+                return result;
+            } finally {
                 inputs.forEach((el, i) => { el.value = oldValues[i]; });
                 checks.forEach((el, i) => { el.checked = oldChecks[i]; });
             }
@@ -3546,6 +3595,10 @@ async function authPedirNuevaClave() {
         const ordenStatusOriginal = getEquipmentExecutionStatus;
         getEquipmentExecutionStatus = function(eq, eqId, exec) {
             if (!exec || !exec.timestamp) return 'pending';
+            const evidenceRequired = exec.evidenceRequired === true || Number(exec.evidenceRequirementVersion) >= 1;
+            const hasEvidence = Number(exec.photosCount) > 0 || ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales']
+                .some(k => Array.isArray(exec[k]) && exec[k].some(Boolean));
+            if (evidenceRequired && !hasEvidence) return 'progress';
             if (!exec.tipoRutina) return ordenStatusOriginal.apply(this, arguments);
             // Para preventivo, el estado depende solo de sus parámetros y checklist originales.
             if (exec.tipoRutina === 'PREVENTIVO') return ordenStatusOriginal(eq, eqId, exec);
