@@ -3207,11 +3207,11 @@ async function authPedirNuevaClave() {
             let conclusion, requiere = false, descCorr = '';
             if (bad) {
                 requiere = true; descCorr = bad;
-                conclusion = 'Estado general: el equipo presenta novedades que afectan su correcto funcionamiento, descritas en las observaciones técnicas. Se recomienda programar la intervención correctiva correspondiente antes de mantenerlo en servicio continuo.';
+                conclusion = 'Estado general: el equipo presenta una novedad que requiere intervención correctiva, según lo descrito en las observaciones técnicas.';
             } else if (bien.test(n)) {
-                conclusion = 'Estado general: el equipo se encuentra operativo y no se reportan novedades que requieran correctivo. Se recomienda mantener el plan de mantenimiento programado.';
+                conclusion = 'Estado general: el equipo se reporta operativo y no se describen novedades que requieran correctivo.';
             } else {
-                conclusion = 'Estado general: no se reportaron fallas que requieran correctivo inmediato en el relato del técnico. Se recomienda verificar el estado final del equipo antes de cerrar la orden.';
+                conclusion = 'Estado general: con la información registrada no es posible determinar si el equipo presenta una condición que requiera correctivo.';
             }
             return { notas_analiticas: paras.join('\n\n'), conclusion, voltaje, amperaje, presion, requiere_correctivo: requiere, descripcion_correctivo: descCorr, advertencia_numeros: [], fuente: 'local' };
         }
@@ -3265,7 +3265,13 @@ async function authPedirNuevaClave() {
             let data = null, motivoIA = '';
             try {
                 if (!IA_ACTIVA || !navigator.onLine || Date.now() < iaPausaHasta) throw new Error('local');   // sin IA: procesamiento local, instantáneo y sin internet
-                const r = await iaFetch(JSON.stringify({ notas_brutas: notas, tipo_servicio: ordenTipoActual() }));
+                const equipoActual = techFindEq(currentExecEqId) || {};
+                const r = await iaFetch(JSON.stringify({
+                    notas_brutas: notas,
+                    tipo_servicio: ordenTipoActual(),
+                    equipo_codigo: String(equipoActual.code || currentExecEqId || ''),
+                    equipo_nombre: String(equipoActual.name || equipoActual.type || 'Equipo HVAC')
+                }));
                 const j = await r.json().catch(() => ({}));
                 if (!r.ok || !j.notas_analiticas) throw new Error(r.status + ': ' + (j.error || 'respuesta vacía del servidor'));
                 data = j;
