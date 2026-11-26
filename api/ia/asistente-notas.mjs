@@ -12,6 +12,20 @@
  *   GEMINI_API_KEY   (obligatoria)  clave de Google AI Studio
  *   GEMINI_MODEL     (opcional)     por defecto "gemini-2.0-flash"
  */
+// Google AI Studio puede entregar claves nuevas con prefijo AQ. además del formato clásico AIza.
+// Se eliminan únicamente comillas externas accidentales y espacios de los extremos.
+function obtenerGeminiKey() {
+  let key = String(process.env.GEMINI_API_KEY || '').trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1).trim();
+  }
+  return key;
+}
+
+function formatoGeminiKeyValido(key) {
+  return /^AIza[0-9A-Za-z_-]{30,}$/.test(key) || (key.startsWith('AQ.') && key.length > 10);
+}
+
 // Google retira modelos con el tiempo (gemini-2.0-flash y 1.5 ya no existen), por eso además de estos
 // nombres la función consulta a Google qué modelos "flash" hay disponibles y usa los más nuevos.
 const MODELS_FALLBACK = ['gemini-3.8-flash', 'gemini-3.5-flash-lite'];
@@ -69,8 +83,8 @@ function parseJson(text) {
 }
 
 async function diagnostico(res) {
-    const k = process.env.GEMINI_API_KEY || '';
-    const info = { version_del_archivo: 'asistente-v1', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: /^AIza[0-9A-Za-z_-]{30,}$/.test(k.trim()), clave_tiene_espacios: k !== k.trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
+    const k = obtenerGeminiKey();
+    const info = { version_del_archivo: 'asistente-v2', funcion_desplegada: true, clave_configurada: !!k, clave_formato_valido: formatoGeminiKeyValido(k), clave_prefijo: k ? k.slice(0, 3) : '', clave_longitud: k.length, clave_comillas_externas: /^['\"].*['\"]$/.test(String(process.env.GEMINI_API_KEY || '').trim()), clave_tiene_espacios: String(process.env.GEMINI_API_KEY || '') !== String(process.env.GEMINI_API_KEY || '').trim(), modelo_configurado: process.env.GEMINI_MODEL || '(por defecto)', pruebas: [] };
     if (!k) { info.resultado = 'FALTA la variable GEMINI_API_KEY en Vercel (Settings > Environment Variables, entorno Production) y luego hacer Redeploy.'; return res.status(200).json(info); }
     const disponibles = await listarModelosFlash(k);
     info.modelos_disponibles_en_tu_cuenta = disponibles.slice(0, 8);
@@ -82,7 +96,7 @@ async function diagnostico(res) {
           body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Responde solo: OK' }] }], generationConfig: { maxOutputTokens: 10 } })
         });
         const d = await r.json().catch(() => ({}));
-        info.pruebas.push({ modelo: model, estado: r.status, detalle: r.ok ? 'FUNCIONA' : String((d.error && d.error.message) || '').slice(0, 160) });
+        info.pruebas.push({ modelo: model, estado: r.status, codigo_error: d.error && d.error.status ? String(d.error.status).slice(0, 60) : '', razon_error: d.error && Array.isArray(d.error.details) ? String((d.error.details.find(x => x && x.reason) || {}).reason || '').slice(0, 80) : '', detalle: r.ok ? 'FUNCIONA' : String((d.error && d.error.message) || '').slice(0, 200) });
       } catch (e) { info.pruebas.push({ modelo: model, estado: 0, detalle: String(e && e.message || e).slice(0, 160) }); }
     }
     const ok = info.pruebas.find(t => t.detalle === 'FUNCIONA');
@@ -98,7 +112,7 @@ async function main(req, res) {
   if (req.method === 'GET' || (req.method === 'POST' && preBody && preBody.ping)) return diagnostico(res);
   if (req.method !== 'POST') return res.status(405).json({ error: 'Método no permitido' });
 
-  const key = process.env.GEMINI_API_KEY;
+  const key = obtenerGeminiKey();
   if (!key) return res.status(501).json({ error: 'Falta GEMINI_API_KEY en las variables de entorno de Vercel.' });
 
   let body = req.body;
