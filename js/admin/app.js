@@ -2064,22 +2064,36 @@ async function authPedirNuevaClave() {
             }
             const summaryById = new Map((sourceList || []).map(o => [String(o.id), o]));
             let changed = false;
+            const resolvedIds = new Set();
             rows.forEach(row => {
                 if (!row || (!row.order_id && row.id == null)) return;
                 let executions = row.executions == null ? {} : row.executions;
                 if (typeof executions === 'string') { try { executions = JSON.parse(executions); } catch (_) { return; } }
                 // Solo se proyecta executions desde la vista ligera; nunca el payload completo.
                 // La vista debe retirar fotos/firma base64 antes de exponer esta columna.
-                if (!executions || typeof executions !== 'object') return;
+                if (!executions || typeof executions !== 'object') executions = {};
                 const id = String(row.order_id || row.id);
                 const summary = summaryById.get(id);
                 if (!summary) return;
+                resolvedIds.add(id);
                 const progressOrder = Object.assign({}, summary, { id, executions });
                 const p = hvacOrderProgress(progressOrder);
                 const started = Object.values(executions || {}).filter(ex => ex && typeof ex === 'object' && (ex.timestamp || ex.status || ex.partial)).length;
                 const prev = hvacProgressCache.get(id);
                 const next = { at: Date.now(), ok: true, total: p.total, done: p.done, started, source: 'hvac_orders_lite' };
                 if (!prev || !prev.ok || prev.done !== next.done || prev.total !== next.total || prev.started !== next.started) changed = true;
+                hvacProgressCache.set(id, next);
+            });
+            // Órdenes que la vista no devolvió (sin executions en DB): guardar done=0 para que el caché
+            // quede válido y no vuelva a mostrarse como null al expirar el TTL.
+            ids.forEach(id => {
+                if (resolvedIds.has(id)) return;
+                const summary = summaryById.get(id);
+                if (!summary) return;
+                const total = new Set((summary.equipmentIds || []).map(String).filter(Boolean)).size;
+                const prev = hvacProgressCache.get(id);
+                const next = { at: Date.now(), ok: true, total, done: 0, started: 0, source: 'hvac_orders_lite' };
+                if (!prev || !prev.ok || prev.done !== 0 || prev.total !== total) changed = true;
                 hvacProgressCache.set(id, next);
             });
             return changed;
