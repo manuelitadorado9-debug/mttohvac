@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.23.1",
-  "minimumVersion": "2026.11.23.1",
+  "version": "2026.11.26.2",
+  "minimumVersion": "2026.11.26.2",
   "force": true,
   "build": "dev",
-  "message": "Actualización de transportes y horas extras."
+  "message": "Actualización de detección GPS: sin límite de 1 a 4 horas entre marcaciones."
 }
