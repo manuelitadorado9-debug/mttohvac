@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.26.2",
-  "minimumVersion": "2026.11.26.2",
+  "version": "2026.11.26.3",
+  "minimumVersion": "2026.11.26.3",
   "force": true,
-  "build": "dev",
-  "message": "Actualización de detección GPS: sin límite de 1 a 4 horas entre marcaciones."
+  "build": "reports-photo-layout",
+  "message": "Informes: fotografías generales cuando solo se carga Antes o Después; sin bloques fotográficos vacíos."
 }
