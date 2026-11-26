@@ -229,15 +229,25 @@
     const all = Array.isArray(exec?.photos) ? exec.photos.map(toPhotoUrl).filter(Boolean) : [];
     const additional = Array.isArray(exec?.fotosAdicionales) ? exec.fotosAdicionales.map(toPhotoUrl).filter(Boolean) : [];
     const uniq = values => [...new Map(values.filter(Boolean).map(value => [value, value])).values()];
-    // En correctivos se conservan las columnas ANTES/DESPUÉS; cualquier foto genérica
-    // que no esté en esas columnas se añade como evidencia adicional, sin perderla.
+    // Si existen fotos en AMBAS categorías, el informe conserva la clasificación
+    // ANTES/DESPUÉS. Si el técnico cargó todo en una sola categoría, se presenta
+    // una galería general continua: no se dibuja una columna vacía ni se inventan pares.
+    // Esta regla aplica tanto a CORRECTIVO como a REVISIÓN.
     const paired = new Set([...before, ...after]);
     const genericExtras = all.filter(src => !paired.has(src));
     const extraPhotos = uniq([...additional, ...genericExtras]);
-    if (routine === 'CORRECTIVO' && (before.length || after.length)) {
-      return { mode: extraPhotos.length ? 'ba-extra' : 'ba', before, after, additional: extraPhotos, all: uniq([...before, ...after, ...extraPhotos]) };
+    const supportsBeforeAfter = routine === 'CORRECTIVO' || routine === 'REVISION';
+    if (supportsBeforeAfter && before.length > 0 && after.length > 0) {
+      return {
+        mode: extraPhotos.length ? 'ba-extra' : 'ba',
+        before, after, additional: extraPhotos,
+        all: uniq([...before, ...after, ...extraPhotos])
+      };
     }
-    return { mode: 'grid', before: [], after: [], additional: [], all: uniq([...all, ...before, ...after, ...additional]) };
+    return {
+      mode: 'grid', before: [], after: [], additional: [],
+      all: uniq([...all, ...before, ...after, ...additional])
+    };
   }
 
   /* Descarga las fotos con el mismo resolvedor que usan los PDF anteriores (si existe). */
@@ -554,7 +564,9 @@
       const pageEl = slot.closest('.page');
       const total = job.mode === 'ba' ? Math.max(job.before.length, job.after.length) : (job.mode === 'ba-extra' ? Math.max(job.before.length, job.after.length) + Math.ceil(job.additional.length / 2) : job.all.length);
       if (!total) {
-        slot.innerHTML = `<h2>${esc(job.title)}</h2><div class="box"><div class="txt" style="font-style:normal">Sin registro fotográfico para este equipo.</div></div>`;
+        // Si el equipo no tiene evidencias, se omite por completo el bloque
+        // fotográfico: evita cajas vacías y espacios reservados innecesarios.
+        slot.innerHTML = '';
         return;
       }
       // Página del equipo: la mayor cantidad de fotos (máx. 4) que quepa, lo más grandes posible.
