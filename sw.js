@@ -1,6 +1,6 @@
 /* Service Worker · Smart Maintenance HVAC.
    Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
-const CACHE_VERSION = 'hvac-v13-pwa-install-20261125';
+const CACHE_VERSION = 'hvac-v15-evidence-admin-ai-amendment-20261125';
 const SHELL = [
   './',
   './tecnico.html',
