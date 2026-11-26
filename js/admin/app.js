@@ -6210,7 +6210,7 @@ async function authPedirNuevaClave() {
 
             const originalLabel = btn ? btn.innerHTML : '';
             if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…'; }
-            if (status) status.textContent = 'Enviando las notas a Gemini. No cierres esta ventana…';
+            if (status) { status.classList.remove('hidden'); status.textContent = 'Procesando…'; }
             try {
                 const response = await fetch('/api/ia/asistente-notas', {
                     method: 'POST',
@@ -6232,11 +6232,11 @@ async function authPedirNuevaClave() {
                 if (data.requiere_correctivo === true && !correctiveField.value.trim() && data.descripcion_correctivo) {
                     correctiveField.value = String(data.descripcion_correctivo).trim();
                 }
-                if (status) status.textContent = 'Texto procesado. Revisa el desarrollo y la conclusión; los cambios aún no están guardados. Pulsa “Guardar modificación posterior” para registrarlos.';
+                if (status) { status.classList.remove('hidden'); status.textContent = 'Texto procesado. Revisa los campos y guarda los cambios.'; }
                 showToast('IA procesó el informe de este equipo. Revisa y guarda los cambios.', 'success');
             } catch (error) {
                 console.error('[IA Administración] No se pudo procesar el informe:', error);
-                if (status) status.textContent = 'No se pudo procesar: ' + String(error.message || error).slice(0, 220);
+                if (status) { status.classList.remove('hidden'); status.textContent = 'No se pudo procesar: ' + String(error.message || error).slice(0, 220); }
                 showToast('No se pudo procesar con IA: ' + String(error.message || error).slice(0, 140), 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.innerHTML = originalLabel || '✨ Procesar texto con IA'; }
@@ -6249,7 +6249,7 @@ async function authPedirNuevaClave() {
             const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
             const exec = order && order.executions && (order.executions[adminAmendmentExecKey] || order.executions[currentExecEqId]) || {};
             const existing = hvacAdminExecPhotos(exec);
-            const renderCard = (src, label) => `<div class="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-white"><img src="${esc(typeof src === 'string' ? src : (src.url || src.src || src.dataUrl || ''))}" alt="${esc(label)}" class="w-full h-full object-cover"><span class="absolute inset-x-0 bottom-0 bg-slate-950/70 text-white text-[9px] text-center py-1">${esc(label)}</span></div>`;
+            const renderCard = (src, label) => `<div class="admin-amend-photo-card relative w-20 h-20 rounded-xl overflow-hidden"><img src="${esc(typeof src === 'string' ? src : (src.url || src.src || src.dataUrl || ''))}" alt="${esc(label)}" class="w-full h-full object-cover"><span class="absolute inset-x-0 bottom-0 bg-slate-950/70 text-white text-[9px] text-center py-1">${esc(label)}</span></div>`;
             box.innerHTML = existing.map((src, i) => renderCard(src, 'Existente ' + (i + 1))).join('') +
                 adminAmendmentNewPhotos.map((src, i) => `<div class="relative">${renderCard(src, 'Nueva ' + (i + 1))}<button type="button" onclick="removeAdminAmendmentPhoto(${i})" class="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-rose-600 text-white text-xs" aria-label="Quitar foto nueva">×</button></div>`).join('');
             if (!box.innerHTML) box.innerHTML = '<p class="text-[11px] text-slate-400">No hay fotografías adjuntas en este equipo.</p>';
@@ -6477,7 +6477,7 @@ async function authPedirNuevaClave() {
                 const aiWrap = document.getElementById('exec-admin-amend-ai-wrap');
                 if (aiWrap) aiWrap.classList.toggle('hidden', !['REVISION', 'CORRECTIVO'].includes(routineType));
                 const aiStatus = document.getElementById('exec-admin-amend-ai-status');
-                if (aiStatus) aiStatus.textContent = 'La IA analizará las notas disponibles y propondrá desarrollo y conclusión para este equipo. Debes guardar la modificación para conservar los cambios.';
+                if (aiStatus) { aiStatus.textContent = ''; aiStatus.classList.add('hidden'); }
                 renderAdminAmendmentPhotoPreview();
             }
         }

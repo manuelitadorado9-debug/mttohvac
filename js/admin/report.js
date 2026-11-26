@@ -442,9 +442,9 @@
           items.length === 1 ? order.finalConclusion : '',
           items.length === 1 ? order.conclusiones : '',
           typeKey === 'CORRECTIVO' ? item.exec?.correctiveDesc : '')).trim();
-        return `<div style="margin:0 0 12px 0; padding:0 0 10px 0; border-bottom:${index === items.length - 1 ? '0' : '1px solid #dce3ec'};"><div style="font-weight:800; color:#17243a; margin-bottom:5px;">${esc(equipmentTitle(item))}</div><div style="white-space:pre-wrap; color:#1a2433;">${esc(eqConclusion || 'No se registró una conclusión para este equipo.')}</div></div>`;
+        return `<div class="conclusion-item${index === items.length - 1 ? ' conclusion-item-last' : ''}"><div class="conclusion-eq">${esc(equipmentTitle(item))}</div><div class="conclusion-text">${esc(eqConclusion || 'No se registró una conclusión para este equipo.')}</div></div>`;
       }).join('');
-      body += section('CONCLUSIONES POR EQUIPO', conclusionRows || textBlock('No se registraron conclusiones por equipo.', 55));
+      body += section('CONCLUSIONES POR EQUIPO', `<div class="conclusion-list">${conclusionRows || textBlock('No se registraron conclusiones por equipo.', 55)}</div>`);
 
       const savedRecs = lines(recText).filter(line => !/^no se (registr|dej|identific)/i.test(line));
       const finalRecs = savedRecs.length ? savedRecs : (Array.isArray(aiRecommendations) ? aiRecommendations : []);
@@ -613,7 +613,13 @@ ul{padding:10px 12px 10px 28px;font-size:11px;line-height:1.7}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
 .t{width:100%;border-collapse:collapse;font-size:11.5px}.t th{background:#f1f5f9;text-align:left;padding:8px 10px;font-size:9px;letter-spacing:1px;color:#6b7a8d}.t td{padding:9px 10px;border-top:1px solid #e6ebf1}.corr{border:2px solid #b45309;background:#fff7ed;border-radius:10px;padding:12px 16px;font-size:11.5px;margin:0 0 16px;color:#7c2d12}.corr ul{padding-left:20px;margin-top:6px;line-height:1.6}.sg{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:center}.sg p{font-size:11px;margin:6px 0}.cn{font-size:14px!important;font-weight:bold;color:#1e3a5f}.box2{border:2px dashed #b8c4d4;border-radius:10px;height:110px;display:flex;align-items:center;justify-content:center;font-size:10px;font-style:italic;color:#8a97a8}.hi{width:100%;display:block;border-bottom:1px solid #dde3ea;padding-bottom:6px}.fi{width:100%;display:block;margin-top:auto}.ph{border:2px dashed #b8c4d4;border-radius:8px;background:#f6f9fc;display:flex;align-items:center;justify-content:center;font-size:9px;color:#9aa7b8;letter-spacing:1px}
 .row{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #e6ebf1;font-size:12px}.row div{padding:8px 12px}.row div:first-child{color:#4a5a6e;border-right:1px solid #e6ebf1}.row div:last-child{font-weight:bold}
-.txt{padding:12px 14px;font-size:11.5px;line-height:1.6;min-height:70px;color:#4a5a6e;font-style:italic}
+.txt{padding:12px 14px;font-size:11.5px;line-height:1.6;min-height:70px;color:#4a5a6e;font-style:italic;text-align:justify;text-align-last:left;text-justify:inter-word}
+.conclusion-list{padding:4px 12px 2px}
+.conclusion-item{padding:8px 0 9px;border-bottom:1px solid #e6ebf1;break-inside:avoid;page-break-inside:avoid}
+.conclusion-item-last{border-bottom:0}
+.conclusion-eq{font-size:10px;line-height:1.35;font-weight:800;color:#1e3a5f;margin:0 0 3px;text-align:left;overflow-wrap:anywhere}
+.conclusion-text{font-size:10.5px;line-height:1.48;color:#334155;white-space:pre-wrap;text-align:justify;text-align-last:left;text-justify:inter-word;overflow-wrap:anywhere}
+.sum{text-align:justify;text-align-last:left;text-justify:inter-word}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px}.cols h4{font-size:10px;letter-spacing:2px;text-align:center;margin-bottom:8px;color:#1e3a5f}
 .p4{display:grid;grid-template-columns:1fr 1fr;gap:8px}.p4 .ph{height:1.35in}
 .p6{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px}.p6 .ph{height:1.6in}
