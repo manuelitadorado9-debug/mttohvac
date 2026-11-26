@@ -90,15 +90,14 @@
     window.trDetect = async function () {
         if (busy) return;
         if (!isAdmin()) return showToast('Solo el administrador puede detectar traslados.', 'error');
-        const f = q('tr-from').value, t = q('tr-to').value, gap = parseInt(q('tr-gap').value, 10) || 180;
+        const f = q('tr-from').value, t = q('tr-to').value;
         if (!f || !t) return showToast('Indica el rango de fechas.', 'error');
         if (t < f) return showToast('La fecha final no puede ser anterior a la inicial.', 'error');
-        if ((new Date(t) - new Date(f)) / 864e5 > 92) return showToast('Máximo 92 días por detección.', 'error');
         const btn = q('tr-detect-btn'); busy = true; if (btn) btn.disabled = true;
         q('tr-preview-body').innerHTML = '<div class="oc-empty">Revisando secuencia GPS y comparando con los transportes ya registrados…</div>';
         q('tr-preview-modal').classList.remove('hidden');
         try {
-            const r = await rpc('ops_transfers_preview', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: gap }));
+            const r = await rpc('ops_transfers_preview', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: null }));
             if (!r.ok) {
                 gpsPreview = null;
                 q('tr-preview-body').innerHTML = '<div class="oc-err">' + esc(r.msg || 'No se pudo revisar la asistencia.') + '</div>';
@@ -156,7 +155,7 @@
         const btn = q('tr-preview-import'); if (btn) btn.disabled = true;
         try {
             const r = await rpc('ops_transfers_detect', Object.assign(auth(), {
-                p_from: rg.from, p_to: rg.to, p_max_gap_min: Number(rg.gap_min) || 180
+                p_from: rg.from, p_to: rg.to, p_max_gap_min: null
             }));
             if (!r.ok) return showToast(r.msg || 'No se pudieron importar los traslados.', 'error');
             const d = r.data || {};
