@@ -706,7 +706,7 @@
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Hasta</label><input type="date" id="tr-to" class="input-box text-xs" onchange="trLoad()"></div>
                     <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Estado</label>
                         <select id="tr-status" class="input-box font-bold text-xs w-36" onchange="trLoad()"><option value="Pendiente" selected>Pendientes</option><option value="Aprobado">Aprobados</option><option value="Rechazado">Rechazados</option><option value="">Todos</option></select></div>
-                    <div><label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Máx. entre salida y entrada</label><select id="tr-gap" class="input-box font-bold text-xs w-28"><option value="60">1 hora</option><option value="120">2 horas</option><option value="180" selected>3 horas</option><option value="240">4 horas</option></select></div>
+                    <div class="flex items-center gap-2 pb-2"><span class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600"><i class="fa-solid fa-infinity mr-2"></i>Sin límite de tiempo entre marcaciones</span></div>
                     <button type="button" class="mx-btn" id="tr-detect-btn" onclick="trDetect()"><i class="fa-solid fa-location-crosshairs"></i> Detectar por GPS</button>
                     <button type="button" class="mx-btn" onclick="trOpenCuts()"><i class="fa-solid fa-scissors"></i> Cortes</button>
                     <button type="button" class="mx-btn mx-btn-pri" onclick="trOpenNew()"><i class="fa-solid fa-plus"></i> Registro manual</button>
@@ -2118,7 +2118,7 @@
 <link rel="stylesheet" href="css/admin/transports.css?v=3b">
 <link rel="stylesheet" href="css/admin/overtime.css?v=3a">
 <script id="overtime-module" src="js/admin/overtime.js?v=3b"></script>
-<script id="transports-module" src="js/admin/transports.js?v=2d"></script>
+<script id="transports-module" src="js/admin/transports.js?v=2e"></script>
 <div id="tr-preview-modal" class="mx-modal hidden" onclick="if(event.target===this)trPreviewClose()">
   <div class="mx-sheet" role="dialog" aria-modal="true" aria-labelledby="tr-preview-title">
     <div class="mx-head"><div><h3 id="tr-preview-title"><i class="fa-solid fa-route text-teal-600"></i> Revisión de transportes por GPS</h3><div class="tr-preview-subtitle">Pares nuevos de salida y entrada entre clientes</div></div><button type="button" class="mx-x" onclick="trPreviewClose()" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></button></div>
