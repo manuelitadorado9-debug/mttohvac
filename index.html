@@ -29,7 +29,7 @@
     <!-- SheetJS (xlsx) -->
     <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     
-    <link id="app-ui" rel="stylesheet" href="css/admin/app-ui.css?v=f0">
+    <link id="app-ui" rel="stylesheet" href="css/admin/app-ui.css?v=f1">
 
 <link id="v5-overrides" rel="stylesheet" href="css/admin/v5-overrides.css?v=f0">
 <link id="v6-overrides" rel="stylesheet" href="css/admin/v6-overrides.css?v=f0">
@@ -1592,44 +1592,37 @@
                     <div id="exec-photos-preview" class="flex gap-2 mt-2.5 flex-wrap"></div>
                 </div>
 
-                <!-- Edición administrativa no destructiva: no vuelve a ejecutar el checklist ni modifica la firma. -->
-                <div id="exec-admin-amendment-panel" class="hidden space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
-                    <div>
-                        <div class="text-xs font-black uppercase tracking-wide text-amber-900">Modificación administrativa del informe</div>
-                        <p class="mt-1 text-[11px] leading-relaxed text-amber-800">Este modo conserva el tipo de mantenimiento, parámetros, checklist, fotografías originales, cierre y firma del cliente. Los cambios se registran como una modificación posterior. Si la orden histórica no tenía ejecución para este equipo, se crea solo una ficha documental sin inventar mediciones ni checklist.</p>
-                    </div>
+                <!-- Edición administrativa compacta: conserva los datos operativos y la firma. -->
+                <div id="exec-admin-amendment-panel" class="hidden admin-amend-panel space-y-2.5">
+                    <div class="admin-amend-heading">Edición del informe</div>
                     <label class="block">
-                        <span class="block text-xs font-bold text-slate-700 mb-1.5">Notas originales del técnico</span>
-                        <textarea id="exec-admin-amend-obs" rows="3" class="input-box text-xs font-medium" placeholder="Notas registradas por el técnico..."></textarea>
+                        <span class="admin-amend-label">Notas del técnico</span>
+                        <textarea id="exec-admin-amend-obs" rows="2" class="input-box text-xs font-medium" placeholder="Notas registradas por el técnico..."></textarea>
                     </label>
                     <label class="block">
-                        <span class="block text-xs font-bold text-slate-700 mb-1.5">Desarrollo / observaciones técnicas (incluye texto procesado por IA)</span>
-                        <textarea id="exec-admin-amend-development" rows="4" class="input-box text-xs font-medium" placeholder="Desarrollo técnico del equipo..."></textarea>
+                        <span class="admin-amend-label">Desarrollo técnico</span>
+                        <textarea id="exec-admin-amend-development" rows="3" class="input-box text-xs font-medium" placeholder="Desarrollo técnico del equipo..."></textarea>
                     </label>
-                    <div id="exec-admin-amend-ai-wrap" class="rounded-xl border border-violet-200 bg-white/80 p-3">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <button type="button" id="exec-admin-amend-ai-btn" onclick="adminAmendProcessWithAI()" class="px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition">✨ Procesar texto con IA</button>
-                            <span class="text-[10px] text-slate-500">Para informes históricos de revisión y correctivo.</span>
-                        </div>
-                        <p id="exec-admin-amend-ai-status" class="mt-2 text-[11px] text-slate-500" aria-live="polite">La IA analizará las notas disponibles y propondrá desarrollo y conclusión para este equipo. Debes guardar la modificación para conservar los cambios.</p>
+                    <div id="exec-admin-amend-ai-wrap" class="admin-amend-ai-wrap">
+                        <button type="button" id="exec-admin-amend-ai-btn" onclick="adminAmendProcessWithAI()" class="btn-teal admin-amend-ai-btn">✨ Procesar texto con IA</button>
+                        <p id="exec-admin-amend-ai-status" class="admin-amend-ai-status hidden" aria-live="polite"></p>
                     </div>
                     <label class="block">
-                        <span class="block text-xs font-bold text-slate-700 mb-1.5">Conclusión del equipo</span>
-                        <textarea id="exec-admin-amend-conclusion" rows="3" class="input-box text-xs font-medium" placeholder="Conclusión individual de este equipo..."></textarea>
+                        <span class="admin-amend-label">Conclusión del equipo</span>
+                        <textarea id="exec-admin-amend-conclusion" rows="2" class="input-box text-xs font-medium" placeholder="Conclusión individual de este equipo..."></textarea>
                     </label>
                     <label class="block" id="exec-admin-amend-corrective-wrap">
-                        <span class="block text-xs font-bold text-slate-700 mb-1.5">Novedad / descripción del correctivo</span>
+                        <span class="admin-amend-label">Novedad / correctivo</span>
                         <textarea id="exec-admin-amend-corrective" rows="2" class="input-box text-xs font-medium" placeholder="Novedad o trabajo correctivo descrito..."></textarea>
                     </label>
                     <label class="block">
-                        <span class="block text-xs font-bold text-slate-700 mb-1.5">Observaciones técnicas adicionales</span>
-                        <textarea id="exec-admin-amend-technical" rows="3" class="input-box text-xs font-medium" placeholder="Observaciones técnicas adicionales..."></textarea>
+                        <span class="admin-amend-label">Observaciones adicionales</span>
+                        <textarea id="exec-admin-amend-technical" rows="2" class="input-box text-xs font-medium" placeholder="Observaciones técnicas adicionales..."></textarea>
                     </label>
-                    <div class="border-t border-amber-200 pt-3">
-                        <div class="text-xs font-bold text-slate-700 mb-1.5">Agregar fotografías de evidencia</div>
-                        <p class="text-[11px] text-slate-500 mb-2">Las fotografías existentes no se eliminan ni se reemplazan. Las nuevas se anexan como evidencia adicional.</p>
-                        <input type="file" id="exec-admin-amend-photos" multiple accept="image/*" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700">
-                        <div id="exec-admin-amend-photo-preview" class="flex flex-wrap gap-2 mt-3"></div>
+                    <div class="admin-amend-photos">
+                        <div class="admin-amend-label">Fotografías adicionales</div>
+                        <input type="file" id="exec-admin-amend-photos" multiple accept="image/*" class="admin-amend-file">
+                        <div id="exec-admin-amend-photo-preview" class="flex flex-wrap gap-2 mt-2"></div>
                     </div>
                 </div>
 
@@ -2008,7 +2001,7 @@
         </div>
     </div>
 
-    <script src="js/admin/app.js?v=f2"></script>
+    <script src="js/admin/app.js?v=f3"></script>
     <!-- Capa de interfaz (solo presentación): no altera la lógica ni los datos de la aplicación -->
     <script src="js/admin/nav-tabs.js?v=f0"></script>
 
@@ -2261,7 +2254,7 @@
 
 <script src="js/admin/new-routine.js?v=f0"></script>
 
-<script id="report-module" src="js/admin/report.js?v=f2"></script>
+<script id="report-module" src="js/admin/report.js?v=f3"></script>
 
 <!-- Informes PDF integrados en las acciones normales de cada orden -->
 <script src="js/admin/report-trigger.js?v=f0"></script>
