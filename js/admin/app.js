@@ -2056,7 +2056,7 @@ async function authPedirNuevaClave() {
 
         async function hvacFetchLiteProgress(ids, sourceList) {
             if (hvacProgressLiteViewMissing || !ids.length || !navigator.onLine) return false;
-            const query = 'hvac_orders_lite?select=id,order_id:payload->>id,executions:payload->executions&id=in.(' + pgList(ids) + ')';
+            const query = 'hvac_orders_lite?select=id,order_id:payload->>id,executions:payload->executions&payload->>id=in.(' + pgList(ids) + ')';
             const rows = await supabaseFetch(query, 'GET', null, null, { quiet: true, noStore: true });
             if (!Array.isArray(rows)) {
                 if (Number(cloudCtl.lastStatus) === 404) hvacProgressLiteViewMissing = true;
