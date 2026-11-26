@@ -3244,7 +3244,7 @@ async function authPedirNuevaClave() {
         let iaPausaHasta = 0;
         async function iaFetch(body) {
             const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 40000);
-            try { return await fetch('/api/ia/redactar-cf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctl.signal }); }
+            try { return await fetch('/api/ia/asistente-notas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ctl.signal }); }
             finally { clearTimeout(timer); }
         }
 
