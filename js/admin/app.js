@@ -9272,10 +9272,10 @@ async function authPedirNuevaClave() {
             const searchText = normText(document.getElementById('hist-search-input')?.value);
             const selectedClient = document.getElementById('hist-filter-client')?.value || 'ALL';
             const selectedStatus = document.getElementById('hist-filter-status')?.value || 'ALL';
-            // Pendiente / En proceso dependen del avance real: se consulta (una vez) el avance de las órdenes aún abiertas que no lo tienen.
-            if ((selectedStatus === 'PENDING' || selectedStatus === 'IN_PROGRESS') && navigator.onLine) {
+            // Todas las órdenes visibles (incluidas COMPLETED) necesitan avance real si son summaryOnly sin caché.
+            if (navigator.onLine) {
                 const need = workOrders.filter(o => o && o._hvacSummaryOnly && !String(o.id || '').startsWith('HIST-')
-                    && !['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase())
+                    && !['BILLED'].includes(String(o.status || '').toUpperCase())
                     && matchesClientFilter(String(o.client || o.clientName || ''), selectedClient)
                     && !(hvacProgressCache.get(String(o.id)) || {}).ok).slice(0, 40);
                 if (need.length) hvacRefreshProgress(need).then(changed => { if (changed && hvacHistoryVisible()) renderHistoryModule(); }).catch(() => {});
@@ -9330,6 +9330,11 @@ async function authPedirNuevaClave() {
                         doneCount = localProgress.done;
                         percent = localProgress.percent;
                         progressTitle = 'Avance calculado desde ejecuciones locales disponibles.';
+                    } else if (['COMPLETED', 'BILLED'].includes(String(o.status || '').toUpperCase()) && eqIds.length) {
+                        // Orden cerrada sin caché ni snapshot: se muestra 100% mientras llega el dato real de la nube.
+                        doneCount = eqIds.length;
+                        percent = 100;
+                        progressTitle = 'Avance confirmado al cierre; actualizando desde la nube…';
                     }
                 } else {
                     const missingByEquipment = [];
