@@ -40,7 +40,7 @@
       coverSmall: 'INFORME TÉCNICO GENERAL DE MANTENIMIENTO · REVISIÓN TÉCNICA',
       coverText: `Se detallan las revisiones técnicas, mediciones y hallazgos registrados por ${COMPANY} sobre los equipos del cliente. El detalle de cada equipo y su registro fotográfico se encuentra en las páginas siguientes.`,
       closeSmall: 'CONCLUSIONES Y CIERRE', closeTitle: 'Conclusiones de la revisión técnica',
-      closeText: 'Resumen de los hallazgos de la revisión y estado general del equipo.',
+      closeText: 'Conclusiones individuales de los equipos revisados y estado de cada uno.',
       conclusionTitle: 'CONCLUSIÓN DEL TÉCNICO',
       photoNumber: 4, photoTitle: 'REGISTRO FOTOGRÁFICO',
       summary: 'Este informe técnico proporciona una visión detallada de las actividades realizadas, sirviendo como herramienta de referencia para futuras intervenciones y mejoras.',
@@ -51,7 +51,7 @@
       coverSmall: 'INFORME TÉCNICO GENERAL DE MANTENIMIENTO CORRECTIVO',
       coverText: `Se detallan las intervenciones correctivas, mediciones y trabajos ejecutados por ${COMPANY} sobre los equipos del cliente. El detalle de cada equipo y su registro fotográfico se encuentra en las páginas siguientes.`,
       closeSmall: 'CONCLUSIONES Y CIERRE', closeTitle: 'Conclusiones del mantenimiento correctivo',
-      closeText: 'Resumen del trabajo correctivo ejecutado y estado final del equipo.',
+      closeText: 'Conclusiones individuales de los equipos intervenidos y estado final de cada uno.',
       conclusionTitle: 'ESTADO FINAL Y CONCLUSIONES',
       photoNumber: 4, photoTitle: 'REGISTRO FOTOGRÁFICO · ANTES Y DESPUÉS',
       summary: 'Este informe técnico proporciona una visión detallada de las actividades realizadas, sirviendo como herramienta de referencia para futuras intervenciones y mejoras.',
@@ -398,7 +398,7 @@
     return String(value || '').split(/\r?\n/).map(s => s.replace(/^[-•*]\s*/, '').trim()).filter(Boolean);
   }
 
-  function buildClosePage(order, typeKey, type, items) {
+  function buildClosePage(order, typeKey, type, items, aiRecommendations = [], aiRecommendationError = '') {
     const clientName = resolveClientName(order);
     const signature = order.clientSignature || {};
     const signatureImg = first(signature.signatureImg, signature.image, signature.dataUrl, '');
@@ -407,11 +407,13 @@
       if (!rows.length) return '';
       const groups = new Map();
       rows.forEach(r => { if (!groups.has(r.text)) groups.set(r.text, []); groups.get(r.text).push(r.code); });
-      if (groups.size === 1) return rows[0].text;                                  // todos igual: se muestra una sola vez
+      if (groups.size === 1) return rows[0].text;
       return [...groups.entries()].map(([text, codes]) => `${codes.join(', ')}: ${text}`).join('\n\n');
     };
 
-    const recText = String(first(order.recommendations, order.recomendaciones, perEquipment(['recomendaciones', 'recommendations'])));
+    const orderRecText = String(first(order.recommendations, order.recomendaciones)).trim();
+    const legacyRecText = String(first(perEquipment(['recomendaciones', 'recommendations']))).trim();
+    const recText = typeKey === 'PREVENTIVO' ? String(first(orderRecText, legacyRecText)) : orderRecText;
     let body = `<div class="title"><small>${esc(type.closeSmall)}</small><h1>${esc(type.closeTitle)}</h1><p>${esc(type.closeText)}</p></div>`;
 
     if (typeKey === 'PREVENTIVO') {
@@ -424,11 +426,28 @@
       const list = (recs.length ? recs : type.defaultRecommendations).map(r => `<li>${esc(r)}</li>`).join('');
       body += section('RECOMENDACIONES', `<ul>${list}</ul>`);
     } else {
-      const conclusion = String(first(order.conclusion, order.finalConclusion, order.conclusiones,
-        perEquipment(typeKey === 'REVISION' ? ['conclusion'] : ['conclusion', 'correctiveDesc']),
-        'No se registró una conclusión del técnico para esta orden.'));
-      body += section(type.conclusionTitle, textBlock(conclusion, 110));
-      body += section('RECOMENDACIONES', textBlock(first(recText, 'No se registraron recomendaciones para esta orden.'), 90));
+      // Revisión y correctivo: cada conclusión queda asociada explícitamente a su equipo.
+      const conclusionRows = items.map((item, index) => {
+        const eqConclusion = String(first(item.exec?.conclusion,
+          items.length === 1 ? order.conclusion : '',
+          items.length === 1 ? order.finalConclusion : '',
+          items.length === 1 ? order.conclusiones : '',
+          typeKey === 'CORRECTIVO' ? item.exec?.correctiveDesc : '')).trim();
+        return `<div style="margin:0 0 12px 0; padding:0 0 10px 0; border-bottom:${index === items.length - 1 ? '0' : '1px solid #dce3ec'};"><div style="font-weight:800; color:#17243a; margin-bottom:5px;">${esc(equipmentTitle(item))}</div><div style="white-space:pre-wrap; color:#1a2433;">${esc(eqConclusion || 'No se registró una conclusión para este equipo.')}</div></div>`;
+      }).join('');
+      body += section('CONCLUSIONES POR EQUIPO', conclusionRows || textBlock('No se registraron conclusiones por equipo.', 55));
+
+      const savedRecs = lines(recText).filter(line => !/^no se (registr|dej|identific)/i.test(line));
+      const finalRecs = savedRecs.length ? savedRecs : (Array.isArray(aiRecommendations) ? aiRecommendations : []);
+      let recommendationsHtml;
+      if (finalRecs.length) {
+        recommendationsHtml = `<ul style="margin:0; padding-left:22px;">${finalRecs.map(r => `<li style="margin:0 0 7px 0;">${esc(r)}</li>`).join('')}</ul>`;
+      } else if (aiRecommendationError) {
+        recommendationsHtml = textBlock('No fue posible generar recomendaciones automáticas en este momento. Las conclusiones de cada equipo se conservan en este informe.', 65);
+      } else {
+        recommendationsHtml = textBlock('No se identificaron recomendaciones específicas a partir de los desarrollos y conclusiones registrados.', 65);
+      }
+      body += section('RECOMENDACIONES', recommendationsHtml);
     }
 
     body += `<div class="sum">${esc(type.summary)} <i>La misión de Alejandro Faccini y Compañía S.A.S. es brindarles el mejor servicio.</i></div>
@@ -439,19 +458,24 @@
     return pageHtml(order, body);
   }
 
-  function buildReport(order, typeKey, opts = {}) {
-    const type = REPORTS[typeKey];
+  function selectReportItems(order, opts = {}) {
     let items = equipmentRows(order);
     if (opts.onlyCorrective) items = items.filter(({ exec }) => exec && exec.corrective);
     if (Array.isArray(opts.only) && opts.only.length) {
       const wanted = opts.only.map(String);
       items = items.filter(({ key, eq }) => wanted.includes(String(key)) || wanted.includes(String(eq.id)) || wanted.includes(String(eq.code)));
     }
+    return items;
+  }
+
+  function buildReport(order, typeKey, opts = {}) {
+    const type = REPORTS[typeKey];
+    const items = selectReportItems(order, opts);
     if (!items.length) throw new Error(opts.onlyCorrective ? 'No hay equipos con correctivos en esta orden.' : 'La orden no tiene equipos para generar el informe.');
     const jobs = [];
     const pages = [buildCoverPage(order, typeKey, type, items)];
     items.forEach((item, index) => pages.push(buildEquipmentPage(order, typeKey, type, item, index, jobs)));
-    pages.push(buildClosePage(order, typeKey, type, items));
+    pages.push(buildClosePage(order, typeKey, type, items, opts.aiRecommendations || [], opts.aiRecommendationError || ''));
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
       <title>${esc(order.id || 'Orden')} · ${esc(typeKey)}</title><style>${REPORT_CSS}</style></head><body>${pages.join('')}</body></html>`;
     return { html, jobs };
@@ -951,6 +975,46 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     ]);
   }
 
+  async function generateAggregatedRecommendations(order, typeKey, options = {}) {
+    const saved = String(first(order?.recommendations, order?.recomendaciones, '')).trim();
+    // Si administración ya registró recomendaciones manuales, se respetan y no se sustituyen.
+    if (saved && !/^no se (registr|dej|identific)/i.test(saved)) return { skipped: true, recommendations: [] };
+
+    const items = selectReportItems(order, options);
+    const equipos = items.map(({ eq, exec, key }) => {
+      const development = String(first(exec?.notasAnaliticas, exec?.observaciones_tecnicas, exec?.observaciones, exec?.notas_tecnicas, exec?.correctiveDesc, exec?.obs, exec?.description, exec?.notes, '')).trim();
+      const conclusion = String(first(exec?.conclusion, '')).trim();
+      return {
+        codigo: String(first(eq?.code, eq?.id, key)),
+        nombre: String(first(eq?.name, eq?.type, eq?.systemType, 'Equipo HVAC')),
+        desarrollo: development,
+        conclusion,
+        requiere_correctivo: exec?.corrective === true,
+        detalle_correctivo: String(first(exec?.correctiveDesc, '')).trim()
+      };
+    }).filter(item => item.desarrollo || item.conclusion || item.detalle_correctivo);
+
+    if (!equipos.length) return { recommendations: [], error: 'No existen desarrollos ni conclusiones para analizar.' };
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 40000);
+    try {
+      const response = await fetch('/api/ia/asistente-notas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recomendaciones_orden', tipo_servicio: typeKey, equipos }),
+        signal: controller.signal
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !Array.isArray(data.recomendaciones)) {
+        throw new Error(data.error || `La IA respondió con estado ${response.status}.`);
+      }
+      return { recommendations: data.recomendaciones.map(value => String(value || '').trim()).filter(Boolean).slice(0, 6) };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /**
    * Genera el informe en un iframe aislado y descarga un PDF vectorial directamente.
    * Los textos, mediciones y tablas permanecen seleccionables; fotos y firmas son imágenes.
@@ -998,10 +1062,28 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 
       setPdfProgress('Cargando equipos, firmas y fotografías…');
       try { if (typeof ensureOrderEquipments === 'function') await ensureOrderEquipments(order); } catch (e) { console.warn('[PDF] No se pudo ampliar el catálogo de equipos:', e); }
+
+      const reportOptions = { ...options };
+      if (typeKey === 'REVISION' || typeKey === 'CORRECTIVO') {
+        const existingManual = String(first(order.recommendations, order.recomendaciones, '')).trim();
+        if (!existingManual || /^no se (registr|dej|identific)/i.test(existingManual)) {
+          setPdfProgress('Analizando desarrollos y conclusiones de todos los equipos…');
+          try {
+            const generated = await generateAggregatedRecommendations(order, typeKey, options);
+            reportOptions.aiRecommendations = generated.recommendations || [];
+            reportOptions.aiRecommendationError = generated.error || '';
+          } catch (error) {
+            console.warn('[IA] No se pudieron generar recomendaciones del informe:', error);
+            reportOptions.aiRecommendations = [];
+            reportOptions.aiRecommendationError = error && error.message ? error.message : String(error);
+          }
+        }
+      }
+
       await preloadPhotos(order);
       RUNTIME_IMG.header = await trimWhiteMargins(getHeaderImage());
       RUNTIME_IMG.footer = await trimWhiteMargins(getFooterImage());
-      const built = buildReport(order, typeKey, options);
+      const built = buildReport(order, typeKey, reportOptions);
 
       setPdfProgress('Organizando páginas del informe…');
       frame = document.createElement('iframe');
