@@ -149,6 +149,10 @@
         let currentExecEqId = null;
         let sigCanvas, sigCtx, isDrawing = false;
         let tempPhotosList = [];
+        let adminAmendmentMode = false;
+        let adminAmendmentIsPostCompletion = false;
+        let adminAmendmentNewPhotos = [];
+        let adminAmendmentExecKey = null;
         let currentHubTab = 'equipos'; // 'equipos' o 'correctivos'
 
         // Imágenes oficiales de encabezado y pie de página (1241x93 px c/u)
@@ -6148,6 +6152,242 @@ async function authPedirNuevaClave() {
             }
         }
 
+        // Edición de texto/evidencias sin reejecutar ni sustituir un informe ya guardado.
+        function hvacAdminExecPhotos(exec) {
+            const out = [], seen = new Set();
+            ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales'].forEach(key => {
+                (Array.isArray(exec && exec[key]) ? exec[key] : []).forEach(photo => {
+                    if (!photo) return;
+                    const signature = typeof photo === 'string' ? photo : JSON.stringify(photo);
+                    if (!seen.has(signature)) { seen.add(signature); out.push(photo); }
+                });
+            });
+            return out;
+        }
+        function hvacAdminHasExecPhoto(exec) {
+            return Number(exec && exec.photosCount) > 0 || hvacAdminExecPhotos(exec).length > 0;
+        }
+        function hvacAdminShowAmendmentMode(enabled) {
+            const set = (id, show) => { const el = document.getElementById(id); if (el) el.classList.toggle('hidden', !show); };
+            ['exec-admin-params-section', 'exec-admin-checklist-section', 'exec-admin-corrective-section', 'exec-admin-obs-section', 'exec-admin-photos-section']
+                .forEach(id => set(id, !enabled));
+            set('exec-admin-amendment-panel', enabled);
+            const button = document.querySelector('#exec-equipment-modal-backdrop form button[type="submit"]');
+            if (button) button.innerHTML = enabled
+                ? '<i class="fa-solid fa-clock-rotate-left"></i> Guardar modificación posterior'
+                : '<i class="fa-solid fa-floppy-disk"></i> Guardar Intervención';
+        }
+        async function adminAmendProcessWithAI() {
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+            if (!order) return showToast('No se encontró la orden para procesar.', 'error');
+            const routineType = String(billingRoutineType(order) || '').toUpperCase();
+            if (!['REVISION', 'CORRECTIVO'].includes(routineType)) {
+                return showToast('El procesamiento administrativo con IA está disponible para revisión y correctivo.', 'info');
+            }
+
+            const eq = equipmentCatalog.find(e => String(e.id) === String(currentExecEqId) || String(e.code) === String(currentExecEqId)) || { id: currentExecEqId, code: currentExecEqId, name: 'Equipo HVAC' };
+            const obs = String(document.getElementById('exec-admin-amend-obs')?.value || '').trim();
+            const development = String(document.getElementById('exec-admin-amend-development')?.value || '').trim();
+            const technical = String(document.getElementById('exec-admin-amend-technical')?.value || '').trim();
+            const corrective = String(document.getElementById('exec-admin-amend-corrective')?.value || '').trim();
+            const rawParts = [];
+            if (obs) rawParts.push('Notas originales del técnico:\n' + obs);
+            if (development) rawParts.push('Desarrollo u observaciones ya registradas:\n' + development);
+            if (technical) rawParts.push('Observaciones técnicas adicionales:\n' + technical);
+            if (corrective) rawParts.push('Novedad o correctivo registrado:\n' + corrective);
+            const raw = rawParts.join('\n\n').trim();
+            if (raw.replace(/\s/g, '').length < 5) {
+                return showToast('No hay notas ni desarrollo para enviar a la IA. Agrega primero el texto del informe.', 'error');
+            }
+
+            const out = document.getElementById('exec-admin-amend-development');
+            const conclusion = document.getElementById('exec-admin-amend-conclusion');
+            const correctiveField = document.getElementById('exec-admin-amend-corrective');
+            const btn = document.getElementById('exec-admin-amend-ai-btn');
+            const status = document.getElementById('exec-admin-amend-ai-status');
+            const hasExistingOutput = !!(out.value.trim() || conclusion.value.trim());
+            if (hasExistingOutput && !confirm('La IA volverá a redactar el desarrollo y la conclusión de este equipo usando las notas disponibles. ¿Deseas reemplazar esos dos campos? Las notas originales y las demás observaciones se conservarán.')) return;
+
+            const originalLabel = btn ? btn.innerHTML : '';
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando…'; }
+            if (status) status.textContent = 'Enviando las notas a Gemini. No cierres esta ventana…';
+            try {
+                const response = await fetch('/api/ia/asistente-notas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        notas_brutas: raw,
+                        tipo_servicio: routineType,
+                        equipo_codigo: String(eq.code || currentExecEqId || ''),
+                        equipo_nombre: String(eq.name || eq.type || 'Equipo HVAC')
+                    })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !String(data.notas_analiticas || '').trim() || !String(data.conclusion || '').trim()) {
+                    throw new Error(data.error || `La IA respondió con estado ${response.status}.`);
+                }
+                out.value = String(data.notas_analiticas).trim();
+                conclusion.value = String(data.conclusion).trim();
+                // Solo completa la novedad si la IA detecta un correctivo y el campo estaba vacío; nunca borra lo ya escrito.
+                if (data.requiere_correctivo === true && !correctiveField.value.trim() && data.descripcion_correctivo) {
+                    correctiveField.value = String(data.descripcion_correctivo).trim();
+                }
+                if (status) status.textContent = 'Texto procesado. Revisa el desarrollo y la conclusión; los cambios aún no están guardados. Pulsa “Guardar modificación posterior” para registrarlos.';
+                showToast('IA procesó el informe de este equipo. Revisa y guarda los cambios.', 'success');
+            } catch (error) {
+                console.error('[IA Administración] No se pudo procesar el informe:', error);
+                if (status) status.textContent = 'No se pudo procesar: ' + String(error.message || error).slice(0, 220);
+                showToast('No se pudo procesar con IA: ' + String(error.message || error).slice(0, 140), 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = originalLabel || '✨ Procesar texto con IA'; }
+            }
+        }
+
+        function renderAdminAmendmentPhotoPreview() {
+            const box = document.getElementById('exec-admin-amend-photo-preview');
+            if (!box) return;
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+            const exec = order && order.executions && (order.executions[adminAmendmentExecKey] || order.executions[currentExecEqId]) || {};
+            const existing = hvacAdminExecPhotos(exec);
+            const renderCard = (src, label) => `<div class="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-white"><img src="${esc(typeof src === 'string' ? src : (src.url || src.src || src.dataUrl || ''))}" alt="${esc(label)}" class="w-full h-full object-cover"><span class="absolute inset-x-0 bottom-0 bg-slate-950/70 text-white text-[9px] text-center py-1">${esc(label)}</span></div>`;
+            box.innerHTML = existing.map((src, i) => renderCard(src, 'Existente ' + (i + 1))).join('') +
+                adminAmendmentNewPhotos.map((src, i) => `<div class="relative">${renderCard(src, 'Nueva ' + (i + 1))}<button type="button" onclick="removeAdminAmendmentPhoto(${i})" class="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-rose-600 text-white text-xs" aria-label="Quitar foto nueva">×</button></div>`).join('');
+            if (!box.innerHTML) box.innerHTML = '<p class="text-[11px] text-slate-400">No hay fotografías adjuntas en este equipo.</p>';
+        }
+        function removeAdminAmendmentPhoto(index) {
+            adminAmendmentNewPhotos.splice(Number(index), 1);
+            renderAdminAmendmentPhotoPreview();
+        }
+        async function handleAdminAmendmentPhotoChange(input) {
+            const files = Array.from(input && input.files || []);
+            if (input) input.value = '';
+            if (!files.length) return;
+            appBusyStart('Comprimiendo y subiendo evidencias adicionales…');
+            try {
+                for (const file of files) {
+                    if (adminAmendmentNewPhotos.length >= 8) {
+                        showToast('Puedes anexar máximo 8 fotografías nuevas por modificación.', 'error');
+                        break;
+                    }
+                    try {
+                        const stored = await r2keep(await compressImage(file, 1000, 0.72), 'reportes');
+                        if (stored) adminAmendmentNewPhotos.push(stored);
+                        else showToast('Una fotografía no pudo guardarse en el almacenamiento.', 'error');
+                    } catch (error) {
+                        console.warn('[Modificación posterior] Foto no agregada:', error);
+                        showToast('No se pudo procesar una de las fotografías.', 'error');
+                    }
+                }
+                renderAdminAmendmentPhotoPreview();
+            } finally { appBusyEnd(); }
+        }
+        const adminAmendPhotoInput = document.getElementById('exec-admin-amend-photos');
+        if (adminAmendPhotoInput) adminAmendPhotoInput.addEventListener('change', e => handleAdminAmendmentPhotoChange(e.currentTarget));
+
+        async function saveAdminExecutionAmendment() {
+            const order = workOrders.find(o => String(o.id) === String(currentExecOrderId));
+            if (!order) return showToast('No se encontró la orden que deseas modificar.', 'error');
+            const eq = equipmentCatalog.find(e => String(e.id) === String(currentExecEqId) || String(e.code) === String(currentExecEqId)) || { id: currentExecEqId, code: currentExecEqId };
+            if (!order.executions) order.executions = {};
+            const key = adminAmendmentExecKey || currentExecEqId;
+            const storedExisting = order.executions[key] || order.executions[eq.id] || order.executions[eq.code];
+            if ((!storedExisting || typeof storedExisting !== 'object') && !adminAmendmentIsPostCompletion) {
+                return showToast('Todavía no existe una ejecución guardada para modificar. La orden permanece intacta.', 'error');
+            }
+
+            const now = new Date().toISOString();
+            // Algunas órdenes históricas quedaron cerradas sin que existiera un objeto de ejecución.
+            // En ese caso se crea un registro documental mínimo, sin inventar checklist/mediciones,
+            // y sin cambiar estado, firma ni cierre de la orden.
+            const createdPostCompletionRecord = !storedExisting || typeof storedExisting !== 'object';
+            const existing = createdPostCompletionRecord ? {
+                status: 'FINALIZADO',
+                timestamp: now,
+                typeKey: resolveFormTypeKey(eq.type),
+                maintenanceType: billingRoutineType(order),
+                formConfigSnapshot: { params: '', checklist: '' },
+                paramsValues: {},
+                checklist: {},
+                legacyPostCompletionRecord: true
+            } : storedExisting;
+            const next = { ...existing };
+            const fields = {
+                obs: document.getElementById('exec-admin-amend-obs').value,
+                notasAnaliticas: document.getElementById('exec-admin-amend-development').value,
+                conclusion: document.getElementById('exec-admin-amend-conclusion').value,
+                correctiveDesc: document.getElementById('exec-admin-amend-corrective').value,
+                observaciones_tecnicas: document.getElementById('exec-admin-amend-technical').value
+            };
+            const changedFields = [];
+            Object.entries(fields).forEach(([field, value]) => {
+                const normalized = String(value == null ? '' : value);
+                if (String(existing[field] == null ? '' : existing[field]) !== normalized) changedFields.push(field);
+                next[field] = normalized;
+            });
+
+            const oldAdditional = Array.isArray(existing.fotosAdicionales) ? existing.fotosAdicionales : [];
+            const additions = adminAmendmentNewPhotos.slice();
+            if (additions.length) {
+                next.fotosAdicionales = [...oldAdditional, ...additions];
+                const oldGeneric = Array.isArray(existing.photos) ? existing.photos : [];
+                next.photos = [...oldGeneric, ...additions];
+                changedFields.push('fotosAdicionales');
+            } else if (!Array.isArray(next.fotosAdicionales)) {
+                next.fotosAdicionales = oldAdditional;
+            }
+
+            if (!changedFields.length && !additions.length) {
+                return showToast('No hay cambios para guardar. La orden y su firma permanecen intactas.', 'info');
+            }
+
+            // En órdenes que siguen abiertas, también se exige evidencia para contar el equipo como completado.
+            // En órdenes cerradas se conserva la compatibilidad histórica y jamás se retira su firma.
+            if (!adminAmendmentIsPostCompletion) {
+                next.evidenceRequired = true;
+                next.evidenceRequirementVersion = 1;
+                next.evidenceMissing = !hvacAdminHasExecPhoto(next);
+            }
+
+            const previousHistory = Array.isArray(existing.adminModifications) ? existing.adminModifications : [];
+            const changes = changedFields.filter(field => Object.prototype.hasOwnProperty.call(fields, field)).map(field => ({
+                field,
+                before: String(existing[field] == null ? '' : existing[field]),
+                after: String(next[field] == null ? '' : next[field])
+            }));
+            next.adminModifications = previousHistory.concat([{
+                id: (window.crypto && typeof window.crypto.randomUUID === 'function') ? window.crypto.randomUUID() : 'ADM-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                at: now,
+                by: auditUsuario(),
+                type: billingRoutineType(order),
+                afterClosure: !!adminAmendmentIsPostCompletion,
+                createdPostCompletionRecord,
+                fieldsChanged: [...new Set(changedFields)],
+                changes,
+                photosAdded: additions.length,
+                preservedOrderStatus: order.status || null,
+                preservedSignature: !!(order.clientSignature && (order.clientSignature.signatureImg || order.clientSignature.image || order.clientSignature.timestamp))
+            }]).slice(-50);
+            next.adminModifiedAt = now;
+            next.adminModifiedBy = auditUsuario();
+
+            order.executions[key] = next;
+            if (eq.id != null) order.executions[eq.id] = next;
+            if (eq.code) order.executions[eq.code] = next;
+            // No se modifica status, clientSignature, signatureDecision ni technicianFinished.
+            order.updatedAt = now;
+
+            const saved = await cloudSaveOrder(order);
+            localStorage.setItem('HVAC_ORDERS_BACKUP', JSON.stringify(workOrders));
+            registrarAuditoria(adminAmendmentIsPostCompletion ? 'MODIFICACION_POSTERIOR' : 'EDICION_ADMINISTRATIVA', 'hvac_orders', order.id);
+            adminAmendmentNewPhotos = [];
+            closeEquipmentExecutionModal();
+            renderOrderHubEquipments(order);
+            if (typeof renderAgendaModule === 'function') renderAgendaModule();
+            showToast(saved
+                ? 'Modificación guardada en la orden. Se conservaron el cierre y la firma del cliente.'
+                : 'Modificación guardada localmente y pendiente de sincronización. Se conservaron el cierre y la firma.', saved ? 'success' : 'error');
+        }
+
         // =========================================================================
         // FORMULARIO DINÁMICO SEGÚN TIPO DE EQUIPO (EXTRACTOR, MINISPLIT, ETC.)
         // =========================================================================
@@ -6155,8 +6395,19 @@ async function authPedirNuevaClave() {
             currentExecOrderId = orderId;
             currentExecEqId = eqId;
             const order = workOrders.find(o => o.id === orderId);
-            const eq = equipmentCatalog.find(e => e.id === eqId || e.code === eqId) || { code: eqId, type: 'EXTRACTOR' };
-            const exec = (order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
+            const eq = equipmentCatalog.find(e => String(e.id) === String(eqId) || String(e.code) === String(eqId)) || { id: eqId, code: eqId, type: 'EXTRACTOR' };
+            const executionMap = order.executions || {};
+            const execKey = executionMap[eqId] ? eqId : (executionMap[eq.id] ? eq.id : (executionMap[eq.code] ? eq.code : eqId));
+            const exec = (executionMap[execKey] || executionMap[eqId] || executionMap[eq.id] || executionMap[eq.code]) || {};
+
+            const routineType = typeof billingRoutineType === 'function' ? billingRoutineType(order) : String(order.maintenanceType || order.tipoRutina || 'PREVENTIVO').toUpperCase();
+            const signatureDecision = String(order.signatureDecision || '').toUpperCase();
+            const hasSignature = !!(order.clientSignature && (order.clientSignature.signatureImg || order.clientSignature.image || order.clientSignature.timestamp));
+            adminAmendmentIsPostCompletion = ['COMPLETED', 'BILLED'].includes(String(order.status || '').toUpperCase()) || ['SIGNED', 'DECLINED'].includes(signatureDecision) || hasSignature;
+            adminAmendmentMode = adminAmendmentIsPostCompletion || routineType !== 'PREVENTIVO';
+            adminAmendmentExecKey = execKey;
+            adminAmendmentNewPhotos = [];
+            hvacAdminShowAmendmentMode(adminAmendmentMode);
 
             const typeKey = resolveFormTypeKey(eq.type);
             const formCfg = equipmentFormsConfig[typeKey] || equipmentFormsConfig['EXTRACTOR'] || {
@@ -6209,13 +6460,36 @@ async function authPedirNuevaClave() {
             document.getElementById('exec-corrective-desc').value = exec.correctiveDesc || '';
             toggleCorrectiveSection();
 
-            tempPhotosList = exec.photos || [];
+            tempPhotosList = hvacAdminExecPhotos(exec);
             renderExecPhotosPreview();
+
+            if (adminAmendmentMode) {
+                document.getElementById('exec-modal-eq-title').innerText = `Modificar informe: ${eq.code} · ${routineType}`;
+                document.getElementById('exec-admin-amend-obs').value = String(exec.obs || '');
+                document.getElementById('exec-admin-amend-development').value = String(
+                    exec.notasAnaliticas || exec.observaciones_tecnicas || exec.observaciones || exec.notas_tecnicas || exec.correctiveDesc || ''
+                );
+                document.getElementById('exec-admin-amend-conclusion').value = String(exec.conclusion || '');
+                document.getElementById('exec-admin-amend-corrective').value = String(exec.correctiveDesc || '');
+                document.getElementById('exec-admin-amend-technical').value = String(exec.observaciones_tecnicas || exec.observaciones || exec.notas_tecnicas || '');
+                const corrWrap = document.getElementById('exec-admin-amend-corrective-wrap');
+                if (corrWrap) corrWrap.classList.toggle('hidden', routineType !== 'CORRECTIVO' && !exec.corrective && !exec.correctiveDesc);
+                const aiWrap = document.getElementById('exec-admin-amend-ai-wrap');
+                if (aiWrap) aiWrap.classList.toggle('hidden', !['REVISION', 'CORRECTIVO'].includes(routineType));
+                const aiStatus = document.getElementById('exec-admin-amend-ai-status');
+                if (aiStatus) aiStatus.textContent = 'La IA analizará las notas disponibles y propondrá desarrollo y conclusión para este equipo. Debes guardar la modificación para conservar los cambios.';
+                renderAdminAmendmentPhotoPreview();
+            }
         }
 
         function closeEquipmentExecutionModal() {
             document.getElementById('exec-equipment-modal-backdrop').classList.add('hidden');
             currentExecEqId = null;
+            adminAmendmentMode = false;
+            adminAmendmentIsPostCompletion = false;
+            adminAmendmentNewPhotos = [];
+            adminAmendmentExecKey = null;
+            hvacAdminShowAmendmentMode(false);
         }
 
         function toggleCorrectiveSection() {
@@ -6274,8 +6548,15 @@ async function authPedirNuevaClave() {
         }
 
         async function saveEquipmentExecution() {
+            if (adminAmendmentMode) return saveAdminExecutionAmendment();
             const order = workOrders.find(o => o.id === currentExecOrderId);
             if (!order) return;
+            if (!Array.isArray(tempPhotosList) || tempPhotosList.length < 1) {
+                showToast('No puedes completar este equipo sin evidencia fotográfica. Agrega mínimo una foto.', 'error');
+                const photoInput = document.getElementById('exec-f-photos');
+                if (photoInput) photoInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
             if (!order.executions) order.executions = {};
 
             const missingParams = Array.from(document.querySelectorAll('.exec-param-input')).filter(input => !String(input.value || '').trim());
@@ -6320,15 +6601,15 @@ async function authPedirNuevaClave() {
                 corrective,
                 correctiveDesc,
                 photos: tempPhotosList,
+                evidenceRequired: true,
+                evidenceRequirementVersion: 1,
+                evidenceMissing: false,
                 timestamp: new Date().toISOString()
             };
 
             order.executions[currentExecEqId] = execData;
             if (eq && eq.code) order.executions[eq.code] = execData;
-            if (String(order.status || '').toUpperCase() === 'COMPLETED' && !hvacOrderProgress(order).complete) {
-                order.status = 'PENDING';
-                order.clientSignature = null;
-            }
+            // Una edición administrativa nunca retira la firma ya registrada.
 
             // Un único ítem de agenda por cliente: agrega, actualiza o retira este equipo del pendiente del cliente
             syncClientCorrective(order, eq, corrective, correctiveDesc, execData.timestamp);
@@ -8666,6 +8947,17 @@ async function authPedirNuevaClave() {
             const executions = (order && order.executions) || {};
             const exec = executions[eqId] || executions[eq.id] || executions[eq.code] || executions[String(eq.id)] || executions[String(eq.code)];
             if (!exec || typeof exec !== 'object' || !exec.timestamp) return false;
+            const evidenceRequired = exec.evidenceRequired === true || Number(exec.evidenceRequirementVersion) >= 1;
+            const orderStatus = String(order.status || '').toUpperCase();
+            const signatureDecision = String(order.signatureDecision || '').toUpperCase();
+            const signature = order.clientSignature || {};
+            const alreadyClosed = orderStatus === 'BILLED' || ['SIGNED', 'DECLINED'].includes(signatureDecision) ||
+                !!(signature && (signature.signatureImg || signature.image || (signature.timestamp && String(signature.name || '').trim())));
+            if (evidenceRequired || (!alreadyClosed && exec.timestamp)) {
+                const photoArrays = ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales'];
+                const hasEvidence = Number(exec.photosCount) > 0 || photoArrays.some(k => Array.isArray(exec[k]) && exec[k].some(Boolean));
+                if (!hasEvidence) return false;
+            }
 
             // Correctivo/Revisión: el formulario extendido del técnico neutraliza checklist
             // dinámico y exige estas tres lecturas para marcar el equipo como finalizado.

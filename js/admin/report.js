@@ -227,8 +227,17 @@
     const before = Array.isArray(exec?.fotosAntes) ? exec.fotosAntes.map(toPhotoUrl).filter(Boolean) : [];
     const after = Array.isArray(exec?.fotosDespues) ? exec.fotosDespues.map(toPhotoUrl).filter(Boolean) : [];
     const all = Array.isArray(exec?.photos) ? exec.photos.map(toPhotoUrl).filter(Boolean) : [];
-    if (routine === 'CORRECTIVO' && (before.length || after.length)) return { mode: 'ba', before, after, all: [...before, ...after] };
-    return { mode: 'grid', before: [], after: [], all: all.length ? all : [...before, ...after] };
+    const additional = Array.isArray(exec?.fotosAdicionales) ? exec.fotosAdicionales.map(toPhotoUrl).filter(Boolean) : [];
+    const uniq = values => [...new Map(values.filter(Boolean).map(value => [value, value])).values()];
+    // En correctivos se conservan las columnas ANTES/DESPUÉS; cualquier foto genérica
+    // que no esté en esas columnas se añade como evidencia adicional, sin perderla.
+    const paired = new Set([...before, ...after]);
+    const genericExtras = all.filter(src => !paired.has(src));
+    const extraPhotos = uniq([...additional, ...genericExtras]);
+    if (routine === 'CORRECTIVO' && (before.length || after.length)) {
+      return { mode: extraPhotos.length ? 'ba-extra' : 'ba', before, after, additional: extraPhotos, all: uniq([...before, ...after, ...extraPhotos]) };
+    }
+    return { mode: 'grid', before: [], after: [], additional: [], all: uniq([...all, ...before, ...after, ...additional]) };
   }
 
   /* Descarga las fotos con el mismo resolvedor que usan los PDF anteriores (si existe). */
@@ -236,7 +245,7 @@
     if (typeof afcResolvePhoto !== 'function') return;
     const raws = [];
     for (const item of equipmentRows(order)) {
-      for (const key of ['photos', 'fotosAntes', 'fotosDespues']) {
+      for (const key of ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales']) {
         if (Array.isArray(item.exec?.[key])) raws.push(...item.exec[key]);
       }
     }
@@ -349,12 +358,12 @@
     }
 
     const photos = photosFor(exec, typeKey);
-    const useBA = photos.mode === 'ba';
+    const useBA = photos.mode === 'ba' || photos.mode === 'ba-extra';
     const photoTitle = `${photoNumber}. ${useBA ? 'REGISTRO FOTOGRÁFICO · ANTES Y DESPUÉS' : 'REGISTRO FOTOGRÁFICO'}`;
     const job = {
-      id: 'ph' + index, mode: photos.mode, before: photos.before, after: photos.after, all: photos.all,
+      id: 'ph' + index, mode: photos.mode, before: photos.before, after: photos.after, additional: photos.additional || [], all: photos.all,
       title: photoTitle, contTitle: photoTitle + ' (CONTINUACIÓN)',
-      cap: useBA ? 2 : 4,   // máximo 4 fotos por página: 2 columnas de 2 (en correctivo: ANTES y DESPUÉS, 2 filas)
+      cap: (photos.mode === 'ba' || photos.mode === 'ba-extra') ? 2 : 4,   // correctivo: pares ANTES/DESPUÉS y anexos adicionales
       head: headHtml(order), foot: footHtml(),
       eqTitle: `<div class="eqt">${esc(equipmentTitle(item))}</div>`
     };
@@ -494,6 +503,17 @@
       const column = (arr, label) => `<div><h4>${label}</h4><div class="stack">${
         Array.from({ length: to - from }, (_, i) => photoCell(arr[from + i], `${label} ${from + i + 1}`, h)).join('')}</div></div>`;
       body = `<div class="cols">${column(job.before, 'ANTES')}${column(job.after, 'DESPUÉS')}</div>`;
+    } else if (job.mode === 'ba-extra') {
+      const pairs = Math.max(job.before.length, job.after.length);
+      body = Array.from({ length: to - from }, (_, offset) => {
+        const row = from + offset;
+        if (row < pairs) {
+          return `<div class="cols"><div><h4>ANTES</h4>${photoCell(job.before[row], `ANTES ${row + 1}`, h)}</div><div><h4>DESPUÉS</h4>${photoCell(job.after[row], `DESPUÉS ${row + 1}`, h)}</div></div>`;
+        }
+        const start = (row - pairs) * 2;
+        const extraCells = job.additional.slice(start, start + 2).map((src, i) => photoCell(src, `EVIDENCIA ADICIONAL ${start + i + 1}`, h)).join('');
+        return `<div><h4>EVIDENCIA ADICIONAL</h4><div class="p6" style="grid-template-columns:repeat(${job.additional.slice(start, start + 2).length > 1 ? 2 : 1},1fr)">${extraCells}</div></div>`;
+      }).join('');
     } else {
       const cells = job.all.slice(from, to).map((src, i) => photoCell(src, `Foto ${from + i + 1}`, h)).join('');
       body = `<div class="p6" style="grid-template-columns:repeat(${to - from === 1 ? 1 : 2},1fr)">${cells}</div>`;
@@ -508,13 +528,13 @@
      encabezado, pie ni otras secciones). Devuelve false si no cabe con la altura mínima. */
   function fitPhotos(pageEl, slot, job, from, to, title, minH) {
     const count = to - from;
-    const rows = job.mode === 'ba' ? count : Math.ceil(count / 2);
+    const rows = (job.mode === 'ba' || job.mode === 'ba-extra') ? count : Math.ceil(count / 2);
     slot.innerHTML = photoBlock(job, from, to, title, PROBE_H);
     if (pageEl.offsetHeight > PAGE_LIMIT_PX) return false;
     const foot = pageEl.querySelector('.fi');
     const bottom = slot.getBoundingClientRect().bottom;
     const limit = foot ? foot.getBoundingClientRect().top : pageEl.getBoundingClientRect().bottom - 96;
-    const maxH = (job.mode !== 'ba' && count === 1) ? 420 : 300;
+    const maxH = (job.mode !== 'ba' && job.mode !== 'ba-extra' && count === 1) ? 420 : 300;
     let h = Math.min(maxH, PROBE_H + Math.floor((limit - bottom - 6) / rows));
     if (h < minH) return false;
     setPhotoHeight(slot, h);
@@ -532,7 +552,7 @@
       const slot = doc.querySelector(`[data-slot="${job.id}"]`);
       if (!slot) return;
       const pageEl = slot.closest('.page');
-      const total = job.mode === 'ba' ? Math.max(job.before.length, job.after.length) : job.all.length;
+      const total = job.mode === 'ba' ? Math.max(job.before.length, job.after.length) : (job.mode === 'ba-extra' ? Math.max(job.before.length, job.after.length) + Math.ceil(job.additional.length / 2) : job.all.length);
       if (!total) {
         slot.innerHTML = `<h2>${esc(job.title)}</h2><div class="box"><div class="txt" style="font-style:normal">Sin registro fotográfico para este equipo.</div></div>`;
         return;
