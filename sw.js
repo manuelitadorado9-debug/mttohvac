@@ -1,6 +1,6 @@
 /* Service Worker · Smart Maintenance HVAC.
    Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
-const CACHE_VERSION = 'hvac-v12-control-operativo-20261123';
+const CACHE_VERSION = 'hvac-v13-pwa-install-20261125';
 const SHELL = [
   './',
   './tecnico.html',
@@ -9,7 +9,8 @@ const SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-512-maskable.png',
-  './apple-touch-icon.png'
+  './apple-touch-icon.png',
+  './js/tecnico/pwa-install.js'
 ];
 const CDN_HOSTS = [
   'cdnjs.cloudflare.com',
