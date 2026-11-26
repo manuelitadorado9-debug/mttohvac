@@ -97,7 +97,7 @@
         q('tr-preview-body').innerHTML = '<div class="oc-empty">Revisando secuencia GPS y comparando con los transportes ya registrados…</div>';
         q('tr-preview-modal').classList.remove('hidden');
         try {
-            const r = await rpc('ops_transfers_preview', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: null }));
+            const r = await rpc('ops_transfers_preview', Object.assign(auth(), { p_from: f, p_to: t, p_max_gap_min: 1439 }));
             if (!r.ok) {
                 gpsPreview = null;
                 q('tr-preview-body').innerHTML = '<div class="oc-err">' + esc(r.msg || 'No se pudo revisar la asistencia.') + '</div>';
@@ -155,7 +155,7 @@
         const btn = q('tr-preview-import'); if (btn) btn.disabled = true;
         try {
             const r = await rpc('ops_transfers_detect', Object.assign(auth(), {
-                p_from: rg.from, p_to: rg.to, p_max_gap_min: null
+                p_from: rg.from, p_to: rg.to, p_max_gap_min: 1439
             }));
             if (!r.ok) return showToast(r.msg || 'No se pudieron importar los traslados.', 'error');
             const d = r.data || {};
