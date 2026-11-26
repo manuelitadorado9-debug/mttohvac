@@ -974,12 +974,22 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       let order = (Array.isArray(currentOrders) ? currentOrders : [])
         .find(item => String(item.id) === String(orderId));
       if (!order) throw new Error(`No se encontró la orden ${orderId} en workOrders.`);
-      if (order._hvacSummaryOnly && typeof window.hvacEnsureFullOrder === 'function') {
+
+      // Garantizar detalle completo antes de verificar ejecuciones:
+      // Se descarga si la orden es resumen (_hvacSummaryOnly), si su detalle está marcado como
+      // desactualizado (_hvacDetailStale — ocurre cuando el técnico finaliza y el admin recibe la
+      // actualización por sincronización) o si las ejecuciones están vacías (condición hvacLocalEmpty
+      // dentro de hvacEnsureFullOrder que reintenta con backoff de 1 min).
+      // hvacEnsureFullOrder es idempotente: devuelve el objeto local sin red si ya está al día.
+      const needsFetch = order._hvacSummaryOnly || order._hvacDetailStale ||
+        (!Object.keys(order.executions || {}).length &&
+          ['COMPLETED', 'IN_PROGRESS', 'BILLED'].includes(String(order.status || '').toUpperCase()));
+      if (needsFetch && typeof window.hvacEnsureFullOrder === 'function') {
         order = await window.hvacEnsureFullOrder(orderId);
       }
       if (!order) throw new Error(`No se pudo descargar el detalle de la orden ${orderId}.`);
 
-      // No generar un informe vacío: si la orden figura como ejecutada/firmada pero no trae ejecuciones, algo no se cargó.
+      // Si después de intentar la descarga las ejecuciones siguen vacías, algo falló en la nube.
       if (!Object.keys(order.executions || {}).length && ['COMPLETED', 'IN_PROGRESS', 'BILLED'].includes(String(order.status || '').toUpperCase())) {
         throw new Error(`La orden ${order.id} no trae los datos de ejecución (parámetros, textos y fotos). No se generó el PDF para no imprimir un informe vacío; pulsa Sincronizar e inténtalo de nuevo.`);
       }
