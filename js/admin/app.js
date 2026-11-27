@@ -2002,7 +2002,10 @@ async function authPedirNuevaClave() {
             'pickup_done_by:payload->toolPickup->>doneBy',
             'pickup_note:payload->toolPickup->>note',
             'pickup_history:payload->toolPickup->history',
-            'signature_timestamp:payload->clientSignature->>timestamp'
+            'signature_timestamp:payload->clientSignature->>timestamp',
+            'signature_name:payload->clientSignature->>name',
+            'signature_decision:payload->>signatureDecision',
+            'signature_decision_at:payload->>signatureDecisionAt'
         ].join(',');
 
         function hvacOrderSummaryFromRow(row) {
@@ -2037,7 +2040,10 @@ async function authPedirNuevaClave() {
                 routineType: row.routine_type || '',
                 invoice: Object.keys(invoice).length ? invoice : null,
                 toolPickup: Object.keys(toolPickup).length ? toolPickup : null,
-                clientSignature: row.signature_timestamp ? { timestamp: row.signature_timestamp } : null,
+                signatureDecision: row.signature_decision || '',
+                signatureDecisionAt: row.signature_decision_at || '',
+                clientSignature: (row.signature_timestamp || row.signature_name)
+                    ? { timestamp: row.signature_timestamp || '', name: row.signature_name || '' } : null,
                 _hvacSummaryOnly: true
             };
         }
@@ -2064,18 +2070,16 @@ async function authPedirNuevaClave() {
             }
             const summaryById = new Map((sourceList || []).map(o => [String(o.id), o]));
             let changed = false;
-            const resolvedIds = new Set();
             rows.forEach(row => {
                 if (!row || (!row.order_id && row.id == null)) return;
-                let executions = row.executions == null ? {} : row.executions;
+                let executions = row.executions;
                 if (typeof executions === 'string') { try { executions = JSON.parse(executions); } catch (_) { return; } }
-                // Solo se proyecta executions desde la vista ligera; nunca el payload completo.
-                // La vista debe retirar fotos/firma base64 antes de exponer esta columna.
-                if (!executions || typeof executions !== 'object') executions = {};
+                // La vista debe entregar un objeto JSON válido. Si falta o viene malformado,
+                // NO se interpreta como cero: la orden queda sin resolver y pasa al respaldo RPC.
+                if (!executions || typeof executions !== 'object' || Array.isArray(executions)) return;
                 const id = String(row.order_id || row.id);
                 const summary = summaryById.get(id);
                 if (!summary) return;
-                resolvedIds.add(id);
                 const progressOrder = Object.assign({}, summary, { id, executions });
                 const p = hvacOrderProgress(progressOrder);
                 const started = Object.values(executions || {}).filter(ex => ex && typeof ex === 'object' && (ex.timestamp || ex.status || ex.partial)).length;
@@ -2084,20 +2088,8 @@ async function authPedirNuevaClave() {
                 if (!prev || !prev.ok || prev.done !== next.done || prev.total !== next.total || prev.started !== next.started) changed = true;
                 hvacProgressCache.set(id, next);
             });
-            // Órdenes que la vista no devolvió: guardar en caché para que no quede null al expirar el TTL.
-            // Si están COMPLETED, done=total (ya fueron cerradas); si no, done=0.
-            ids.forEach(id => {
-                if (resolvedIds.has(id)) return;
-                const summary = summaryById.get(id);
-                if (!summary) return;
-                const total = new Set((summary.equipmentIds || []).map(String).filter(Boolean)).size;
-                const isCompleted = ['COMPLETED', 'BILLED'].includes(String(summary.status || '').toUpperCase());
-                const done = isCompleted ? total : 0;
-                const prev = hvacProgressCache.get(id);
-                const next = { at: Date.now(), ok: true, total, done, started: done, source: 'hvac_orders_lite' };
-                if (!prev || !prev.ok || prev.done !== done || prev.total !== total) changed = true;
-                hvacProgressCache.set(id, next);
-            });
+            // Las órdenes ausentes o con ejecuciones inválidas NO se convierten artificialmente
+            // en 0% ni 100%. Al no guardarlas en caché, hvacRefreshProgress las deriva a la RPC.
             return changed;
         }
 
@@ -8971,7 +8963,7 @@ async function authPedirNuevaClave() {
                 !!(signature && (signature.signatureImg || signature.image || (signature.timestamp && String(signature.name || '').trim())));
             if (evidenceRequired || (!alreadyClosed && exec.timestamp)) {
                 const photoArrays = ['photos', 'fotosAntes', 'fotosDespues', 'fotosAdicionales'];
-                const hasEvidence = Number(exec.photosCount) > 0 || photoArrays.some(k => Array.isArray(exec[k]) && exec[k].some(Boolean));
+                const hasEvidence = exec._liteHasEvidence === true || Number(exec.photosCount) > 0 || photoArrays.some(k => Array.isArray(exec[k]) && exec[k].some(Boolean));
                 if (!hasEvidence) return false;
             }
 
