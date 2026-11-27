@@ -1,8 +1,7 @@
 /* Service Worker · Smart Maintenance HVAC.
    Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
-const CACHE_VERSION = 'hvac-v21-technician-labels-hvac-update-20261126';
+const CACHE_VERSION = 'hvac-v22-root-pdf-download-admin-network-20261127';
 const SHELL = [
-  './',
   './tecnico.html',
   './common.js',
   './manifest.json',
@@ -19,6 +18,118 @@ const CDN_HOSTS = [
   'fonts.googleapis.com',
   'fonts.gstatic.com'
 ];
+
+
+/* Canal de descarga PDF bajo demanda. El admin está en /, por eso debe vivir en
+   el SW raíz que controla esa página (un SW limitado a /pdf-download/ no recibe
+   las navegaciones iniciadas desde la página raíz). */
+const HVAC_PDF_STREAMS = new Map();
+const HVAC_PDF_PENDING_PORTS = new Map();
+
+function hvacPdfNotify(port, type, message) {
+  try { if (port) port.postMessage({ type, message: message || '' }); } catch (_) {}
+}
+function hvacPdfCleanup(token, state, closePort = true) {
+  HVAC_PDF_STREAMS.delete(token);
+  HVAC_PDF_PENDING_PORTS.delete(token);
+  if (state && state.timer) clearTimeout(state.timer);
+  if (state && state.finishLifetime) state.finishLifetime();
+  if (closePort && state && state.port) { try { state.port.close(); } catch (_) {} }
+}
+function hvacPdfAttachPort(token, port, state) {
+  state.port = port;
+  port.onmessage = event => {
+    const message = event && event.data || {};
+    const current = HVAC_PDF_STREAMS.get(token);
+    if (!current || !current.controller) {
+      hvacPdfNotify(port, 'HVAC_PDF_ERROR', 'El canal de descarga ya no está disponible.');
+      hvacPdfCleanup(token, current, true);
+      return;
+    }
+    try {
+      if (message.type === 'HVAC_PDF_CHUNK') {
+        const buffer = message.buffer;
+        if (!(buffer instanceof ArrayBuffer) || !buffer.byteLength) return;
+        current.controller.enqueue(new Uint8Array(buffer));
+      } else if (message.type === 'HVAC_PDF_END') {
+        if (!current.ended) {
+          current.ended = true;
+          current.controller.close();
+          hvacPdfNotify(port, 'HVAC_PDF_DONE');
+          hvacPdfCleanup(token, current, false);
+        }
+      } else if (message.type === 'HVAC_PDF_ABORT') {
+        try { current.controller.error(new Error(message.message || 'Generación de PDF cancelada.')); } catch (_) {}
+        hvacPdfNotify(port, 'HVAC_PDF_ERROR', message.message || 'Generación de PDF cancelada.');
+        hvacPdfCleanup(token, current, false);
+      }
+    } catch (error) {
+      try { current.controller.error(error); } catch (_) {}
+      hvacPdfNotify(port, 'HVAC_PDF_ERROR', error && error.message ? error.message : String(error));
+      hvacPdfCleanup(token, current, false);
+    }
+  };
+  if (port.start) port.start();
+  if (state.controller) hvacPdfNotify(port, 'HVAC_PDF_READY');
+}
+function hvacPdfCreateResponse(token, filename) {
+  let finishLifetime;
+  const lifetime = new Promise(resolve => { finishLifetime = resolve; });
+  const state = {
+    controller: null,
+    port: HVAC_PDF_PENDING_PORTS.get(token) || null,
+    finishLifetime,
+    timer: null,
+    ended: false
+  };
+  HVAC_PDF_STREAMS.set(token, state);
+  if (state.port) hvacPdfAttachPort(token, state.port, state);
+  const stream = new ReadableStream({
+    start(controller) {
+      state.controller = controller;
+      state.timer = setTimeout(() => {
+        try { controller.error(new Error('Tiempo de espera agotado al entregar el PDF.')); } catch (_) {}
+        hvacPdfNotify(state.port, 'HVAC_PDF_ERROR', 'La descarga superó el tiempo permitido.');
+        hvacPdfCleanup(token, state, false);
+      }, 240000);
+      if (state.port) hvacPdfNotify(state.port, 'HVAC_PDF_READY');
+    },
+    cancel() {
+      hvacPdfNotify(state.port, 'HVAC_PDF_CANCELLED', 'El navegador canceló la descarga.');
+      hvacPdfCleanup(token, state, false);
+    }
+  }, { highWaterMark: 2 });
+  const safeName = String(filename || 'Informe_HVAC.pdf').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 140) || 'Informe_HVAC.pdf';
+  const headers = new Headers({
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="${safeName}"`,
+    'Cache-Control': 'no-store, no-cache, must-revalidate',
+    'Pragma': 'no-cache',
+    'X-Content-Type-Options': 'nosniff'
+  });
+  return { response: new Response(stream, { status: 200, headers }), lifetime };
+}
+
+self.addEventListener('message', event => {
+  const data = event.data || {};
+  if (data.type !== 'HVAC_PDF_STREAM_CONNECT' || !data.token || !event.ports || !event.ports[0]) return;
+  const token = String(data.token);
+  const port = event.ports[0];
+  const state = HVAC_PDF_STREAMS.get(token);
+  if (state) hvacPdfAttachPort(token, port, state);
+  else {
+    HVAC_PDF_PENDING_PORTS.set(token, port);
+    port.onmessage = messageEvent => {
+      const message = messageEvent && messageEvent.data || {};
+      if (message.type === 'HVAC_PDF_ABORT') {
+        hvacPdfNotify(port, 'HVAC_PDF_ERROR', message.message || 'Generación cancelada.');
+        HVAC_PDF_PENDING_PORTS.delete(token);
+        try { port.close(); } catch (_) {}
+      }
+    };
+    if (port.start) port.start();
+  }
+});
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -62,6 +173,28 @@ self.addEventListener('fetch', event => {
 
   if (request.method !== 'GET') return;
   if (url.hostname.endsWith('supabase.co')) return;
+
+  // Única ruta virtual: devuelve el PDF como attachment y recibe sus fragmentos por MessageChannel.
+  if (url.origin === self.location.origin && url.pathname === '/__hvac_pdf_download') {
+    const token = String(url.searchParams.get('token') || '');
+    const filename = String(url.searchParams.get('name') || 'Informe_HVAC.pdf');
+    if (!/^[A-Za-z0-9_-]{8,100}$/.test(token)) {
+      event.respondWith(new Response('Solicitud de descarga inválida.', { status: 400 }));
+      return;
+    }
+    const result = hvacPdfCreateResponse(token, filename);
+    event.waitUntil(result.lifetime);
+    event.respondWith(Promise.resolve(result.response));
+    return;
+  }
+
+  // El panel administrador (/, index.html) es web y siempre debe ir a red.
+  // Solo el técnico conserva el comportamiento offline-first.
+  if (request.mode === 'navigate' && url.origin === self.location.origin &&
+      !url.pathname.endsWith('/tecnico.html')) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
 
   // Versionado y lógica compartida: siempre consultar red primero para no servir JS obsoleto.
   const isVersionControlAsset =
@@ -111,6 +244,16 @@ self.addEventListener('fetch', event => {
   // Resto de recursos: caché primero, actualización en segundo plano.
   if (url.origin === self.location.origin || CDN_HOSTS.includes(url.hostname)) {
     event.respondWith((async () => {
+      // Detectar solicitudes originadas por el panel administrador y no usar su caché.
+      try {
+        const client = event.clientId ? await self.clients.get(event.clientId) : null;
+        if (client && client.url) {
+          const clientPath = new URL(client.url).pathname;
+          if (clientPath === '/' || clientPath.endsWith('/index.html')) {
+            return fetch(new Request(request, { cache: 'no-store' }));
+          }
+        }
+      } catch (_) {}
       const cached = await caches.match(request);
       const network = fetch(request).then(response => {
         if (response && (response.ok || response.type === 'opaque')) {

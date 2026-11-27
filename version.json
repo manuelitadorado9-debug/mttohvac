@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.26.5",
-  "minimumVersion": "2026.11.26.5",
+  "version": "2026.11.27.1",
+  "minimumVersion": "2026.11.27.1",
   "force": true,
-  "build": "pdf-download-on-demand-ai-recommendations-persistent-tech-badges-history-progress",
-  "message": "Informes: descarga sucesiva fiable y recomendaciones IA guardadas; técnico: etiquetas corregidas; histórico: avance y evidencias ligeras."
+  "build": "root-sw-pdf-stream-admin-no-cache-ai-recommendations-tech-badges-history-progress",
+  "message": "Corrección del canal de descarga PDF en panel administrador; recomendaciones IA persistentes; etiquetas técnico e histórico actualizados."
 }
