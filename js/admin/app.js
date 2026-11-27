@@ -2283,7 +2283,9 @@ async function authPedirNuevaClave() {
                             const summary = list.find(o => o && String(o.id) === id);
                             const expectedTotal = summary && Array.isArray(summary.equipmentIds) ? new Set(summary.equipmentIds.map(String).filter(Boolean)).size : null;
                             const total = Math.max(0, Number(r.total) || 0);
-                            if (expectedTotal != null && total !== expectedTotal) return;
+                            // Solo descartar si el resumen tenía equipos Y el total no coincide.
+                            // Si equipmentIds llegó vacío (expectedTotal === 0), se acepta el total de la nube.
+                            if (expectedTotal != null && expectedTotal > 0 && total !== expectedTotal) return;
                             const prev = hvacProgressCache.get(id);
                             const nx = { at: Date.now(), ok: true, total, done: Math.min(total, Math.max(0, Number(r.done) || 0)), started: Math.max(0, Number(r.started) || 0), source: 'rpc' };
                             if (!prev || !prev.ok || prev.done !== nx.done || prev.started !== nx.started || prev.total !== nx.total) changed = true;
@@ -9467,9 +9469,11 @@ async function authPedirNuevaClave() {
                         doneCount = Math.min(Math.max(0, pc.done), refLen);
                         percent = refLen ? Math.round(doneCount / refLen * 100) : 0;
                         progressTitle = pc.source === 'rpc' ? 'Avance actualizado desde RPC.' : 'Avance actualizado desde la vista ligera.';
-                    } else if (o.progressSnapshot && Number(o.progressSnapshot.total) === eqIds.length && Number.isFinite(Number(o.progressSnapshot.done))) {
-                        doneCount = Math.min(Math.max(0, Number(o.progressSnapshot.done)), eqIds.length);
-                        percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                    } else if (o.progressSnapshot && Number.isFinite(Number(o.progressSnapshot.done)) && Number(o.progressSnapshot.total) > 0 &&
+                               (eqIds.length === 0 || Number(o.progressSnapshot.total) === eqIds.length)) {
+                        const snapTotal = Number(o.progressSnapshot.total);
+                        doneCount = Math.min(Math.max(0, Number(o.progressSnapshot.done)), snapTotal);
+                        percent = Math.round(doneCount / snapTotal * 100);
                         progressTitle = 'Avance técnico conservado al momento de facturar.';
                     } else if (o.executions && Object.keys(o.executions).length) {
                         const localProgress = hvacOrderProgress(o);
@@ -9503,6 +9507,9 @@ async function authPedirNuevaClave() {
                 const percentLabel = percent == null ? '—' : percent + '%';
                 const progressWidth = percent == null ? 0 : percent;
                 const doneLabel = doneCount == null ? '—' : doneCount;
+                // Si el resumen llegó sin equipmentIds, usar el total del caché para el label
+                const pc2 = hvacProgressCache.get(String(o.id));
+                const totalLabel = eqIds.length > 0 ? eqIds.length : (pc2 && pc2.ok && pc2.total > 0 ? pc2.total : (o.progressSnapshot && Number(o.progressSnapshot.total) > 0 ? Number(o.progressSnapshot.total) : eqIds.length));
                 const ownState = hvacOrderState(o);
                 const mParts = hvacMatrixParts(o);
                 let statusBadge = hvacStateBadge(ownState) + hvacToolChip(o);
@@ -9525,7 +9532,7 @@ async function authPedirNuevaClave() {
                                 </div>
                                 <span class="text-[11px] font-bold text-slate-600 w-9 text-right">${percentLabel}</span>
                             </div>
-                            <div class="text-[10px] text-slate-500">${doneLabel}/${esc(eqIds.length)} equipos completos</div>
+                            <div class="text-[10px] text-slate-500">${doneLabel}/${esc(totalLabel)} equipos completos</div>
                         </div>
                     </td>
                     <td>${statusBadge}</td>
