@@ -9457,9 +9457,15 @@ async function authPedirNuevaClave() {
                 let progressTitle = 'Consultando avance real; el listado no descarga fotos ni payload completo.';
                 if (o._hvacSummaryOnly) {
                     const pc = hvacProgressCache.get(String(o.id));
-                    if (pc && pc.ok && Number(pc.total) === eqIds.length) {
-                        doneCount = Math.min(Math.max(0, pc.done), eqIds.length);
-                        percent = eqIds.length ? Math.round(doneCount / eqIds.length * 100) : 0;
+                    // Se acepta el caché cuando el total coincide con eqIds, O cuando eqIds aún
+                    // no llegó del resumen (eqIds.length === 0) pero el caché sí tiene datos válidos.
+                    const pcTotal = pc && pc.ok ? Number(pc.total) : -1;
+                    const eqLen = eqIds.length;
+                    const pcMatches = pc && pc.ok && (pcTotal === eqLen || (eqLen === 0 && pcTotal > 0));
+                    if (pcMatches) {
+                        const refLen = eqLen > 0 ? eqLen : pcTotal;
+                        doneCount = Math.min(Math.max(0, pc.done), refLen);
+                        percent = refLen ? Math.round(doneCount / refLen * 100) : 0;
                         progressTitle = pc.source === 'rpc' ? 'Avance actualizado desde RPC.' : 'Avance actualizado desde la vista ligera.';
                     } else if (o.progressSnapshot && Number(o.progressSnapshot.total) === eqIds.length && Number.isFinite(Number(o.progressSnapshot.done))) {
                         doneCount = Math.min(Math.max(0, Number(o.progressSnapshot.done)), eqIds.length);
