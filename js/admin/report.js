@@ -954,28 +954,30 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     } catch (_) { return false; }
   }
 
-  /* Canal de descarga directo para móvil.
-     Se abre una pestaña nueva SINCRÓNICAMENTE dentro del gesto del usuario
-     (Android/Chrome solo permite window.open en ese contexto).
-     Cuando el blob está listo se escribe un link de descarga en esa pestaña
-     y se hace click automático. */
+  /* Canal de descarga directo vía createObjectURL — funciona en todos los navegadores
+     móviles sin depender del Service Worker ni de fetch events.
+     El anchor se crea e inserta SINCRÓNICAMENTE dentro del gesto del usuario para que
+     Android/Chrome lo reconozca como descarga permitida. El href se actualiza luego
+     cuando el blob está listo. */
   function beginPdfDownloadDirect(fileName) {
-    // Abrir pestaña vacía sincrónicamente dentro del gesto del usuario.
-    const win = window.open('', '_blank');
+    const anchor = document.createElement('a');
+    anchor.download = fileName;
+    anchor.href = '#';          // valor provisional; se reemplaza en deliver
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
 
     let resolveBlob, rejectBlob;
     const blobReady = new Promise((res, rej) => { resolveBlob = res; rejectBlob = rej; });
     return {
       _direct: true,
-      _win: win,
-      _fileName: fileName,
+      _anchor: anchor,
       _resolveBlob: resolveBlob,
       _rejectBlob: rejectBlob,
       ready: Promise.resolve(true),
       done: blobReady,
       setDoneTimeout() {},
       abort() {
-        try { if (win && !win.closed) win.close(); } catch (_) {}
+        try { anchor.remove(); } catch (_) {}
         rejectBlob(new Error('Generación cancelada.'));
       },
       close() {}
@@ -1059,37 +1061,22 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
   async function deliverPdfDownload(ticket, blob, fileName) {
     if (!ticket) throw new Error('No se inició el canal de descarga. El PDF no fue enviado al navegador.');
 
-    // Canal directo (móvil): la ventana ya fue abierta sincrónicamente en beginPdfDownload.
-    // Escribimos un link de descarga en ella y hacemos click automático.
+    // Canal directo (móvil): el anchor ya fue creado sincrónicamente en beginPdfDownload
+    // dentro del gesto del usuario. Aquí solo actualizamos su href y hacemos click.
     if (ticket._direct) {
-      const win = ticket._win;
+      const anchor = ticket._anchor;
       try {
         const url = URL.createObjectURL(blob);
-        const safeName = String(fileName || 'Informe_HVAC.pdf').replace(/"/g, '_');
-        if (win && !win.closed) {
-          win.document.open();
-          win.document.write(
-            '<!doctype html><html><head><meta charset="utf-8">' +
-            '<title>Descargando informe…</title></head><body style="font-family:sans-serif;padding:24px">' +
-            '<p>Descargando <strong>' + safeName + '</strong>…</p>' +
-            '<p>Si la descarga no inicia, <a id="dl" href="' + url + '" download="' + safeName + '" ' +
-            'style="color:#6366f1;font-weight:bold">toca aquí</a>.</p>' +
-            '<script>document.getElementById("dl").click();<\/script>' +
-            '</body></html>'
-          );
-          win.document.close();
-          setTimeout(() => { try { if (!win.closed) win.close(); } catch (_) {} }, 15000);
-        } else {
-          // Si el navegador bloqueó la ventana, descarga directamente en la página actual.
-          const a = document.createElement('a');
-          a.href = url; a.download = safeName; a.style.display = 'none';
-          document.body.appendChild(a); a.click(); a.remove();
-        }
-        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 30000);
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        anchor.remove();
+        // Liberar la URL de objeto después de un momento para que el navegador inicie la descarga.
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
         ticket._resolveBlob(true);
         return { transport: 'blob-url-mobile' };
       } catch (error) {
-        try { if (win && !win.closed) win.close(); } catch (_) {}
+        try { anchor.remove(); } catch (_) {}
         ticket._rejectBlob(error);
         throw error;
       }
