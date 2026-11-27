@@ -2084,16 +2084,18 @@ async function authPedirNuevaClave() {
                 if (!prev || !prev.ok || prev.done !== next.done || prev.total !== next.total || prev.started !== next.started) changed = true;
                 hvacProgressCache.set(id, next);
             });
-            // Órdenes que la vista no devolvió (sin executions en DB): guardar done=0 para que el caché
-            // quede válido y no vuelva a mostrarse como null al expirar el TTL.
+            // Órdenes que la vista no devolvió: guardar en caché para que no quede null al expirar el TTL.
+            // Si están COMPLETED, done=total (ya fueron cerradas); si no, done=0.
             ids.forEach(id => {
                 if (resolvedIds.has(id)) return;
                 const summary = summaryById.get(id);
                 if (!summary) return;
                 const total = new Set((summary.equipmentIds || []).map(String).filter(Boolean)).size;
+                const isCompleted = ['COMPLETED', 'BILLED'].includes(String(summary.status || '').toUpperCase());
+                const done = isCompleted ? total : 0;
                 const prev = hvacProgressCache.get(id);
-                const next = { at: Date.now(), ok: true, total, done: 0, started: 0, source: 'hvac_orders_lite' };
-                if (!prev || !prev.ok || prev.done !== 0 || prev.total !== total) changed = true;
+                const next = { at: Date.now(), ok: true, total, done, started: done, source: 'hvac_orders_lite' };
+                if (!prev || !prev.ok || prev.done !== done || prev.total !== total) changed = true;
                 hvacProgressCache.set(id, next);
             });
             return changed;
@@ -2154,9 +2156,9 @@ async function authPedirNuevaClave() {
                     return !(c && c.ok && c.source === 'hvac_orders_lite' && c.at >= now);
                 });
 
-                // Respaldo: RPC numérica. Solo se invoca si la vista no entregó ejecuciones
-                // verificables; una respuesta fallida nunca reemplaza el último valor bueno.
-                if (unresolved.length && !hvacProgressDisabled && hvacProgressLiteViewMissing) {
+                // Respaldo: RPC numérica. Se invoca siempre que la vista lite no resolvió alguna orden.
+                // Una respuesta fallida nunca reemplaza el último valor bueno.
+                if (unresolved.length && !hvacProgressDisabled) {
                     const rows = await supabaseFetch('rpc/hvac_orders_progress', 'POST', { p_ids: unresolved }, null, { quiet: true, noStore: true });
                     if (!Array.isArray(rows) && Number(cloudCtl.lastStatus) === 404) {
                         hvacProgressDisabled = true;
@@ -2507,7 +2509,7 @@ async function authPedirNuevaClave() {
             const st = historyState;
             const f = historyServerFilters();
             if (reset) { st.offset = 0; st.hasMore = true; }
-            if (force) hvacProgressCache.clear();   // botón Sincronizar: avance también se refresca
+            if (force) { hvacProgressCache.clear(); hvacProgressLiteViewMissing = false; hvacProgressDisabled = false; }   // botón Sincronizar: avance también se refresca
             st.sig = f.text + '|' + f.clientKey + '|' + f.status;
             const token = ++st.token;
             st.loading = true;
