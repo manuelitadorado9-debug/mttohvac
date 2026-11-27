@@ -954,14 +954,32 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     } catch (_) { return false; }
   }
 
-  /* Canal de descarga directo para móvil via createObjectURL.
-     No depende del Service Worker ni de window.open. */
+  /* Canal de descarga directo para móvil.
+     Usa showSaveFilePicker (Chrome Android) cuando está disponible — funciona en
+     múltiples descargas por sesión sin restricciones de gesto.
+     Fallback: createObjectURL + anchor para la primera descarga o escritorio. */
   function beginPdfDownloadDirect(fileName) {
     let resolveBlob, rejectBlob;
     const blobReady = new Promise((res, rej) => { resolveBlob = res; rejectBlob = rej; });
+
+    // Intentar abrir showSaveFilePicker sincrónicamente dentro del gesto del usuario.
+    // Si el navegador lo soporta, devuelve una promesa de FileSystemWritableFileStream.
+    let pickerPromise = null;
+    if (typeof window.showSaveFilePicker === 'function') {
+      try {
+        pickerPromise = window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }]
+        });
+      } catch (_) {
+        pickerPromise = null;
+      }
+    }
+
     return {
       _direct: true,
       _fileName: fileName,
+      _pickerPromise: pickerPromise,
       _resolveBlob: resolveBlob,
       _rejectBlob: rejectBlob,
       ready: Promise.resolve(true),
@@ -1049,22 +1067,45 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
   async function deliverPdfDownload(ticket, blob, fileName) {
     if (!ticket) throw new Error('No se inició el canal de descarga. El PDF no fue enviado al navegador.');
 
-    // Canal directo (móvil): descarga via createObjectURL + anchor.
+    // Canal directo (móvil): usa showSaveFilePicker si se inició en el gesto,
+    // o cae a createObjectURL + anchor como fallback.
     if (ticket._direct) {
+      const safeName = String(fileName || ticket._fileName || 'Informe_HVAC.pdf');
+
+      // Ruta 1: File System Access API (Chrome Android 86+ — funciona en múltiples descargas).
+      if (ticket._pickerPromise) {
+        try {
+          const fileHandle = await ticket._pickerPromise;
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          ticket._resolveBlob(true);
+          return { transport: 'file-system-access' };
+        } catch (error) {
+          // Si el usuario canceló el picker, no es un error real.
+          if (error && error.name === 'AbortError') {
+            ticket._resolveBlob(true);
+            return { transport: 'file-system-access-cancelled' };
+          }
+          // Otro error: caer al anchor como último recurso.
+          console.warn('[PDF] showSaveFilePicker falló, usando fallback anchor:', error);
+        }
+      }
+
+      // Ruta 2: createObjectURL + anchor (fallback).
       let url = null;
       try {
         url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = String(fileName || ticket._fileName || 'Informe_HVAC.pdf');
+        a.download = safeName;
         a.style.display = 'none';
         document.body.appendChild(a);
         a.click();
         a.remove();
-        // Revocar después de que el navegador haya tenido tiempo de iniciar la descarga.
         setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 30000);
         ticket._resolveBlob(true);
-        return { transport: 'blob-url-mobile' };
+        return { transport: 'blob-url-fallback' };
       } catch (error) {
         if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
         ticket._rejectBlob(error);
