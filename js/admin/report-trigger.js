@@ -47,10 +47,8 @@
       if (typeof window.generateMaintenancePDF !== 'function') {
         throw new Error('El generador de informes no está disponible. Recarga la página.');
       }
-      if (typeof window.hvacEnsureFullOrder === 'function') {
-        const fullOrder = await window.hvacEnsureFullOrder(orderId);
-        if (!fullOrder) throw new Error('No se pudo cargar el detalle de la orden para generar el PDF.');
-      }
+      // No esperar aquí a la descarga de datos: el generador inicia el canal de descarga
+      // síncronamente dentro del toque y luego carga el detalle completo de la orden.
       let typeKey = window.hvacNormalizeReportType(reportType);
       if (!typeKey) {
         const orders = (typeof workOrders !== 'undefined' && Array.isArray(workOrders)) ? workOrders : [];

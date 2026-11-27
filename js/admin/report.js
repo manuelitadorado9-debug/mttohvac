@@ -457,7 +457,9 @@
       body += section('CONCLUSIONES POR EQUIPO', `<div class="conclusion-list">${conclusionRows || textBlock('No se registraron conclusiones por equipo.', 55)}</div>`);
 
       const savedRecs = lines(recText).filter(line => !/^no se (registr|dej|identific)/i.test(line));
-      const finalRecs = savedRecs.length ? savedRecs : (Array.isArray(aiRecommendations) ? aiRecommendations : []);
+      const cachedAiRecs = Array.isArray(order.aiRecommendations) ? order.aiRecommendations : [];
+      const finalRecs = savedRecs.length ? savedRecs
+        : (Array.isArray(aiRecommendations) && aiRecommendations.length ? aiRecommendations : cachedAiRecs);
       let recommendationsHtml;
       if (finalRecs.length) {
         recommendationsHtml = `<ul style="margin:0; padding-left:22px;">${finalRecs.map(r => `<li style="margin:0 0 7px 0;">${esc(r)}</li>`).join('')}</ul>`;
@@ -937,69 +939,175 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       // Permite que el overlay se actualice entre páginas, incluso en órdenes extensas.
       if (i % 2 === 1) await new Promise(resolve => setTimeout(resolve, 0));
     }
-    if (onProgress) onProgress('Descargando archivo PDF…');
-    const result = pdf.save(fileName, { returnPromise: true });
-    if (result && typeof result.then === 'function') await result;
-    else await new Promise(resolve => setTimeout(resolve, 250));
-    return { pages: pages.length };
+    if (onProgress) onProgress('Preparando archivo para descarga…');
+    const blob = pdf.output('blob');
+    if (!(blob instanceof Blob) || !blob.size) throw new Error('El PDF se generó vacío. No se inició la descarga.');
+    return { pages: pages.length, blob };
   }
 
-  function showPdfError(message, onRetry, onPrint, onClose) {
-    const old = document.getElementById('pdf-ready-card');
-    if (old) old.remove();
-    const card = document.createElement('div');
-    card.id = 'pdf-ready-card';
-    card.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:30000;max-width:460px;margin:0 auto;background:#0f1a33;color:#e8edf7;border:1px solid rgba(251,113,133,.5);border-radius:18px;padding:14px 16px;box-shadow:0 24px 60px -12px rgba(0,0,0,.65);font-family:inherit';
-    const btn = 'display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:12px;font-size:12px;font-weight:800;border:0;cursor:pointer;';
-    card.innerHTML = `<div style="font-weight:900;font-size:13px;color:#fb7185">No se pudo generar el PDF</div>
-      <div style="font-size:11px;opacity:.85;margin:4px 0 12px;word-break:break-word">${esc(message)}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button type="button" id="pdf-err-retry" style="${btn}background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff;flex:1 1 auto">Reintentar</button>
-        <button type="button" id="pdf-err-print" style="${btn}background:#1b2744;color:#e8edf7">Usar impresión</button>
-        <button type="button" id="pdf-err-close" style="${btn}background:transparent;color:#9fb0d1">Cerrar</button>
-      </div>`;
-    document.body.appendChild(card);
-    card.querySelector('#pdf-err-retry').onclick = () => { card.remove(); onRetry(); };
-    card.querySelector('#pdf-err-print').onclick = () => { card.remove(); onPrint(); };
-    card.querySelector('#pdf-err-close').onclick = () => { card.remove(); onClose(); };
+  /*
+   * Registro de un Service Worker dedicado y de alcance estrecho (/pdf-download/).
+   * No controla index.html ni tecnico.html; solo intercepta la ruta de descarga.
+   * Se registra al cargar el módulo, sin generar PDFs ni consultar datos.
+   */
+  let pdfDownloadWorker = null;
+  let pdfDownloadWorkerError = '';
+
+  function waitForWorkerActivation(worker, timeoutMs = 12000) {
+    if (!worker || worker.state === 'activated') return Promise.resolve(worker);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('El módulo seguro de descarga no terminó de activarse.')), timeoutMs);
+      const check = () => {
+        if (worker.state === 'activated') {
+          clearTimeout(timer);
+          worker.removeEventListener('statechange', check);
+          resolve(worker);
+        } else if (worker.state === 'redundant') {
+          clearTimeout(timer);
+          worker.removeEventListener('statechange', check);
+          reject(new Error('El módulo seguro de descarga fue reemplazado durante su instalación.'));
+        }
+      };
+      worker.addEventListener('statechange', check);
+      check();
+    });
   }
 
-  /* Chrome móvil bloquea descargas automáticas repetidas (sin toque del usuario). Por eso, además
-     de intentar la descarga directa, se muestra una tarjeta con botones que SÍ garantizan el archivo. */
-  function presentPdf(blob, fileName) {
-    const url = URL.createObjectURL(blob);
-    const old = document.getElementById('pdf-ready-card');
-    if (old) old.remove();
-    const mb = (blob.size / 1048576).toFixed(1);
-    const card = document.createElement('div');
-    card.id = 'pdf-ready-card';
-    card.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:30000;max-width:460px;margin:0 auto;background:#0f1a33;color:#e8edf7;border:1px solid rgba(94,234,212,.4);border-radius:18px;padding:14px 16px;box-shadow:0 24px 60px -12px rgba(0,0,0,.65);font-family:inherit';
-    const btn = 'display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border-radius:12px;font-size:12px;font-weight:800;text-decoration:none;border:0;cursor:pointer;';
-    card.innerHTML = `<div style="font-weight:900;font-size:13px">Informe listo</div>
-      <div style="font-size:11px;opacity:.8;margin:2px 0 12px;word-break:break-all">${esc(fileName)} · ${mb} MB</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a id="pdf-ready-dl" href="${url}" download="${esc(fileName)}" style="${btn}background:linear-gradient(135deg,#14c4b4,#0b9e91);color:#fff;flex:1 1 auto">Descargar PDF</a>
-        <a href="${url}" target="_blank" rel="noopener" style="${btn}background:#1b2744;color:#e8edf7">Abrir</a>
-        <button type="button" id="pdf-ready-share" style="${btn}background:#1b2744;color:#e8edf7;display:none">Compartir</button>
-        <button type="button" id="pdf-ready-close" style="${btn}background:transparent;color:#9fb0d1">Cerrar</button>
-      </div>`;
-    document.body.appendChild(card);
-    const close = () => { card.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); };
-    card.querySelector('#pdf-ready-close').onclick = close;
-    setTimeout(close, 15 * 60 * 1000);
-    try {                                                    // compartir / guardar con el menú del sistema (si el navegador lo permite)
-      const file = new File([blob], fileName, { type: 'application/pdf' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        const share = card.querySelector('#pdf-ready-share');
-        share.style.display = 'inline-flex';
-        share.onclick = () => navigator.share({ files: [file], title: fileName }).catch(() => {});
+  const pdfDownloadWorkerReady = (async () => {
+    try {
+      if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost')) {
+        throw new Error('Este navegador no permite el módulo seguro de descarga.');
       }
-    } catch (e) { /* sin compartir */ }
-    try {                                                    // intento de descarga automática
-      const a = document.createElement('a');
-      a.href = url; a.download = fileName; a.style.display = 'none';
-      document.body.appendChild(a); a.click(); a.remove();
-    } catch (e) { /* queda el botón */ }
+      const scopeUrl = new URL('./pdf-download/', document.baseURI).href;
+      const scriptUrl = new URL('./pdf-download/sw.js?v=2026.11.26.1', document.baseURI).href;
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      let registration = (registrations || []).find(item => item && item.scope === scopeUrl) || null;
+      const expectedScript = scriptUrl;
+      const activeScript = registration && registration.active ? registration.active.scriptURL : '';
+      if (!registration || !activeScript.includes('sw.js?v=2026.11.26.1')) {
+        registration = await navigator.serviceWorker.register(expectedScript, {
+          scope: scopeUrl,
+          updateViaCache: 'none'
+        });
+      }
+      let worker = registration.active || registration.installing || registration.waiting;
+      if (!worker) throw new Error('El navegador no activó el módulo de descarga.');
+      await waitForWorkerActivation(worker);
+      // registration.active es la versión que recibe mensajes aunque esta página no esté bajo su scope.
+      pdfDownloadWorker = registration.active || worker;
+      if (!pdfDownloadWorker || pdfDownloadWorker.state !== 'activated') {
+        throw new Error('El módulo seguro de descarga todavía no está activo.');
+      }
+      return pdfDownloadWorker;
+    } catch (error) {
+      pdfDownloadWorkerError = error && error.message ? error.message : String(error);
+      console.warn('[PDF] No se pudo preparar el módulo seguro de descarga:', error);
+      return null;
+    }
+  })();
+
+  function beginPdfDownload(fileName) {
+    // No iniciar IA ni construir el PDF si no se puede iniciar primero una descarga real.
+    if (!pdfDownloadWorker || pdfDownloadWorker.state !== 'activated') {
+      throw new Error('El módulo seguro de descarga aún no está listo. Cierra y vuelve a abrir la aplicación; no se ha generado el PDF ni consumido IA. ' + (pdfDownloadWorkerError || ''));
+    }
+    if (typeof MessageChannel === 'undefined') {
+      throw new Error('Este navegador no permite iniciar una descarga directa segura.');
+    }
+
+    const token = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : ('hvac-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
+    const channel = new MessageChannel();
+    let readyResolve, readyReject, doneResolve, doneReject;
+    let readyTimer = null, doneTimer = null;
+    const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+    const done = new Promise((resolve, reject) => { doneResolve = resolve; doneReject = reject; });
+    ready.catch(() => {}); done.catch(() => {});
+
+    channel.port1.onmessage = event => {
+      const data = event && event.data || {};
+      if (data.type === 'HVAC_PDF_READY') {
+        if (readyTimer) clearTimeout(readyTimer);
+        readyResolve(true);
+      } else if (data.type === 'HVAC_PDF_DONE') {
+        if (doneTimer) clearTimeout(doneTimer);
+        doneResolve(true);
+      } else if (data.type === 'HVAC_PDF_ERROR' || data.type === 'HVAC_PDF_CANCELLED') {
+        const error = new Error(data.message || 'El navegador interrumpió la descarga.');
+        if (readyTimer) clearTimeout(readyTimer);
+        if (doneTimer) clearTimeout(doneTimer);
+        readyReject(error);
+        doneReject(error);
+      }
+    };
+    channel.port1.start && channel.port1.start();
+
+    // La comunicación y el click ocurren sincrónicamente dentro del toque del usuario.
+    pdfDownloadWorker.postMessage({ type: 'HVAC_PDF_STREAM_CONNECT', token }, [channel.port2]);
+    const url = new URL('./pdf-download/download', document.baseURI);
+    url.searchParams.set('token', token);
+    url.searchParams.set('name', fileName);
+    const anchor = document.createElement('a');
+    anchor.href = url.toString();
+    anchor.download = fileName;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    readyTimer = setTimeout(() => readyReject(new Error('El navegador no inició el canal de descarga.')), 15000);
+    return {
+      token,
+      port: channel.port1,
+      ready,
+      done,
+      setDoneTimeout() {
+        doneTimer = setTimeout(() => doneReject(new Error('El navegador no confirmó la recepción completa del archivo.')), 180000);
+      },
+      abort(message) {
+        try { channel.port1.postMessage({ type: 'HVAC_PDF_ABORT', message: String(message || 'Generación cancelada.') }); } catch (_) {}
+        try { channel.port1.close(); } catch (_) {}
+      },
+      close() {
+        if (readyTimer) clearTimeout(readyTimer);
+        if (doneTimer) clearTimeout(doneTimer);
+        try { channel.port1.close(); } catch (_) {}
+      }
+    };
+  }
+
+  async function deliverPdfDownload(ticket, blob, fileName) {
+    if (!ticket) throw new Error('No se inició el canal de descarga. El PDF no fue enviado al navegador.');
+    try {
+      await ticket.ready;
+      const chunkSize = 256 * 1024;
+      for (let offset = 0; offset < blob.size; offset += chunkSize) {
+        const buffer = await blob.slice(offset, Math.min(offset + chunkSize, blob.size)).arrayBuffer();
+        ticket.port.postMessage({ type: 'HVAC_PDF_CHUNK', buffer }, [buffer]);
+      }
+      ticket.setDoneTimeout();
+      ticket.port.postMessage({ type: 'HVAC_PDF_END' });
+      await ticket.done;
+      ticket.close();
+      return { transport: 'scoped-service-worker-stream' };
+    } catch (error) {
+      ticket.abort(error && error.message ? error.message : 'Canal de descarga interrumpido.');
+      ticket.close();
+      throw error;
+    }
+  }
+
+  function recommendationFingerprint(typeKey, equipos) {
+    const input = JSON.stringify({ version: 1, typeKey, equipos });
+    // Dos acumuladores FNV-1a independientes: huella determinista sin librerías ni llamadas de red.
+    let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+    for (let i = 0; i < input.length; i++) {
+      const code = input.charCodeAt(i);
+      h1 = Math.imul(h1 ^ code, 0x01000193) >>> 0;
+      h2 = Math.imul(h2 ^ (code + i), 0x85ebca6b) >>> 0;
+    }
+    return 'hvac-ai-v1-' + h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
   }
 
   async function waitForImages(doc, timeoutMs = 12000) {
@@ -1034,6 +1142,28 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 
     if (!equipos.length) return { recommendations: [], error: 'No existen desarrollos ni conclusiones para analizar.' };
 
+    const fingerprint = recommendationFingerprint(typeKey, equipos);
+    // Recupera primero la caché local independiente (sin volver a cargar la orden completa).
+    if (typeof window.hvacLoadAIRecommendations === 'function') {
+      window.hvacLoadAIRecommendations(order.id, fingerprint, order);
+    }
+    const cached = Array.isArray(order.aiRecommendations) &&
+      String(order.aiRecommendationsFingerprint || '') === fingerprint;
+    if (cached) {
+      let persistence = { localSaved: true, cloudSaved: !!order.aiRecommendationsSavedAt }; 
+      // Si la copia local nació sin conexión o falló el RPC, reintenta guardar en la nube
+      // sin volver a consumir IA ni recalcular el informe.
+      if (!order.aiRecommendationsSavedAt && typeof window.hvacStoreAIRecommendations === 'function') {
+        persistence = await window.hvacStoreAIRecommendations(order.id, order.aiRecommendations, fingerprint, order.aiRecommendationsGeneratedAt || new Date().toISOString());
+      }
+      return {
+        recommendations: order.aiRecommendations.slice(0, 6),
+        cached: true,
+        persistence,
+        persistenceWarning: !persistence.cloudSaved
+      };
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 40000);
     try {
@@ -1047,7 +1177,18 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       if (!response.ok || !Array.isArray(data.recomendaciones)) {
         throw new Error(data.error || `La IA respondió con estado ${response.status}.`);
       }
-      return { recommendations: data.recomendaciones.map(value => String(value || '').trim()).filter(Boolean).slice(0, 6) };
+      const recommendations = data.recomendaciones.map(value => String(value || '').trim()).filter(Boolean).slice(0, 6);
+      const generatedAt = new Date().toISOString();
+      // La respuesta IA se almacena local y en Supabase ANTES de construir/descargar el PDF.
+      const persistence = typeof window.hvacStoreAIRecommendations === 'function'
+        ? await window.hvacStoreAIRecommendations(order.id, recommendations, fingerprint, generatedAt)
+        : { localSaved: false, cloudSaved: false, error: 'No está disponible el guardado persistente de recomendaciones.' };
+      return {
+        recommendations,
+        fingerprint,
+        persistence,
+        persistenceWarning: !persistence.cloudSaved
+      };
     } finally {
       clearTimeout(timer);
     }
@@ -1061,6 +1202,15 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     let busyStarted = false;
     let frame = null;
     const cleanup = () => { if (frame && frame.isConnected) frame.remove(); };
+    const initialOrders = getWorkOrders();
+    const initialOrder = (Array.isArray(initialOrders) ? initialOrders : []).find(item => String(item.id) === String(orderId));
+    const initialType = normalizeRoutine(reportType || getOrderType(initialOrder)) || 'REVISION';
+    const safeInitialOrderId = String(orderId || 'orden').replace(/[^\w-]+/g, '_');
+    const initialFileName = `Informe_${initialType}_${safeInitialOrderId}.pdf`;
+    // Este bloque se ejecuta sincrónicamente dentro del toque del botón, antes de cualquier await.
+    const downloadTicket = options.autoPrint === false ? null
+      : (options._downloadTicket || beginPdfDownload(initialFileName));
+    let aiPersistenceWarning = '';
     try {
       if (typeof appBusyStart === 'function') {
         appBusyStart('Preparando informe PDF…', true);
@@ -1110,6 +1260,12 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
             const generated = await generateAggregatedRecommendations(order, typeKey, options);
             reportOptions.aiRecommendations = generated.recommendations || [];
             reportOptions.aiRecommendationError = generated.error || '';
+            if (generated.persistenceWarning) {
+              const savedLocally = !!(generated.persistence && generated.persistence.localSaved);
+              aiPersistenceWarning = savedLocally
+                ? 'Las recomendaciones quedaron guardadas en este dispositivo, pero Supabase no confirmó la sincronización. Se reintentará sin volver a llamar a la IA.'
+                : 'No se pudo confirmar el guardado de las recomendaciones. El informe se generó, pero no se debe asumir que la IA quedó guardada para la próxima descarga.';
+            }
           } catch (error) {
             console.warn('[IA] No se pudieron generar recomendaciones del informe:', error);
             reportOptions.aiRecommendations = [];
@@ -1156,16 +1312,20 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       const safeOrderId = String(order.id || orderId).replace(/[^\w-]+/g, '_');
       const fileName = `Informe_${typeKey}_${safeOrderId}.pdf`;
       const result = await exportFramePdf(frame, fileName, setPdfProgress);
+      await deliverPdfDownload(downloadTicket, result.blob, fileName);
       cleanup();
-      // El aviso de éxito debe usar la función global de la aplicación.
-      // No llamar a notify(): el notify() del módulo de seguridad es privado a otro IIFE.
+      // El navegador confirma que recibió el flujo del archivo, no el estado físico de la carpeta Descargas.
       if (typeof window.showToast === 'function') {
-        window.showToast(`Informe PDF descargado correctamente (${result.pages} páginas).`, 'success');
+        window.showToast(`Informe enviado al navegador (${result.pages} páginas). Revisa la carpeta Descargas.`, 'success');
+        if (aiPersistenceWarning) {
+          window.showToast(aiPersistenceWarning, 'error');
+        }
       } else {
-        console.info(`[PDF] Informe descargado: ${fileName} (${result.pages} páginas).`);
+        console.info(`[PDF] Descarga iniciada: ${fileName} (${result.pages} páginas).`);
       }
       return { orderId: order.id, reportType: typeKey, fileName, pages: result.pages };
     } catch (error) {
+      if (downloadTicket) downloadTicket.abort(error && error.message ? error.message : 'No se pudo generar el informe.');
       cleanup();
       throw error;
     } finally {

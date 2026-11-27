@@ -62,7 +62,11 @@ async function planCalInit() {
 }
 /* Membretes PDF desde Supabase Storage (reemplazan los Base64 pesados) */
 Promise.resolve(window.HVAC && HVAC.letterhead ? HVAC.letterhead.load() : { header: '', footer: '' }).then(r => { AFC_HEADER_IMG = r.header; AFC_FOOTER_IMG = r.footer; if (!r.header) console.warn('Membrete PDF no disponible: sube membrete/encabezado.jpg y pie.jpg al bucket.'); }).catch(e => console.warn('Membrete PDF:', e));
-/* Admin = página web convencional: sin Service Worker ni instalación. Limpia (una sola vez) restos de versiones anteriores. */
+/* Administración sigue sin PWA/caché de página. Conserva únicamente el SW aislado
+   que entrega descargas PDF bajo demanda; no controla index.html ni los módulos del panel. */
 try { if (!localStorage.getItem('HVAC_ADMIN_NO_PWA')) { localStorage.setItem('HVAC_ADMIN_NO_PWA', '1');
-    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
+    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => {
+        const pdfScope = new URL('./pdf-download/', document.baseURI).href;
+        rs.forEach(r => { if (r.scope !== pdfScope) r.unregister(); });
+    }).catch(() => {});
     if (window.caches) caches.keys().then(ks => ks.filter(k => k.indexOf('hvac-') === 0).forEach(k => caches.delete(k))); } } catch (e) {}

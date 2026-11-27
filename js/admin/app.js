@@ -1719,6 +1719,120 @@ async function authPedirNuevaClave() {
             try { hvacInvalidateOrderQueries(); } catch (_) {}      // también al terminar: un listado en vuelo no deja datos viejos en caché
             return res;
         }
+        // Caché local pequeña y separada: no reserializa el respaldo completo de órdenes/fotos.
+        const HVAC_AI_RECOMMENDATIONS_KEY = 'HVAC_AI_RECOMMENDATIONS_V1';
+        function hvacReadAIRecommendationCache() {
+            try {
+                const value = JSON.parse(localStorage.getItem(HVAC_AI_RECOMMENDATIONS_KEY) || '{}');
+                return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+            } catch (_) { return {}; }
+        }
+        function hvacWriteAIRecommendationCache(cache) {
+            try {
+                // Límite de seguridad: conservar como máximo las 250 órdenes más recientes.
+                const keys = Object.keys(cache || {}).sort((a, b) =>
+                    String((cache[b] || {}).generatedAt || '').localeCompare(String((cache[a] || {}).generatedAt || ''))
+                ).slice(0, 250);
+                const compact = {};
+                keys.forEach(key => { compact[key] = cache[key]; });
+                localStorage.setItem(HVAC_AI_RECOMMENDATIONS_KEY, JSON.stringify(compact));
+                return true;
+            } catch (e) {
+                console.warn('[IA] No se pudo persistir la caché local de recomendaciones:', e);
+                return false;
+            }
+        }
+        // Carga solo las recomendaciones que coinciden con la huella del contenido técnico actual.
+        window.hvacLoadAIRecommendations = function(orderId, fingerprint, order) {
+            const id = String(orderId || '').trim();
+            if (!id || !fingerprint) return null;
+            const entry = hvacReadAIRecommendationCache()[id];
+            if (!entry || String(entry.fingerprint || '') !== String(fingerprint) || !Array.isArray(entry.recommendations)) return null;
+            // Si la nube ya contiene una versión más reciente de la misma huella, prevalece la nube.
+            const cloudSameFingerprint = order && Array.isArray(order.aiRecommendations) &&
+                String(order.aiRecommendationsFingerprint || '') === String(fingerprint);
+            const localTime = Date.parse(entry.generatedAt || '') || 0;
+            const cloudTime = cloudSameFingerprint ? (Date.parse(order.aiRecommendationsGeneratedAt || '') || 0) : 0;
+            if (cloudSameFingerprint && cloudTime >= localTime) return {
+                recommendations: order.aiRecommendations.slice(0, 6),
+                fingerprint: String(order.aiRecommendationsFingerprint),
+                savedAt: String(order.aiRecommendationsSavedAt || ''),
+                pendingCloud: false
+            };
+            const saved = {
+                aiRecommendations: entry.recommendations.slice(0, 6),
+                aiRecommendationsFingerprint: String(entry.fingerprint),
+                aiRecommendationsGeneratedAt: String(entry.generatedAt || ''),
+                aiRecommendationsSavedAt: String(entry.savedAt || ''),
+                aiRecommendationsPendingCloud: entry.pendingCloud === true
+            };
+            if (order && typeof order === 'object') Object.assign(order, saved);
+            return saved;
+        };
+
+        // Guarda recomendaciones IA en una clave local pequeña y mediante RPC acotada.
+        // No reenvía el payload completo ni fotos/ejecuciones a Supabase.
+        window.hvacStoreAIRecommendations = async function(orderId, recommendations, fingerprint, generatedAt) {
+            const id = String(orderId || '').trim();
+            const recs = Array.isArray(recommendations)
+                ? recommendations.map(v => String(v || '').trim()).filter(Boolean).slice(0, 6)
+                : null;
+            if (!id || !recs || !String(fingerprint || '').trim()) {
+                return { localSaved: false, cloudSaved: false, error: 'Datos de recomendaciones incompletos.' };
+            }
+            const stamp = String(generatedAt || new Date().toISOString());
+            const cache = hvacReadAIRecommendationCache();
+            cache[id] = {
+                recommendations: recs,
+                fingerprint: String(fingerprint),
+                generatedAt: stamp,
+                savedAt: '',
+                pendingCloud: true
+            };
+            const localSaved = hvacWriteAIRecommendationCache(cache);
+            const target = (workOrders || []).find(o => o && String(o.id) === id);
+            if (target) {
+                target.aiRecommendations = recs;
+                target.aiRecommendationsFingerprint = String(fingerprint);
+                target.aiRecommendationsGeneratedAt = stamp;
+                delete target.aiRecommendationsSavedAt;
+                target.aiRecommendationsPendingCloud = true;
+            }
+            if (navigator.onLine === false) {
+                return { localSaved, cloudSaved: false, offline: true };
+            }
+
+            try {
+                const result = await supabaseFetch('rpc/hvac_store_ai_recommendations', 'POST', {
+                    p_order_id: id,
+                    p_recommendations: recs,
+                    p_fingerprint: String(fingerprint),
+                    p_generated_at: stamp
+                }, null, { quiet: true, noStore: true });
+                const count = Number(result);
+                if (typeof result === 'number' && Number.isFinite(count) && count > 0) {
+                    const latest = hvacReadAIRecommendationCache();
+                    const stored = latest[id];
+                    // No marcar como sincronizada una entrada que otra descarga ya haya sustituido.
+                    if (stored && stored.fingerprint === String(fingerprint)) {
+                        stored.savedAt = stamp;
+                        stored.pendingCloud = false;
+                        hvacWriteAIRecommendationCache(latest);
+                    }
+                    if (target && target.aiRecommendationsFingerprint === String(fingerprint)) {
+                        target.aiRecommendationsSavedAt = stamp;
+                        target.aiRecommendationsPendingCloud = false;
+                    }
+                    try { hvacInvalidateOrderQueries(); } catch (_) {}
+                    return { localSaved, cloudSaved: true, rows: count };
+                }
+                return { localSaved, cloudSaved: false, error: 'Supabase no confirmó el guardado de las recomendaciones.' };
+            } catch (error) {
+                console.warn('[IA] No se pudieron guardar las recomendaciones en Supabase:', error);
+                return { localSaved, cloudSaved: false, error: error && error.message ? error.message : String(error) };
+            }
+        };
+
         async function hvacVerifyOrderEquipmentIds(orderId, expectedIds) {
             if (!navigator.onLine) return false;
             const enc = encodeURIComponent(String(orderId));
@@ -2077,6 +2191,11 @@ async function authPedirNuevaClave() {
                 // La vista debe entregar un objeto JSON válido. Si falta o viene malformado,
                 // NO se interpreta como cero: la orden queda sin resolver y pasa al respaldo RPC.
                 if (!executions || typeof executions !== 'object' || Array.isArray(executions)) return;
+                const executionEntries = Object.entries(executions);
+                const executionValues = executionEntries.map(([, ex]) => ex);
+                // Cada ejecución proyectada por hvac_orders_lite debe ser un objeto marcado _lite.
+                // Una mezcla de objetos, nulos o respuestas de una vista antigua no se considera válida.
+                if (executionValues.some(ex => !ex || typeof ex !== 'object' || Array.isArray(ex) || ex._lite !== true)) return;
                 const id = String(row.order_id || row.id);
                 const summary = summaryById.get(id);
                 if (!summary) return;
@@ -2379,6 +2498,19 @@ async function authPedirNuevaClave() {
                 let hasPending = false;
                 try { hasPending = cloudOutboxRead().some(e => e && e.table === 'hvac_orders' && e.op !== 'delete' && String(e.id) === cloudCleanId(key)); } catch (_) {}
                 const full = hasPending ? Object.assign({}, payload, current) : Object.assign({}, current, payload);   // sin cambios pendientes, manda la nube
+                // Las recomendaciones que quedaron guardadas localmente por una caída del RPC
+                // no deben desaparecer al revalidar la orden desde Supabase. En la siguiente
+                // descarga se reintenta únicamente el guardado, sin volver a llamar a la IA.
+                if (current.aiRecommendationsPendingCloud === true &&
+                    Array.isArray(current.aiRecommendations) && current.aiRecommendationsFingerprint &&
+                    !(Array.isArray(payload.aiRecommendations) &&
+                      String(payload.aiRecommendationsFingerprint || '') === String(current.aiRecommendationsFingerprint))) {
+                    full.aiRecommendations = current.aiRecommendations;
+                    full.aiRecommendationsFingerprint = current.aiRecommendationsFingerprint;
+                    full.aiRecommendationsGeneratedAt = current.aiRecommendationsGeneratedAt || '';
+                    full.aiRecommendationsPendingCloud = true;
+                    delete full.aiRecommendationsSavedAt;
+                }
                 full.invoice = Object.assign({}, payload.invoice || {}, current.invoice || {});
                 full.toolPickup = Object.assign({}, payload.toolPickup || {}, current.toolPickup || {});
                 full.clientSignature = Object.assign({}, payload.clientSignature || {}, current.clientSignature || {});
