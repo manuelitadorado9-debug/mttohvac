@@ -945,9 +945,47 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     return { pages: pages.length, blob };
   }
 
+  /* Detecta si el navegador es móvil (Android / iOS) donde anchor.click() sintético
+     puede ser bloqueado por el sistema operativo. En ese caso se usa createObjectURL
+     como canal de descarga directo, sin pasar por el Service Worker. */
+  function isMobileBrowser() {
+    try {
+      return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    } catch (_) { return false; }
+  }
+
+  /* Canal de descarga directo vía createObjectURL — funciona en todos los navegadores
+     móviles sin depender del Service Worker ni de fetch events. */
+  function beginPdfDownloadDirect() {
+    // Ticket compatible con la API de beginPdfDownload: acumula los chunks en memoria
+    // y descarga el Blob completo en deliverPdfDownload.
+    const chunks = [];
+    let resolveBlob, rejectBlob;
+    const blobReady = new Promise((res, rej) => { resolveBlob = res; rejectBlob = rej; });
+    return {
+      _direct: true,
+      _chunks: chunks,
+      _resolveBlob: resolveBlob,
+      _rejectBlob: rejectBlob,
+      _blobReady: blobReady,
+      ready: Promise.resolve(true),
+      done: blobReady,
+      setDoneTimeout() {},
+      abort() { rejectBlob(new Error('Generación cancelada.')); },
+      close() {}
+    };
+  }
+
   /* El admin está en la raíz; usa el SW raíz que controla esta página para abrir
-     el canal de descarga durante el toque inicial, antes de consultar datos o IA. */
+     el canal de descarga durante el toque inicial, antes de consultar datos o IA.
+     En móvil usa createObjectURL como fallback para evitar el bloqueo del SO. */
   function beginPdfDownload(fileName) {
+    // En móvil el anchor.click() sintético puede ser bloqueado por Android/iOS.
+    // Usamos el canal directo (createObjectURL) que sí funciona en móvil.
+    if (isMobileBrowser()) {
+      return beginPdfDownloadDirect();
+    }
+
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     if (!worker || typeof MessageChannel === 'undefined') {
       throw new Error('El canal de descarga aún no está conectado. Recarga la aplicación una vez y vuelve a pulsar Informe General.');
@@ -1014,6 +1052,29 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
 
   async function deliverPdfDownload(ticket, blob, fileName) {
     if (!ticket) throw new Error('No se inició el canal de descarga. El PDF no fue enviado al navegador.');
+
+    // Canal directo (móvil): descarga el blob completo vía createObjectURL.
+    if (ticket._direct) {
+      try {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        // Liberar la URL de objeto después de un momento para que el navegador inicie la descarga.
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
+        ticket._resolveBlob(true);
+        return { transport: 'blob-url-mobile' };
+      } catch (error) {
+        ticket._rejectBlob(error);
+        throw error;
+      }
+    }
+
+    // Canal Service Worker (escritorio): envía el blob por chunks al SW.
     try {
       await ticket.ready;
       const chunkSize = 256 * 1024;
