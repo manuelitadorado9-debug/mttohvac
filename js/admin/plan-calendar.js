@@ -62,11 +62,32 @@ async function planCalInit() {
 }
 /* Membretes PDF desde Supabase Storage (reemplazan los Base64 pesados) */
 Promise.resolve(window.HVAC && HVAC.letterhead ? HVAC.letterhead.load() : { header: '', footer: '' }).then(r => { AFC_HEADER_IMG = r.header; AFC_FOOTER_IMG = r.footer; if (!r.header) console.warn('Membrete PDF no disponible: sube membrete/encabezado.jpg y pie.jpg al bucket.'); }).catch(e => console.warn('Membrete PDF:', e));
-/* Administración sigue sin PWA/caché de página. Conserva únicamente el SW aislado
-   que entrega descargas PDF bajo demanda; no controla index.html ni los módulos del panel. */
-try { if (!localStorage.getItem('HVAC_ADMIN_NO_PWA')) { localStorage.setItem('HVAC_ADMIN_NO_PWA', '1');
-    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => {
-        const pdfScope = new URL('./pdf-download/', document.baseURI).href;
-        rs.forEach(r => { if (r.scope !== pdfScope) r.unregister(); });
-    }).catch(() => {});
-    if (window.caches) caches.keys().then(ks => ks.filter(k => k.indexOf('hvac-') === 0).forEach(k => caches.delete(k))); } } catch (e) {}
+/* El panel admin usa el SW raíz únicamente para transportar informes PDF bajo demanda.
+   El sw.js detecta clientes / e index.html y sirve sus demás recursos siempre desde red,
+   sin caché offline del panel. No se precargan datos ni PDFs. */
+try {
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        // Retirar el worker experimental de alcance /pdf-download/ de la versión anterior.
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+            const oldScope = new URL('./pdf-download/', document.baseURI).href;
+            registrations.forEach(registration => {
+                if (registration.scope === oldScope) registration.unregister().catch(() => {});
+            });
+        }).catch(() => {});
+        window.HVAC_PDF_SW_READY = navigator.serviceWorker.register(new URL('./sw.js', document.baseURI).href, { updateViaCache: 'none' })
+            .then(async registration => {
+                try { await registration.update(); } catch (_) {}
+                if (navigator.serviceWorker.controller) return true;
+                await Promise.race([
+                    new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })),
+                    new Promise(resolve => setTimeout(resolve, 10000))
+                ]);
+                return !!navigator.serviceWorker.controller;
+            })
+            .catch(error => { console.warn('[PDF] No se pudo activar el transporte seguro:', error); return false; });
+    } else {
+        window.HVAC_PDF_SW_READY = Promise.resolve(false);
+    }
+} catch (e) {
+    window.HVAC_PDF_SW_READY = Promise.resolve(false);
+}

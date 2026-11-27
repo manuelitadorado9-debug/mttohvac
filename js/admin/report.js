@@ -945,76 +945,13 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     return { pages: pages.length, blob };
   }
 
-  /*
-   * Registro de un Service Worker dedicado y de alcance estrecho (/pdf-download/).
-   * No controla index.html ni tecnico.html; solo intercepta la ruta de descarga.
-   * Se registra al cargar el módulo, sin generar PDFs ni consultar datos.
-   */
-  let pdfDownloadWorker = null;
-  let pdfDownloadWorkerError = '';
-
-  function waitForWorkerActivation(worker, timeoutMs = 12000) {
-    if (!worker || worker.state === 'activated') return Promise.resolve(worker);
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('El módulo seguro de descarga no terminó de activarse.')), timeoutMs);
-      const check = () => {
-        if (worker.state === 'activated') {
-          clearTimeout(timer);
-          worker.removeEventListener('statechange', check);
-          resolve(worker);
-        } else if (worker.state === 'redundant') {
-          clearTimeout(timer);
-          worker.removeEventListener('statechange', check);
-          reject(new Error('El módulo seguro de descarga fue reemplazado durante su instalación.'));
-        }
-      };
-      worker.addEventListener('statechange', check);
-      check();
-    });
-  }
-
-  const pdfDownloadWorkerReady = (async () => {
-    try {
-      if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost')) {
-        throw new Error('Este navegador no permite el módulo seguro de descarga.');
-      }
-      const scopeUrl = new URL('./pdf-download/', document.baseURI).href;
-      const scriptUrl = new URL('./pdf-download/sw.js?v=2026.11.26.1', document.baseURI).href;
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      let registration = (registrations || []).find(item => item && item.scope === scopeUrl) || null;
-      const expectedScript = scriptUrl;
-      const activeScript = registration && registration.active ? registration.active.scriptURL : '';
-      if (!registration || !activeScript.includes('sw.js?v=2026.11.26.1')) {
-        registration = await navigator.serviceWorker.register(expectedScript, {
-          scope: scopeUrl,
-          updateViaCache: 'none'
-        });
-      }
-      let worker = registration.active || registration.installing || registration.waiting;
-      if (!worker) throw new Error('El navegador no activó el módulo de descarga.');
-      await waitForWorkerActivation(worker);
-      // registration.active es la versión que recibe mensajes aunque esta página no esté bajo su scope.
-      pdfDownloadWorker = registration.active || worker;
-      if (!pdfDownloadWorker || pdfDownloadWorker.state !== 'activated') {
-        throw new Error('El módulo seguro de descarga todavía no está activo.');
-      }
-      return pdfDownloadWorker;
-    } catch (error) {
-      pdfDownloadWorkerError = error && error.message ? error.message : String(error);
-      console.warn('[PDF] No se pudo preparar el módulo seguro de descarga:', error);
-      return null;
-    }
-  })();
-
+  /* El admin está en la raíz; usa el SW raíz que controla esta página para abrir
+     el canal de descarga durante el toque inicial, antes de consultar datos o IA. */
   function beginPdfDownload(fileName) {
-    // No iniciar IA ni construir el PDF si no se puede iniciar primero una descarga real.
-    if (!pdfDownloadWorker || pdfDownloadWorker.state !== 'activated') {
-      throw new Error('El módulo seguro de descarga aún no está listo. Cierra y vuelve a abrir la aplicación; no se ha generado el PDF ni consumido IA. ' + (pdfDownloadWorkerError || ''));
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker || typeof MessageChannel === 'undefined') {
+      throw new Error('El canal de descarga aún no está conectado. Recarga la aplicación una vez y vuelve a pulsar Informe General.');
     }
-    if (typeof MessageChannel === 'undefined') {
-      throw new Error('Este navegador no permite iniciar una descarga directa segura.');
-    }
-
     const token = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
       ? globalThis.crypto.randomUUID()
       : ('hvac-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
@@ -1037,15 +974,13 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
         const error = new Error(data.message || 'El navegador interrumpió la descarga.');
         if (readyTimer) clearTimeout(readyTimer);
         if (doneTimer) clearTimeout(doneTimer);
-        readyReject(error);
-        doneReject(error);
+        readyReject(error); doneReject(error);
       }
     };
     channel.port1.start && channel.port1.start();
+    worker.postMessage({ type: 'HVAC_PDF_STREAM_CONNECT', token }, [channel.port2]);
 
-    // La comunicación y el click ocurren sincrónicamente dentro del toque del usuario.
-    pdfDownloadWorker.postMessage({ type: 'HVAC_PDF_STREAM_CONNECT', token }, [channel.port2]);
-    const url = new URL('./pdf-download/download', document.baseURI);
+    const url = new URL('/__hvac_pdf_download', location.origin);
     url.searchParams.set('token', token);
     url.searchParams.set('name', fileName);
     const anchor = document.createElement('a');
@@ -1090,7 +1025,7 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
       ticket.port.postMessage({ type: 'HVAC_PDF_END' });
       await ticket.done;
       ticket.close();
-      return { transport: 'scoped-service-worker-stream' };
+      return { transport: 'root-service-worker-stream' };
     } catch (error) {
       ticket.abort(error && error.message ? error.message : 'Canal de descarga interrumpido.');
       ticket.close();
