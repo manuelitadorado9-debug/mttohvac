@@ -2119,7 +2119,8 @@ async function authPedirNuevaClave() {
             'signature_timestamp:payload->clientSignature->>timestamp',
             'signature_name:payload->clientSignature->>name',
             'signature_decision:payload->>signatureDecision',
-            'signature_decision_at:payload->>signatureDecisionAt'
+            'signature_decision_at:payload->>signatureDecisionAt',
+            'executions:payload->executions'
         ].join(',');
 
         function hvacOrderSummaryFromRow(row) {
@@ -2158,6 +2159,7 @@ async function authPedirNuevaClave() {
                 signatureDecisionAt: row.signature_decision_at || '',
                 clientSignature: (row.signature_timestamp || row.signature_name)
                     ? { timestamp: row.signature_timestamp || '', name: row.signature_name || '' } : null,
+                executions: (row.executions && typeof row.executions === 'object' && !Array.isArray(row.executions)) ? row.executions : {},
                 _hvacSummaryOnly: true
             };
         }
@@ -9458,12 +9460,19 @@ async function authPedirNuevaClave() {
                 let doneCount = null, percent = null;
                 let progressTitle = 'Consultando avance real; el listado no descarga fotos ni payload completo.';
                 if (o._hvacSummaryOnly) {
+                    // Fuente directa: executions ya viene en el resumen desde Supabase.
+                    if (o.executions && Object.keys(o.executions).length && eqIds.length) {
+                        const p = hvacOrderProgress(o);
+                        doneCount = p.done;
+                        percent = p.percent;
+                        progressTitle = 'Avance calculado desde ejecuciones de la orden.';
+                    }
                     const pc = hvacProgressCache.get(String(o.id));
                     // Se acepta el caché cuando el total coincide con eqIds, O cuando eqIds aún
                     // no llegó del resumen (eqIds.length === 0) pero el caché sí tiene datos válidos.
                     const pcTotal = pc && pc.ok ? Number(pc.total) : -1;
                     const eqLen = eqIds.length;
-                    const pcMatches = pc && pc.ok && (pcTotal === eqLen || (eqLen === 0 && pcTotal > 0));
+                    const pcMatches = percent == null && pc && pc.ok && (pcTotal === eqLen || (eqLen === 0 && pcTotal > 0));
                     if (pcMatches) {
                         const refLen = eqLen > 0 ? eqLen : pcTotal;
                         doneCount = Math.min(Math.max(0, pc.done), refLen);
