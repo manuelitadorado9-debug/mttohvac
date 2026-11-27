@@ -1,6 +1,6 @@
 /* Service Worker · Smart Maintenance HVAC.
    Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
-const CACHE_VERSION = 'hvac-v22-root-pdf-download-admin-network-20261127';
+const CACHE_VERSION = 'hvac-v23-root-pdf-download-lifecycle-20261127';
 const SHELL = [
   './tecnico.html',
   './common.js',
@@ -29,14 +29,27 @@ const HVAC_PDF_PENDING_PORTS = new Map();
 function hvacPdfNotify(port, type, message) {
   try { if (port) port.postMessage({ type, message: message || '' }); } catch (_) {}
 }
+function hvacPdfReleasePending(token, pending) {
+  if (!pending) return;
+  if (pending.timer) clearTimeout(pending.timer);
+  if (HVAC_PDF_PENDING_PORTS.get(token) === pending) HVAC_PDF_PENDING_PORTS.delete(token);
+  if (typeof pending.release === 'function') {
+    const release = pending.release;
+    pending.release = null;
+    try { release(); } catch (_) {}
+  }
+}
 function hvacPdfCleanup(token, state, closePort = true) {
   HVAC_PDF_STREAMS.delete(token);
-  HVAC_PDF_PENDING_PORTS.delete(token);
+  const pending = HVAC_PDF_PENDING_PORTS.get(token);
+  if (pending) hvacPdfReleasePending(token, pending);
   if (state && state.timer) clearTimeout(state.timer);
   if (state && state.finishLifetime) state.finishLifetime();
   if (closePort && state && state.port) { try { state.port.close(); } catch (_) {} }
 }
-function hvacPdfAttachPort(token, port, state) {
+function hvacPdfAttachPort(token, port, state, pending = null) {
+  const waiting = pending || HVAC_PDF_PENDING_PORTS.get(token);
+  if (waiting) hvacPdfReleasePending(token, waiting);
   state.port = port;
   port.onmessage = event => {
     const message = event && event.data || {};
@@ -75,15 +88,16 @@ function hvacPdfAttachPort(token, port, state) {
 function hvacPdfCreateResponse(token, filename) {
   let finishLifetime;
   const lifetime = new Promise(resolve => { finishLifetime = resolve; });
+  const pending = HVAC_PDF_PENDING_PORTS.get(token) || null;
   const state = {
     controller: null,
-    port: HVAC_PDF_PENDING_PORTS.get(token) || null,
+    port: pending ? pending.port : null,
     finishLifetime,
     timer: null,
     ended: false
   };
   HVAC_PDF_STREAMS.set(token, state);
-  if (state.port) hvacPdfAttachPort(token, state.port, state);
+  if (pending && pending.port) hvacPdfAttachPort(token, pending.port, state, pending);
   const stream = new ReadableStream({
     start(controller) {
       state.controller = controller;
@@ -116,19 +130,38 @@ self.addEventListener('message', event => {
   const token = String(data.token);
   const port = event.ports[0];
   const state = HVAC_PDF_STREAMS.get(token);
-  if (state) hvacPdfAttachPort(token, port, state);
-  else {
-    HVAC_PDF_PENDING_PORTS.set(token, port);
-    port.onmessage = messageEvent => {
-      const message = messageEvent && messageEvent.data || {};
-      if (message.type === 'HVAC_PDF_ABORT') {
-        hvacPdfNotify(port, 'HVAC_PDF_ERROR', message.message || 'Generación cancelada.');
-        HVAC_PDF_PENDING_PORTS.delete(token);
-        try { port.close(); } catch (_) {}
-      }
-    };
-    if (port.start) port.start();
+  if (state) {
+    hvacPdfAttachPort(token, port, state);
+    return;
   }
+
+  /* Importante en Chrome Android: el navegador puede terminar el Service Worker
+     entre el evento message y la petición GET iniciada por el enlace. Mantener
+     vivo este evento hasta que llegue el fetch evita perder el MessagePort y
+     producir una descarga vacía ("Error: Sin archivos"). */
+  let release;
+  const keepAlive = new Promise(resolve => { release = resolve; });
+  try { event.waitUntil(keepAlive); } catch (error) {
+    hvacPdfNotify(port, 'HVAC_PDF_ERROR', 'No se pudo mantener activo el canal de descarga.');
+    try { port.close(); } catch (_) {}
+    return;
+  }
+  const pending = { port, release, timer: null };
+  pending.timer = setTimeout(() => {
+    hvacPdfNotify(port, 'HVAC_PDF_ERROR', 'No llegó la solicitud de descarga al Service Worker.');
+    hvacPdfReleasePending(token, pending);
+    try { port.close(); } catch (_) {}
+  }, 18000);
+  HVAC_PDF_PENDING_PORTS.set(token, pending);
+  port.onmessage = messageEvent => {
+    const message = messageEvent && messageEvent.data || {};
+    if (message.type === 'HVAC_PDF_ABORT') {
+      hvacPdfNotify(port, 'HVAC_PDF_ERROR', message.message || 'Generación cancelada.');
+      hvacPdfReleasePending(token, pending);
+      try { port.close(); } catch (_) {}
+    }
+  };
+  if (port.start) port.start();
 });
 
 self.addEventListener('install', event => {

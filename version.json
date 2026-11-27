@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.27.1",
-  "minimumVersion": "2026.11.27.1",
+  "version": "2026.11.27.2",
+  "minimumVersion": "2026.11.27.2",
   "force": true,
-  "build": "root-sw-pdf-stream-admin-no-cache-ai-recommendations-tech-badges-history-progress",
-  "message": "Corrección del canal de descarga PDF en panel administrador; recomendaciones IA persistentes; etiquetas técnico e histórico actualizados."
+  "build": "root-sw-pdf-stream-lifecycle-fix-ai-recommendations-tech-badges-history-progress",
+  "message": "Corrección del ciclo de vida del canal de descarga PDF en Chrome Android; se conservan recomendaciones IA, etiquetas e histórico."
 }
