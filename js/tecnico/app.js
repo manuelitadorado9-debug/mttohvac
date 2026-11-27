@@ -2360,6 +2360,30 @@ async function authPedirNuevaClave() {
             return true;
         }
 
+        // Tipo real de la orden para etiquetas y formulario del técnico.
+        // Los consecutivos PRE-/COR- son la fuente más fiable cuando existen
+        // metadatos heredados contradictorios (por ejemplo maintenanceType=REVISION).
+        function techOrderRoutineType(order) {
+            if (!order) return 'PREVENTIVO';
+            const orderId = String(order.id || '').trim().toUpperCase();
+            if (/^PRE(?:VENTIVO)?[-_]/.test(orderId)) return 'PREVENTIVO';
+            if (/^COR(?:RECTIVO)?[-_]/.test(orderId)) return 'CORRECTIVO';
+
+            const normalize = value => String(value || '')
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+            // tipoRutina/routineType/type describen el trabajo planificado;
+            // maintenanceType puede contener una clasificación heredada más genérica.
+            const candidates = [order.tipoRutina, order.routineType, order.type, order.maintenanceType];
+            for (const candidate of candidates) {
+                const value = normalize(candidate);
+                if (!value) continue;
+                if (value.includes('CORRECT') || value === 'COR') return 'CORRECTIVO';
+                if (value.includes('REVISION') || value === 'REV') return 'REVISION';
+                if (value.includes('PREVENT') || value === 'PRE') return 'PREVENTIVO';
+            }
+            return 'PREVENTIVO';
+        }
+
         // Zona / piso de una orden (con respaldo en la zona de sus equipos para órdenes antiguas)
         function techOrderZone(o) {
             const own = String((o && o.zoneName) || '').trim(); if (own) return own;
@@ -2398,13 +2422,14 @@ async function authPedirNuevaClave() {
                 const awaitingSignature = progress.known && progress.allDone && techSignatureDecision(o) === 'PENDING';
                 const isCompleted = techEffectiveStatus(o) === 'COMPLETED';
                 const eqIds = o.equipmentIds || [];
-                const routineRaw = String(o.maintenanceType || o.tipoRutina || o.routineType || o.type || 'PREVENTIVO').toUpperCase();
-                const routineLabel = (routineRaw.includes('COR') ? 'Correctivo' : (routineRaw.includes('REV') ? 'Revisión' : 'Preventivo'));
+                const routineType = techOrderRoutineType(o);
+                const routineLabel = routineType === 'CORRECTIVO' ? 'Correctivo'
+                    : routineType === 'REVISION' ? 'Revisión' : 'Preventivo';
                 return `<article class="r-card ${isCompleted ? 'is-done' : ''}">
                     <div class="r-top">
                         <span class="r-id">${esc(o.id)}</span>
                         <span class="pill ${routineLabel === 'Correctivo' ? 'pill-warn' : (routineLabel === 'Revisión' ? 'pill-idle' : 'pill-pend')}">${routineLabel}</span>
-                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Rutina cerrada' : (awaitingSignature ? 'Equipos listos · firma pendiente' : 'Pendiente · continuar rutina')}</span>
+                        <span class="pill ${isCompleted ? 'pill-ok' : 'pill-pend'}">${isCompleted ? 'Completada' : 'Pendiente'}</span>
                     </div>
                     <h3 class="r-client">${esc(o.client)}</h3>
                     ${techOrderZone(o) ? `<span class="zone-chip"><i class="fa-solid fa-layer-group"></i>${esc(techOrderZone(o))}</span>` : ''}
@@ -3444,12 +3469,7 @@ async function authPedirNuevaClave() {
             const order = workOrders.find(o => o.id === orderId);
             const eq = techFindEq(eqId) || { code: eqId };
             const exec = (order && order.executions && (order.executions[eqId] || order.executions[eq.code])) || {};
-            const routineRaw = String(
-                order?.tipoRutina || order?.maintenanceType || order?.routineType || order?.type || exec?.tipoRutina || 'PREVENTIVO'
-            ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
-            const plannedType = ['COR', 'CORRECTIVO', 'CORRECTIVA'].includes(routineRaw) ? 'CORRECTIVO'
-                : ['REV', 'REVISION'].includes(routineRaw) ? 'REVISION'
-                : 'PREVENTIVO';
+            const plannedType = techOrderRoutineType(Object.assign({}, order || {}, { tipoRutina: order?.tipoRutina || exec?.tipoRutina }));
             const isCorrectiveRoutine = plannedType === 'CORRECTIVO';
             const radio = document.querySelector(`input[name="exec-tipo-rutina"][value="${plannedType}"]`);
             if (radio) radio.checked = true;
