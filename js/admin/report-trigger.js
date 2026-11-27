@@ -24,20 +24,26 @@
     return orders.find(o => String(o.id) === String(id));
   };
   window.generateConsolidatedRoutinePDFDirect = async function(onlyCorrective = false) {
+    if (busy) return;
+    busy = true;
     const id = (typeof currentExecOrderId !== 'undefined') ? currentExecOrderId : null;
     const order = findOrder(id);
-    if (!order) return;
+    if (!order) { busy = false; return; }
     try {
       const typeKey = onlyCorrective ? 'CORRECTIVO' : window.hvacOrderReportType(order);
       await window.generateMaintenancePDF(order.id, typeKey, { onlyCorrective: !!onlyCorrective });
     } catch (error) { reportError(error); }
+    finally { busy = false; }
   };
   window.generateSingleEquipmentPDF = async function(orderId, eqId) {
+    if (busy) return;
+    busy = true;
     const order = findOrder(orderId);
-    if (!order) return;
+    if (!order) { busy = false; return; }
     try {
       await window.generateMaintenancePDF(order.id, window.hvacOrderReportType(order), { only: [eqId] });
     } catch (error) { reportError(error); }
+    finally { busy = false; }
   };
 
   window.hvacGenerateOrderReport = async function(orderId, reportType) {

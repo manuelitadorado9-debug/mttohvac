@@ -954,32 +954,20 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
     } catch (_) { return false; }
   }
 
-  /* Canal de descarga directo vía createObjectURL — funciona en todos los navegadores
-     móviles sin depender del Service Worker ni de fetch events.
-     El anchor se crea e inserta SINCRÓNICAMENTE dentro del gesto del usuario para que
-     Android/Chrome lo reconozca como descarga permitida. El href se actualiza luego
-     cuando el blob está listo. */
+  /* Canal de descarga directo para móvil via createObjectURL.
+     No depende del Service Worker ni de window.open. */
   function beginPdfDownloadDirect(fileName) {
-    const anchor = document.createElement('a');
-    anchor.download = fileName;
-    anchor.href = '#';          // valor provisional; se reemplaza en deliver
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-
     let resolveBlob, rejectBlob;
     const blobReady = new Promise((res, rej) => { resolveBlob = res; rejectBlob = rej; });
     return {
       _direct: true,
-      _anchor: anchor,
+      _fileName: fileName,
       _resolveBlob: resolveBlob,
       _rejectBlob: rejectBlob,
       ready: Promise.resolve(true),
       done: blobReady,
       setDoneTimeout() {},
-      abort() {
-        try { anchor.remove(); } catch (_) {}
-        rejectBlob(new Error('Generación cancelada.'));
-      },
+      abort() { rejectBlob(new Error('Generación cancelada.')); },
       close() {}
     };
   }
@@ -1061,22 +1049,24 @@ td,th{padding-top:5px!important;padding-bottom:5px!important}
   async function deliverPdfDownload(ticket, blob, fileName) {
     if (!ticket) throw new Error('No se inició el canal de descarga. El PDF no fue enviado al navegador.');
 
-    // Canal directo (móvil): el anchor ya fue creado sincrónicamente en beginPdfDownload
-    // dentro del gesto del usuario. Aquí solo actualizamos su href y hacemos click.
+    // Canal directo (móvil): descarga via createObjectURL + anchor.
     if (ticket._direct) {
-      const anchor = ticket._anchor;
+      let url = null;
       try {
-        const url = URL.createObjectURL(blob);
-        anchor.href = url;
-        anchor.download = fileName;
-        anchor.click();
-        anchor.remove();
-        // Liberar la URL de objeto después de un momento para que el navegador inicie la descarga.
-        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 10000);
+        url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = String(fileName || ticket._fileName || 'Informe_HVAC.pdf');
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Revocar después de que el navegador haya tenido tiempo de iniciar la descarga.
+        setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 30000);
         ticket._resolveBlob(true);
         return { transport: 'blob-url-mobile' };
       } catch (error) {
-        try { anchor.remove(); } catch (_) {}
+        if (url) { try { URL.revokeObjectURL(url); } catch (_) {} }
         ticket._rejectBlob(error);
         throw error;
       }
