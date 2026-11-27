@@ -1,7 +1,7 @@
 {
-  "version": "2026.11.26.3",
-  "minimumVersion": "2026.11.26.3",
+  "version": "2026.11.26.5",
+  "minimumVersion": "2026.11.26.5",
   "force": true,
-  "build": "reports-photo-layout",
-  "message": "Informes: fotografías generales cuando solo se carga Antes o Después; sin bloques fotográficos vacíos."
+  "build": "pdf-download-on-demand-ai-recommendations-persistent-tech-badges-history-progress",
+  "message": "Informes: descarga sucesiva fiable y recomendaciones IA guardadas; técnico: etiquetas corregidas; histórico: avance y evidencias ligeras."
 }

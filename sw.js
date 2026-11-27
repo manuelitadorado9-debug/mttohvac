@@ -1,6 +1,6 @@
 /* Service Worker · Smart Maintenance HVAC.
    Nueva versión de caché: incrementar CACHE_VERSION en cada despliegue con cambios del shell. */
-const CACHE_VERSION = 'hvac-v19-history-progress-20261126';
+const CACHE_VERSION = 'hvac-v21-technician-labels-hvac-update-20261126';
 const SHELL = [
   './',
   './tecnico.html',
@@ -45,12 +45,6 @@ self.addEventListener('activate', event => {
   })());
 });
 
-self.addEventListener('message', event => {
-  if (event.data === 'skip-waiting' || (event.data && event.data.type === 'SKIP_WAITING')) {
-    self.skipWaiting();
-  }
-});
-
 /* Sync de segundo plano: conserva el comportamiento de la cola IndexedDB de marcaciones. */
 self.addEventListener('sync', event => {
   if (event.tag === 'hvac-outbox') {
@@ -64,9 +58,9 @@ self.addEventListener('sync', event => {
 
 self.addEventListener('fetch', event => {
   const request = event.request;
-  if (request.method !== 'GET') return;
-
   const url = new URL(request.url);
+
+  if (request.method !== 'GET') return;
   if (url.hostname.endsWith('supabase.co')) return;
 
   // Versionado y lógica compartida: siempre consultar red primero para no servir JS obsoleto.
